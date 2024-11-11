@@ -2,20 +2,21 @@ name: ci-go-tests
 
 on:
   pull_request:
-    paths-ignore:
-    - '**/**.gitignore'
-    - '**/**.md'
     types:
-    - opened
-    - reopened
-    - synchronize
-    - ready_for_review
-    branches:
-    - main
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - '**/*.go'
+      - '**/go.mod'
+
+permissions:
+  contents: read
+  actions: write
 
 jobs:
   ci-go-tests:
-    if: github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
 
     steps:
