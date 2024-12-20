@@ -11,7 +11,9 @@ import (
 	"github.com/dgraph-io/dgo/v240/protos/api"
 	"github.com/dgraph-io/dgraph/v24/dql"
 	"github.com/dgraph-io/dgraph/v24/protos/pb"
+	"github.com/dgraph-io/dgraph/v24/query"
 	"github.com/dgraph-io/dgraph/v24/schema"
+	"github.com/dgraph-io/dgraph/v24/worker"
 	"github.com/dgraph-io/dgraph/v24/x"
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/wkb"
@@ -95,7 +97,7 @@ func valueToValType(v any) (*api.Value, error) {
 	}
 }
 
-func generateCreateDqlMutationAndSchema[T any](n *Namespace, object *T,
+func generateCreateDqlMutationsAndSchema[T any](n *Namespace, object *T,
 	gid uint64) ([]*dql.Mutation, *schema.ParsedSchema, error) {
 	t := reflect.TypeOf(*object)
 	if t.Kind() != reflect.Struct {
@@ -164,12 +166,28 @@ func generateCreateDqlMutationAndSchema[T any](n *Namespace, object *T,
 	return dms, sch, nil
 }
 
+func generateDeleteDqlMutations(n *Namespace, gid uint64) []*dql.Mutation {
+	return []*dql.Mutation{{
+		Del: []*api.NQuad{
+			{
+				Namespace: n.ID(),
+				Subject:   fmt.Sprint(gid),
+				Predicate: x.Star,
+				ObjectValue: &api.Value{
+					Val: &api.Value_DefaultVal{DefaultVal: x.Star},
+				},
+			},
+		},
+	}}
+}
+
 func getByGid[T any](ctx context.Context, n *Namespace, gid uint64) (uint64, *T, error) {
 	query := fmt.Sprintf(`
 	{
 	  obj(func: uid(%d)) {
 		uid
 		expand(_all_)
+		dgraph.type
 	  }
 	}
 	  `, gid)
@@ -178,14 +196,18 @@ func getByGid[T any](ctx context.Context, n *Namespace, gid uint64) (uint64, *T,
 }
 
 func getByConstrainedField[T any](ctx context.Context, n *Namespace, cf ConstrainedField) (uint64, *T, error) {
+	var obj T
+
+	t := reflect.TypeOf(obj)
 	query := fmt.Sprintf(`
 	{
 	  obj(func: eq(%s, %s)) {
 		uid
 		expand(_all_)
+		dgraph.type
 	  }
 	}
-	  `, cf.Key, cf.Value)
+	  `, getPredicateName(t.Name(), cf.Key), cf.Value)
 
 	return executeGet[T](ctx, n, query, &cf)
 }
@@ -204,7 +226,7 @@ func executeGet[T any](ctx context.Context, n *Namespace, query string, cf *Cons
 		return 0, nil, fmt.Errorf("constraint not defined for field %s", cf.Key)
 	}
 
-	resp, err := n.Query(ctx, query)
+	resp, err := n.queryWithLock(ctx, query)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -226,12 +248,54 @@ func executeGet[T any](ctx context.Context, n *Namespace, query string, cf *Cons
 
 	// Check if we have at least one object in the response
 	if len(result.Obj) == 0 {
-		return 0, nil, fmt.Errorf("no object found")
+		return 0, nil, ErrNoObjFound
 	}
 
 	// Map the dynamic struct to the final type T
 	finalObject := reflect.New(t).Interface()
-	gid := mapDynamicToFinal(result.Obj[0], finalObject)
+	gid, err := mapDynamicToFinal(result.Obj[0], finalObject)
+	if err != nil {
+		return 0, nil, err
+	}
 
 	return gid, finalObject.(*T), nil
+}
+
+func applyDqlMutations(ctx context.Context, db *DB, dms []*dql.Mutation) error {
+	edges, err := query.ToDirectedEdges(dms, nil)
+	if err != nil {
+		return err
+	}
+
+	if !db.isOpen {
+		return ErrClosedDB
+	}
+
+	startTs, err := db.z.nextTs()
+	if err != nil {
+		return err
+	}
+	commitTs, err := db.z.nextTs()
+	if err != nil {
+		return err
+	}
+
+	m := &pb.Mutations{
+		GroupId: 1,
+		StartTs: startTs,
+		Edges:   edges,
+	}
+	m.Edges, err = query.ExpandEdges(ctx, m)
+	if err != nil {
+		return fmt.Errorf("error expanding edges: %w", err)
+	}
+
+	p := &pb.Proposal{Mutations: m, StartTs: startTs}
+	if err := worker.ApplyMutations(ctx, p); err != nil {
+		return err
+	}
+
+	return worker.ApplyCommited(ctx, &pb.OracleDelta{
+		Txns: []*pb.TxnStatus{{StartTs: startTs, CommitTs: commitTs}},
+	})
 }
