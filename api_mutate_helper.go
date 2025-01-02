@@ -90,15 +90,10 @@ func generateCreateDqlMutationsAndSchema[T any](ctx context.Context, n *Namespac
 		}
 		if jsonToDbTags[jsonName] != nil {
 			constraint := jsonToDbTags[jsonName].constraint
-			if constraint == "unique" || constraint == "term" {
-				uniqueConstraintFound = true
-				u.Directive = pb.SchemaUpdate_INDEX
-				if constraint == "unique" {
-					u.Tokenizer = []string{"exact"}
-				} else {
-					u.Tokenizer = []string{"term"}
-				}
+			if constraint == "vector" && valType != pb.Posting_VFLOAT {
+				return fmt.Errorf("vector index can only be applied to []float values")
 			}
+			uniqueConstraintFound = addIndex(u, constraint, uniqueConstraintFound)
 		}
 
 		sch.Preds = append(sch.Preds, u)
@@ -237,4 +232,40 @@ func getUidOrMutate[T any](ctx context.Context, db *DB, n *Namespace, object T) 
 	}
 
 	return gid, nil
+}
+
+func addIndex(u *pb.SchemaUpdate, index string, uniqueConstraintExists bool) bool {
+	u.Directive = pb.SchemaUpdate_INDEX
+	switch index {
+	case "exact":
+		u.Tokenizer = []string{"exact"}
+	case "term":
+		u.Tokenizer = []string{"term"}
+	case "hash":
+		u.Tokenizer = []string{"hash"}
+	case "unique":
+		u.Tokenizer = []string{"exact"}
+		u.Unique = true
+		u.Upsert = true
+		uniqueConstraintExists = true
+	case "fulltext":
+		u.Tokenizer = []string{"fulltext"}
+	case "trigram":
+		u.Tokenizer = []string{"trigram"}
+	case "vector":
+		u.IndexSpecs = []*pb.VectorIndexSpec{
+			{
+				Name: "hnsw",
+				Options: []*pb.OptionPair{
+					{
+						Key:   "metric",
+						Value: "cosine",
+					},
+				},
+			},
+		}
+	default:
+		return uniqueConstraintExists
+	}
+	return uniqueConstraintExists
 }
