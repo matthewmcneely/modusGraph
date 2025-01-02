@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dgraph-io/dgo/v240/protos/api"
 	"github.com/dgraph-io/dgraph/v24/protos/pb"
+	"github.com/dgraph-io/dgraph/v24/types"
 	"github.com/dgraph-io/dgraph/v24/x"
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/wkb"
@@ -24,6 +26,51 @@ type UniqueField interface {
 type ConstrainedField struct {
 	Key   string
 	Value any
+}
+
+type QueryParams struct {
+	Filter     *Filter
+	Pagination *Pagination
+	Sorting    *Sorting
+}
+
+type Filter struct {
+	Field  string
+	String StringPredicate
+	Vector VectorPredicate
+	And    *Filter
+	Or     *Filter
+	Not    *Filter
+}
+
+type Pagination struct {
+	Limit  int64
+	Offset int64
+	After  string
+}
+
+type Sorting struct {
+	OrderAscField  string
+	OrderDescField string
+	OrderDescFirst bool
+}
+
+type StringPredicate struct {
+	Equals         string
+	LessThan       string
+	LessOrEqual    string
+	GreaterThan    string
+	GreaterOrEqual string
+	AllOfTerms     []string
+	AnyOfTerms     []string
+	AllOfText      []string
+	AnyOfText      []string
+	RegExp         string
+}
+
+type VectorPredicate struct {
+	SimilarTo []float32
+	TopK      int64
 }
 
 type ModusDbOption func(*modusDbOptions)
@@ -110,6 +157,16 @@ func valueToApiVal(v any) (*api.Value, error) {
 		return &api.Value{Val: &api.Value_DoubleVal{DoubleVal: float64(val)}}, nil
 	case float64:
 		return &api.Value{Val: &api.Value_DoubleVal{DoubleVal: val}}, nil
+	case []float32:
+		return &api.Value{Val: &api.Value_Vfloat32Val{
+			Vfloat32Val: types.FloatArrayAsBytes(val)}}, nil
+	case []float64:
+		float32Slice := make([]float32, len(val))
+		for i, v := range val {
+			float32Slice[i] = float32(v)
+		}
+		return &api.Value{Val: &api.Value_Vfloat32Val{
+			Vfloat32Val: types.FloatArrayAsBytes(float32Slice)}}, nil
 	case []byte:
 		return &api.Value{Val: &api.Value_BytesVal{BytesVal: val}}, nil
 	case time.Time:
@@ -129,4 +186,55 @@ func valueToApiVal(v any) (*api.Value, error) {
 	default:
 		return nil, fmt.Errorf("unsupported type %T", v)
 	}
+}
+
+func filterToQueryFunc(typeName string, f Filter) QueryFunc {
+	// Handle logical operators first
+	if f.And != nil {
+		return And(filterToQueryFunc(typeName, *f.And))
+	}
+	if f.Or != nil {
+		return Or(filterToQueryFunc(typeName, *f.Or))
+	}
+	if f.Not != nil {
+		return Not(filterToQueryFunc(typeName, *f.Not))
+	}
+
+	// Handle field predicates
+	if f.String.Equals != "" {
+		return buildEqQuery(getPredicateName(typeName, f.Field), f.String.Equals)
+	}
+	if len(f.String.AllOfTerms) != 0 {
+		return buildAllOfTermsQuery(getPredicateName(typeName, f.Field), strings.Join(f.String.AllOfTerms, " "))
+	}
+	if len(f.String.AnyOfTerms) != 0 {
+		return buildAnyOfTermsQuery(getPredicateName(typeName, f.Field), strings.Join(f.String.AnyOfTerms, " "))
+	}
+	if len(f.String.AllOfText) != 0 {
+		return buildAllOfTextQuery(getPredicateName(typeName, f.Field), strings.Join(f.String.AllOfText, " "))
+	}
+	if len(f.String.AnyOfText) != 0 {
+		return buildAnyOfTextQuery(getPredicateName(typeName, f.Field), strings.Join(f.String.AnyOfText, " "))
+	}
+	if f.String.RegExp != "" {
+		return buildRegExpQuery(getPredicateName(typeName, f.Field), f.String.RegExp)
+	}
+	if f.String.LessThan != "" {
+		return buildLtQuery(getPredicateName(typeName, f.Field), f.String.LessThan)
+	}
+	if f.String.LessOrEqual != "" {
+		return buildLeQuery(getPredicateName(typeName, f.Field), f.String.LessOrEqual)
+	}
+	if f.String.GreaterThan != "" {
+		return buildGtQuery(getPredicateName(typeName, f.Field), f.String.GreaterThan)
+	}
+	if f.String.GreaterOrEqual != "" {
+		return buildGeQuery(getPredicateName(typeName, f.Field), f.String.GreaterOrEqual)
+	}
+	if f.Vector.SimilarTo != nil {
+		return buildSimilarToQuery(getPredicateName(typeName, f.Field), f.Vector.TopK, f.Vector.SimilarTo)
+	}
+
+	// Return empty query if no conditions match
+	return func() string { return "" }
 }

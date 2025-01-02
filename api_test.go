@@ -22,7 +22,7 @@ func TestFirstTimeUser(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	gid, user, err := modusdb.Create(db, &User{
+	gid, user, err := modusdb.Create(db, User{
 		Name:    "A",
 		Age:     10,
 		ClerkId: "123",
@@ -59,7 +59,7 @@ func TestFirstTimeUser(t *testing.T) {
 	_, queriedUser3, err := modusdb.Get[User](db, gid)
 	require.Error(t, err)
 	require.Equal(t, "no object found", err.Error())
-	require.Nil(t, queriedUser3)
+	require.Equal(t, queriedUser3, User{})
 
 }
 
@@ -74,7 +74,7 @@ func TestCreateApi(t *testing.T) {
 
 	require.NoError(t, db1.DropData(ctx))
 
-	user := &User{
+	user := User{
 		Name:    "B",
 		Age:     20,
 		ClerkId: "123",
@@ -131,7 +131,7 @@ func TestCreateApiWithNonStruct(t *testing.T) {
 
 	require.NoError(t, db1.DropData(ctx))
 
-	user := &User{
+	user := User{
 		Name: "B",
 		Age:  20,
 	}
@@ -152,7 +152,7 @@ func TestGetApi(t *testing.T) {
 
 	require.NoError(t, db1.DropData(ctx))
 
-	user := &User{
+	user := User{
 		Name:    "B",
 		Age:     20,
 		ClerkId: "123",
@@ -181,7 +181,7 @@ func TestGetApiWithConstrainedField(t *testing.T) {
 
 	require.NoError(t, db1.DropData(ctx))
 
-	user := &User{
+	user := User{
 		Name:    "B",
 		Age:     20,
 		ClerkId: "123",
@@ -213,7 +213,7 @@ func TestDeleteApi(t *testing.T) {
 
 	require.NoError(t, db1.DropData(ctx))
 
-	user := &User{
+	user := User{
 		Name:    "B",
 		Age:     20,
 		ClerkId: "123",
@@ -228,7 +228,7 @@ func TestDeleteApi(t *testing.T) {
 	_, queriedUser, err := modusdb.Get[User](db, gid, db1.ID())
 	require.Error(t, err)
 	require.Equal(t, "no object found", err.Error())
-	require.Nil(t, queriedUser)
+	require.Equal(t, queriedUser, User{})
 
 	_, queriedUser, err = modusdb.Get[User](db, modusdb.ConstrainedField{
 		Key:   "clerk_id",
@@ -236,7 +236,7 @@ func TestDeleteApi(t *testing.T) {
 	}, db1.ID())
 	require.Error(t, err)
 	require.Equal(t, "no object found", err.Error())
-	require.Nil(t, queriedUser)
+	require.Equal(t, queriedUser, User{})
 }
 
 func TestUpsertApi(t *testing.T) {
@@ -250,7 +250,7 @@ func TestUpsertApi(t *testing.T) {
 
 	require.NoError(t, db1.DropData(ctx))
 
-	user := &User{
+	user := User{
 		Name:    "B",
 		Age:     20,
 		ClerkId: "123",
@@ -271,6 +271,123 @@ func TestUpsertApi(t *testing.T) {
 	require.Equal(t, 21, queriedUser.Age)
 	require.Equal(t, "B", queriedUser.Name)
 	require.Equal(t, "123", queriedUser.ClerkId)
+}
+
+func TestQueryApi(t *testing.T) {
+	ctx := context.Background()
+	db, err := modusdb.New(modusdb.NewDefaultConfig(t.TempDir()))
+	require.NoError(t, err)
+	defer db.Close()
+
+	db1, err := db.CreateNamespace()
+	require.NoError(t, err)
+
+	require.NoError(t, db1.DropData(ctx))
+
+	users := []User{
+		{Name: "A", Age: 10, ClerkId: "123"},
+		{Name: "B", Age: 20, ClerkId: "123"},
+		{Name: "C", Age: 30, ClerkId: "123"},
+		{Name: "D", Age: 40, ClerkId: "123"},
+		{Name: "E", Age: 50, ClerkId: "123"},
+	}
+
+	for _, user := range users {
+		_, _, err = modusdb.Create(db, user, db1.ID())
+		require.NoError(t, err)
+	}
+
+	gids, queriedUsers, err := modusdb.Query[User](db, modusdb.QueryParams{}, db1.ID())
+	require.NoError(t, err)
+	require.Len(t, queriedUsers, 5)
+	require.Len(t, gids, 5)
+	require.Equal(t, "A", queriedUsers[0].Name)
+	require.Equal(t, "B", queriedUsers[1].Name)
+	require.Equal(t, "C", queriedUsers[2].Name)
+	require.Equal(t, "D", queriedUsers[3].Name)
+	require.Equal(t, "E", queriedUsers[4].Name)
+
+	gids, queriedUsers, err = modusdb.Query[User](db, modusdb.QueryParams{
+		Filter: &modusdb.Filter{
+			Field: "age",
+			String: modusdb.StringPredicate{
+				// The reason its a string even for int is bc i cant tell if
+				// user wants to compare with 0 the number or didn't provide a value
+				// TODO: fix this
+				GreaterOrEqual: fmt.Sprintf("%d", 20),
+			},
+		},
+	}, db1.ID())
+
+	require.NoError(t, err)
+	require.Len(t, queriedUsers, 4)
+	require.Len(t, gids, 4)
+	require.Equal(t, "B", queriedUsers[0].Name)
+	require.Equal(t, "C", queriedUsers[1].Name)
+	require.Equal(t, "D", queriedUsers[2].Name)
+	require.Equal(t, "E", queriedUsers[3].Name)
+}
+
+func TestQueryApiWithPaginiationAndSorting(t *testing.T) {
+	ctx := context.Background()
+	db, err := modusdb.New(modusdb.NewDefaultConfig(t.TempDir()))
+	require.NoError(t, err)
+	defer db.Close()
+
+	db1, err := db.CreateNamespace()
+	require.NoError(t, err)
+
+	require.NoError(t, db1.DropData(ctx))
+
+	users := []User{
+		{Name: "A", Age: 10, ClerkId: "123"},
+		{Name: "B", Age: 20, ClerkId: "123"},
+		{Name: "C", Age: 30, ClerkId: "123"},
+		{Name: "D", Age: 40, ClerkId: "123"},
+		{Name: "E", Age: 50, ClerkId: "123"},
+	}
+
+	for _, user := range users {
+		_, _, err = modusdb.Create(db, user, db1.ID())
+		require.NoError(t, err)
+	}
+
+	gids, queriedUsers, err := modusdb.Query[User](db, modusdb.QueryParams{
+		Filter: &modusdb.Filter{
+			Field: "age",
+			String: modusdb.StringPredicate{
+				GreaterOrEqual: fmt.Sprintf("%d", 20),
+			},
+		},
+		Pagination: &modusdb.Pagination{
+			Limit:  3,
+			Offset: 1,
+		},
+	}, db1.ID())
+
+	require.NoError(t, err)
+	require.Len(t, queriedUsers, 3)
+	require.Len(t, gids, 3)
+	require.Equal(t, "C", queriedUsers[0].Name)
+	require.Equal(t, "D", queriedUsers[1].Name)
+	require.Equal(t, "E", queriedUsers[2].Name)
+
+	gids, queriedUsers, err = modusdb.Query[User](db, modusdb.QueryParams{
+		Pagination: &modusdb.Pagination{
+			Limit:  3,
+			Offset: 1,
+		},
+		Sorting: &modusdb.Sorting{
+			OrderAscField: "age",
+		},
+	}, db1.ID())
+
+	require.NoError(t, err)
+	require.Len(t, queriedUsers, 3)
+	require.Len(t, gids, 3)
+	require.Equal(t, "B", queriedUsers[0].Name)
+	require.Equal(t, "C", queriedUsers[1].Name)
+	require.Equal(t, "D", queriedUsers[2].Name)
 }
 
 type Project struct {
@@ -298,7 +415,7 @@ func TestNestedObjectMutation(t *testing.T) {
 
 	require.NoError(t, db1.DropData(ctx))
 
-	branch := &Branch{
+	branch := Branch{
 		Name:    "B",
 		ClerkId: "123",
 		Proj: Project{
@@ -352,7 +469,7 @@ func TestLinkingObjectsByConstrainedFields(t *testing.T) {
 
 	require.NoError(t, db1.DropData(ctx))
 
-	projGid, project, err := modusdb.Create(db, &Project{
+	projGid, project, err := modusdb.Create(db, Project{
 		Name:    "P",
 		ClerkId: "456",
 	}, db1.ID())
@@ -361,7 +478,7 @@ func TestLinkingObjectsByConstrainedFields(t *testing.T) {
 	require.Equal(t, "P", project.Name)
 	require.Equal(t, project.Gid, projGid)
 
-	branch := &Branch{
+	branch := Branch{
 		Name:    "B",
 		ClerkId: "123",
 		Proj: Project{
@@ -415,7 +532,7 @@ func TestLinkingObjectsByGid(t *testing.T) {
 
 	require.NoError(t, db1.DropData(ctx))
 
-	projGid, project, err := modusdb.Create(db, &Project{
+	projGid, project, err := modusdb.Create(db, Project{
 		Name:    "P",
 		ClerkId: "456",
 	}, db1.ID())
@@ -424,7 +541,7 @@ func TestLinkingObjectsByGid(t *testing.T) {
 	require.Equal(t, "P", project.Name)
 	require.Equal(t, project.Gid, projGid)
 
-	branch := &Branch{
+	branch := Branch{
 		Name:    "B",
 		ClerkId: "123",
 		Proj: Project{
@@ -489,7 +606,7 @@ func TestNestedObjectMutationWithBadType(t *testing.T) {
 
 	require.NoError(t, db1.DropData(ctx))
 
-	branch := &BadBranch{
+	branch := BadBranch{
 		Name:    "B",
 		ClerkId: "123",
 		Proj: BadProject{
@@ -502,7 +619,7 @@ func TestNestedObjectMutationWithBadType(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, fmt.Sprintf(modusdb.NoUniqueConstr, "BadProject"), err.Error())
 
-	proj := &BadProject{
+	proj := BadProject{
 		Name:    "P",
 		ClerkId: "456",
 	}
@@ -511,4 +628,121 @@ func TestNestedObjectMutationWithBadType(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, fmt.Sprintf(modusdb.NoUniqueConstr, "BadProject"), err.Error())
 
+}
+
+type Document struct {
+	Gid     uint64    `json:"gid,omitempty"`
+	Text    string    `json:"text,omitempty"`
+	TextVec []float32 `json:"textVec,omitempty" db:"constraint=vector"`
+}
+
+func TestVectorIndexSearchTyped(t *testing.T) {
+	ctx := context.Background()
+	db, err := modusdb.New(modusdb.NewDefaultConfig(t.TempDir()))
+	require.NoError(t, err)
+	defer db.Close()
+
+	db1, err := db.CreateNamespace()
+	require.NoError(t, err)
+
+	require.NoError(t, db1.DropData(ctx))
+
+	documents := []Document{
+		{Text: "apple", TextVec: []float32{0.1, 0.1, 0.0}},
+		{Text: "banana", TextVec: []float32{0.0, 1.0, 0.0}},
+		{Text: "carrot", TextVec: []float32{0.0, 0.0, 1.0}},
+		{Text: "dog", TextVec: []float32{1.0, 1.0, 0.0}},
+		{Text: "elephant", TextVec: []float32{0.0, 1.0, 1.0}},
+		{Text: "fox", TextVec: []float32{1.0, 0.0, 1.0}},
+		{Text: "gorilla", TextVec: []float32{1.0, 1.0, 1.0}},
+	}
+
+	for _, doc := range documents {
+		_, _, err = modusdb.Create(db, doc, db1.ID())
+		require.NoError(t, err)
+	}
+
+	const query = `
+		{
+			documents(func: similar_to(Document.textVec, 5, "[0.1,0.1,0.1]")) {
+					Document.text
+			}
+		}`
+
+	resp, err := db1.Query(ctx, query)
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"documents":[
+			{"Document.text":"apple"},
+			{"Document.text":"dog"},
+			{"Document.text":"elephant"},
+			{"Document.text":"fox"},
+			{"Document.text":"gorilla"}
+		]
+	}`, string(resp.GetJson()))
+
+	const query2 = `
+		{
+			documents(func: type("Document")) @filter(similar_to(Document.textVec, 5, "[0.1,0.1,0.1]")) {
+					Document.text
+			}
+		}`
+
+	resp, err = db1.Query(ctx, query2)
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"documents":[
+			{"Document.text":"apple"},
+			{"Document.text":"dog"},
+			{"Document.text":"elephant"},
+			{"Document.text":"fox"},
+			{"Document.text":"gorilla"}
+		]
+	}`, string(resp.GetJson()))
+}
+
+func TestVectorIndexSearchWithQuery(t *testing.T) {
+	ctx := context.Background()
+	db, err := modusdb.New(modusdb.NewDefaultConfig(t.TempDir()))
+	require.NoError(t, err)
+	defer db.Close()
+
+	db1, err := db.CreateNamespace()
+	require.NoError(t, err)
+
+	require.NoError(t, db1.DropData(ctx))
+
+	documents := []Document{
+		{Text: "apple", TextVec: []float32{0.1, 0.1, 0.0}},
+		{Text: "banana", TextVec: []float32{0.0, 1.0, 0.0}},
+		{Text: "carrot", TextVec: []float32{0.0, 0.0, 1.0}},
+		{Text: "dog", TextVec: []float32{1.0, 1.0, 0.0}},
+		{Text: "elephant", TextVec: []float32{0.0, 1.0, 1.0}},
+		{Text: "fox", TextVec: []float32{1.0, 0.0, 1.0}},
+		{Text: "gorilla", TextVec: []float32{1.0, 1.0, 1.0}},
+	}
+
+	for _, doc := range documents {
+		_, _, err = modusdb.Create(db, doc, db1.ID())
+		require.NoError(t, err)
+	}
+
+	gids, docs, err := modusdb.Query[Document](db, modusdb.QueryParams{
+		Filter: &modusdb.Filter{
+			Field: "textVec",
+			Vector: modusdb.VectorPredicate{
+				SimilarTo: []float32{0.1, 0.1, 0.1},
+				TopK:      5,
+			},
+		},
+	}, db1.ID())
+
+	require.NoError(t, err)
+	require.Len(t, docs, 5)
+	require.Len(t, gids, 5)
+	require.Equal(t, "apple", docs[0].Text)
+	require.Equal(t, "dog", docs[1].Text)
+	require.Equal(t, "elephant", docs[2].Text)
+	require.Equal(t, "fox", docs[3].Text)
+	require.Equal(t, "gorilla", docs[4].Text)
 }
