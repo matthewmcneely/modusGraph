@@ -400,10 +400,10 @@ func TestQueryApiWithPaginiationAndSorting(t *testing.T) {
 }
 
 type Project struct {
-	Gid     uint64 `json:"gid,omitempty"`
-	Name    string `json:"name,omitempty"`
-	ClerkId string `json:"clerk_id,omitempty" db:"constraint=unique"`
-	// Branches []Branch `json:"branches,omitempty" readFrom:"type=Branch,field=proj"`
+	Gid      uint64   `json:"gid,omitempty"`
+	Name     string   `json:"name,omitempty"`
+	ClerkId  string   `json:"clerk_id,omitempty" db:"constraint=unique"`
+	Branches []Branch `json:"branches,omitempty" readFrom:"type=Branch,field=proj"`
 }
 
 type Branch struct {
@@ -411,6 +411,147 @@ type Branch struct {
 	Name    string  `json:"name,omitempty"`
 	ClerkId string  `json:"clerk_id,omitempty" db:"constraint=unique"`
 	Proj    Project `json:"proj,omitempty"`
+}
+
+func TestReverseEdgeGet(t *testing.T) {
+	ctx := context.Background()
+	db, err := modusdb.New(modusdb.NewDefaultConfig(t.TempDir()))
+	require.NoError(t, err)
+	defer db.Close()
+
+	db1, err := db.CreateNamespace()
+	require.NoError(t, err)
+
+	require.NoError(t, db1.DropData(ctx))
+
+	projGid, project, err := modusdb.Create(db, Project{
+		Name:    "P",
+		ClerkId: "456",
+		Branches: []Branch{
+			{Name: "B", ClerkId: "123"},
+			{Name: "B2", ClerkId: "456"},
+		},
+	}, db1.ID())
+	require.NoError(t, err)
+
+	require.Equal(t, "P", project.Name)
+	require.Equal(t, project.Gid, projGid)
+
+	// modifying a read-only field will be a no-op
+	require.Len(t, project.Branches, 0)
+
+	branch1 := Branch{
+		Name:    "B",
+		ClerkId: "123",
+		Proj: Project{
+			Gid: projGid,
+		},
+	}
+
+	branch1Gid, branch1, err := modusdb.Create(db, branch1, db1.ID())
+	require.NoError(t, err)
+
+	require.Equal(t, "B", branch1.Name)
+	require.Equal(t, branch1.Gid, branch1Gid)
+	require.Equal(t, projGid, branch1.Proj.Gid)
+	require.Equal(t, "P", branch1.Proj.Name)
+
+	branch2 := Branch{
+		Name:    "B2",
+		ClerkId: "456",
+		Proj: Project{
+			Gid: projGid,
+		},
+	}
+
+	branch2Gid, branch2, err := modusdb.Create(db, branch2, db1.ID())
+	require.NoError(t, err)
+	require.Equal(t, "B2", branch2.Name)
+	require.Equal(t, branch2.Gid, branch2Gid)
+	require.Equal(t, projGid, branch2.Proj.Gid)
+
+	getProjGid, queriedProject, err := modusdb.Get[Project](db, projGid, db1.ID())
+	require.NoError(t, err)
+	require.Equal(t, projGid, getProjGid)
+	require.Equal(t, "P", queriedProject.Name)
+	require.Len(t, queriedProject.Branches, 2)
+	require.Equal(t, "B", queriedProject.Branches[0].Name)
+	require.Equal(t, "B2", queriedProject.Branches[1].Name)
+
+	queryBranchesGids, queriedBranches, err := modusdb.Query[Branch](db, modusdb.QueryParams{}, db1.ID())
+	require.NoError(t, err)
+	require.Len(t, queriedBranches, 2)
+	require.Len(t, queryBranchesGids, 2)
+	require.Equal(t, "B", queriedBranches[0].Name)
+	require.Equal(t, "B2", queriedBranches[1].Name)
+
+	// max depth is 2, so we should not see the branches within project
+	require.Len(t, queriedBranches[0].Proj.Branches, 0)
+
+	_, _, err = modusdb.Delete[Project](db, projGid, db1.ID())
+	require.NoError(t, err)
+
+	queryBranchesGids, queriedBranches, err = modusdb.Query[Branch](db, modusdb.QueryParams{}, db1.ID())
+	require.NoError(t, err)
+	require.Len(t, queriedBranches, 2)
+	require.Len(t, queryBranchesGids, 2)
+	require.Equal(t, "B", queriedBranches[0].Name)
+	require.Equal(t, "B2", queriedBranches[1].Name)
+}
+
+func TestReverseEdgeQuery(t *testing.T) {
+	ctx := context.Background()
+	db, err := modusdb.New(modusdb.NewDefaultConfig(t.TempDir()))
+	require.NoError(t, err)
+	defer db.Close()
+
+	db1, err := db.CreateNamespace()
+	require.NoError(t, err)
+
+	require.NoError(t, db1.DropData(ctx))
+
+	projects := []Project{
+		{Name: "P1", ClerkId: "456"},
+		{Name: "P2", ClerkId: "789"},
+	}
+
+	branchCounter := 1
+	clerkCounter := 100
+
+	for _, project := range projects {
+		projGid, project, err := modusdb.Create(db, project, db1.ID())
+		require.NoError(t, err)
+		require.Equal(t, project.Name, project.Name)
+		require.Equal(t, project.Gid, projGid)
+
+		branches := []Branch{
+			{Name: fmt.Sprintf("B%d", branchCounter), ClerkId: fmt.Sprintf("%d", clerkCounter), Proj: Project{Gid: projGid}},
+			{Name: fmt.Sprintf("B%d", branchCounter+1), ClerkId: fmt.Sprintf("%d", clerkCounter+1), Proj: Project{Gid: projGid}},
+		}
+		branchCounter += 2
+		clerkCounter += 2
+
+		for _, branch := range branches {
+			branchGid, branch, err := modusdb.Create(db, branch, db1.ID())
+			require.NoError(t, err)
+			require.Equal(t, branch.Name, branch.Name)
+			require.Equal(t, branch.Gid, branchGid)
+			require.Equal(t, projGid, branch.Proj.Gid)
+		}
+	}
+
+	queriedProjectsGids, queriedProjects, err := modusdb.Query[Project](db, modusdb.QueryParams{}, db1.ID())
+	require.NoError(t, err)
+	require.Len(t, queriedProjects, 2)
+	require.Len(t, queriedProjectsGids, 2)
+	require.Equal(t, "P1", queriedProjects[0].Name)
+	require.Equal(t, "P2", queriedProjects[1].Name)
+	require.Len(t, queriedProjects[0].Branches, 2)
+	require.Len(t, queriedProjects[1].Branches, 2)
+	require.Equal(t, "B1", queriedProjects[0].Branches[0].Name)
+	require.Equal(t, "B2", queriedProjects[0].Branches[1].Name)
+	require.Equal(t, "B3", queriedProjects[1].Branches[0].Name)
+	require.Equal(t, "B4", queriedProjects[1].Branches[1].Name)
 }
 
 func TestNestedObjectMutation(t *testing.T) {

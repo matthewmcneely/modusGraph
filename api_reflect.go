@@ -82,7 +82,7 @@ func createDynamicStruct(t reflect.Type, fieldToJsonTags map[string]string, dept
 		field, _ := t.FieldByName(fieldName)
 		if fieldName != "Gid" {
 			if field.Type.Kind() == reflect.Struct {
-				if depth <= 2 {
+				if depth <= 1 {
 					nestedFieldToJsonTags, _, _, _ := getFieldTags(field.Type)
 					nestedType := createDynamicStruct(field.Type, nestedFieldToJsonTags, depth+1)
 					fields = append(fields, reflect.StructField{
@@ -100,6 +100,15 @@ func createDynamicStruct(t reflect.Type, fieldToJsonTags map[string]string, dept
 					Type: reflect.PointerTo(nestedType),
 					Tag:  reflect.StructTag(fmt.Sprintf(`json:"%s.%s"`, t.Name(), jsonName)),
 				})
+			} else if field.Type.Kind() == reflect.Slice &&
+				field.Type.Elem().Kind() == reflect.Struct {
+				nestedFieldToJsonTags, _, _, _ := getFieldTags(field.Type.Elem())
+				nestedType := createDynamicStruct(field.Type.Elem(), nestedFieldToJsonTags, depth+1)
+				fields = append(fields, reflect.StructField{
+					Name: field.Name,
+					Type: reflect.SliceOf(nestedType),
+					Tag:  reflect.StructTag(fmt.Sprintf(`json:"%s.%s"`, t.Name(), jsonName)),
+				})
 			} else {
 				fields = append(fields, reflect.StructField{
 					Name: field.Name,
@@ -111,9 +120,9 @@ func createDynamicStruct(t reflect.Type, fieldToJsonTags map[string]string, dept
 		}
 	}
 	fields = append(fields, reflect.StructField{
-		Name: "Uid",
+		Name: "Gid",
 		Type: reflect.TypeOf(""),
-		Tag:  reflect.StructTag(`json:"uid"`),
+		Tag:  reflect.StructTag(`json:"gid"`),
 	}, reflect.StructField{
 		Name: "DgraphType",
 		Type: reflect.TypeOf([]string{}),
@@ -122,7 +131,7 @@ func createDynamicStruct(t reflect.Type, fieldToJsonTags map[string]string, dept
 	return reflect.StructOf(fields)
 }
 
-func mapDynamicToFinal(dynamic any, final any) (uint64, error) {
+func mapDynamicToFinal(dynamic any, final any, isNested bool) (uint64, error) {
 	vFinal := reflect.ValueOf(final).Elem()
 	vDynamic := reflect.ValueOf(dynamic).Elem()
 
@@ -135,35 +144,54 @@ func mapDynamicToFinal(dynamic any, final any) (uint64, error) {
 		dynamicValue := vDynamic.Field(i)
 
 		var finalField reflect.Value
-		if dynamicField.Name == "Uid" {
+		if dynamicField.Name == "Gid" {
 			finalField = vFinal.FieldByName("Gid")
 			gidStr := dynamicValue.String()
 			gid, _ = strconv.ParseUint(gidStr, 0, 64)
 		} else if dynamicField.Name == "DgraphType" {
-			fieldArr := dynamicValue.Interface().([]string)
-			if len(fieldArr) == 0 {
-				return 0, ErrNoObjFound
+			fieldArrInterface := dynamicValue.Interface()
+			fieldArr, ok := fieldArrInterface.([]string)
+			if ok {
+				if len(fieldArr) == 0 {
+					if !isNested {
+						return 0, ErrNoObjFound
+					} else {
+						continue
+					}
+				}
+			} else {
+				return 0, fmt.Errorf("DgraphType field should be an array of strings")
 			}
 		} else {
 			finalField = vFinal.FieldByName(dynamicField.Name)
 		}
 		if dynamicFieldType.Kind() == reflect.Struct {
-			_, err := mapDynamicToFinal(dynamicValue.Addr().Interface(), finalField.Addr().Interface())
+			_, err := mapDynamicToFinal(dynamicValue.Addr().Interface(), finalField.Addr().Interface(), true)
 			if err != nil {
 				return 0, err
 			}
 		} else if dynamicFieldType.Kind() == reflect.Ptr &&
 			dynamicFieldType.Elem().Kind() == reflect.Struct {
 			// if field is a pointer, find if the underlying is a struct
-			_, err := mapDynamicToFinal(dynamicValue.Interface(), finalField.Interface())
+			_, err := mapDynamicToFinal(dynamicValue.Interface(), finalField.Interface(), true)
 			if err != nil {
 				return 0, err
 			}
-
+		} else if dynamicFieldType.Kind() == reflect.Slice &&
+			dynamicFieldType.Elem().Kind() == reflect.Struct {
+			for j := 0; j < dynamicValue.Len(); j++ {
+				sliceElem := dynamicValue.Index(j).Addr().Interface()
+				finalSliceElem := reflect.New(finalField.Type().Elem()).Elem()
+				_, err := mapDynamicToFinal(sliceElem, finalSliceElem.Addr().Interface(), true)
+				if err != nil {
+					return 0, err
+				}
+				finalField.Set(reflect.Append(finalField, finalSliceElem))
+			}
 		} else {
 			if finalField.IsValid() && finalField.CanSet() {
-				// if field name is uid, convert it to uint64
-				if dynamicField.Name == "Uid" {
+				// if field name is gid, convert it to uint64
+				if dynamicField.Name == "Gid" {
 					finalField.SetUint(gid)
 				} else {
 					finalField.Set(dynamicValue)
