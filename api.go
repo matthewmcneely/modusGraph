@@ -14,6 +14,7 @@ import (
 
 	"github.com/dgraph-io/dgraph/v24/dql"
 	"github.com/dgraph-io/dgraph/v24/schema"
+	"github.com/hypermodeinc/modusdb/api/utils"
 )
 
 func Create[T any](db *DB, object T, ns ...uint64) (uint64, T, error) {
@@ -34,7 +35,7 @@ func Create[T any](db *DB, object T, ns ...uint64) (uint64, T, error) {
 
 	dms := make([]*dql.Mutation, 0)
 	sch := &schema.ParsedSchema{}
-	err = generateCreateDqlMutationsAndSchema[T](ctx, n, object, gid, &dms, sch)
+	err = generateSetDqlMutationsAndSchema[T](ctx, n, object, gid, &dms, sch)
 	if err != nil {
 		return 0, object, err
 	}
@@ -66,14 +67,14 @@ func Upsert[T any](db *DB, object T, ns ...uint64) (uint64, T, bool, error) {
 		return 0, object, false, err
 	}
 
-	gid, cf, err := getUniqueConstraint[T](object)
+	gid, cf, err := GetUniqueConstraint[T](object)
 	if err != nil {
 		return 0, object, false, err
 	}
 
 	dms := make([]*dql.Mutation, 0)
 	sch := &schema.ParsedSchema{}
-	err = generateCreateDqlMutationsAndSchema[T](ctx, n, object, gid, &dms, sch)
+	err = generateSetDqlMutationsAndSchema[T](ctx, n, object, gid, &dms, sch)
 	if err != nil {
 		return 0, object, false, err
 	}
@@ -83,19 +84,14 @@ func Upsert[T any](db *DB, object T, ns ...uint64) (uint64, T, bool, error) {
 		return 0, object, false, err
 	}
 
-	if gid != 0 {
-		gid, _, err = getByGidWithObject[T](ctx, n, gid, object)
-		if err != nil && err != ErrNoObjFound {
-			return 0, object, false, err
-		}
-		wasFound = err == nil
-	} else if cf != nil {
-		gid, _, err = getByConstrainedFieldWithObject[T](ctx, n, *cf, object)
-		if err != nil && err != ErrNoObjFound {
+	if gid != 0 || cf != nil {
+		gid, err = getExistingObject[T](ctx, n, gid, cf, object)
+		if err != nil && err != utils.ErrNoObjFound {
 			return 0, object, false, err
 		}
 		wasFound = err == nil
 	}
+
 	if gid == 0 {
 		gid, err = db.z.nextUID()
 		if err != nil {
@@ -104,7 +100,7 @@ func Upsert[T any](db *DB, object T, ns ...uint64) (uint64, T, bool, error) {
 	}
 
 	dms = make([]*dql.Mutation, 0)
-	err = generateCreateDqlMutationsAndSchema[T](ctx, n, object, gid, &dms, sch)
+	err = generateSetDqlMutationsAndSchema[T](ctx, n, object, gid, &dms, sch)
 	if err != nil {
 		return 0, object, false, err
 	}
