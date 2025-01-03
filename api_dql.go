@@ -21,9 +21,9 @@ const (
 	objQuery = `
     {
       obj(func: %s) {
-        uid
+        gid: uid
         expand(_all_) {
-            uid
+            gid: uid
             expand(_all_)
             dgraph.type
         }
@@ -36,9 +36,9 @@ const (
 	objsQuery = `
     {
       objs(func: type("%s")%s) @filter(%s) {
-        uid
+        gid: uid
         expand(_all_) {
-            uid
+            gid: uid
             expand(_all_)
             dgraph.type
         }
@@ -46,6 +46,14 @@ const (
         %s
       }
     }
+  `
+
+	reverseEdgeQuery = `
+  %s: ~%s {
+			gid: uid
+			expand(_all_)
+			dgraph.type
+		}
   `
 
 	funcUid        = `uid(%d)`
