@@ -1,3 +1,12 @@
+/*
+ * Copyright 2025 Hypermode Inc.
+ * Licensed under the terms of the Apache License, Version 2.0
+ * See the LICENSE file that accompanied this code for further details.
+ *
+ * SPDX-FileCopyrightText: 2025 Hypermode Inc. <hello@hypermode.com>
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 package mutations
 
 import (
@@ -8,12 +17,13 @@ import (
 	"github.com/dgraph-io/dgo/v240/protos/api"
 	"github.com/dgraph-io/dgraph/v24/protos/pb"
 	"github.com/dgraph-io/dgraph/v24/schema"
-	"github.com/hypermodeinc/modusdb/api/utils"
+	"github.com/hypermodeinc/modusdb/api/apiutils"
+	"github.com/hypermodeinc/modusdb/api/dgraphtypes"
 )
 
 func HandleReverseEdge(jsonName string, value reflect.Type, nsId uint64, sch *schema.ParsedSchema,
-	jsonToReverseEdgeTags map[string]string) error {
-	if jsonToReverseEdgeTags[jsonName] == "" {
+	reverseEdgeStr string) error {
+	if reverseEdgeStr == "" {
 		return nil
 	}
 
@@ -21,17 +31,16 @@ func HandleReverseEdge(jsonName string, value reflect.Type, nsId uint64, sch *sc
 		return fmt.Errorf("reverse edge %s should be a slice of structs", jsonName)
 	}
 
-	reverseEdge := jsonToReverseEdgeTags[jsonName]
-	typeName := strings.Split(reverseEdge, ".")[0]
+	typeName := strings.Split(reverseEdgeStr, ".")[0]
 	u := &pb.SchemaUpdate{
-		Predicate: utils.AddNamespace(nsId, reverseEdge),
+		Predicate: apiutils.AddNamespace(nsId, reverseEdgeStr),
 		ValueType: pb.Posting_UID,
 		Directive: pb.SchemaUpdate_REVERSE,
 	}
 
 	sch.Preds = append(sch.Preds, u)
 	sch.Types = append(sch.Types, &pb.TypeUpdate{
-		TypeName: utils.AddNamespace(nsId, typeName),
+		TypeName: apiutils.AddNamespace(nsId, typeName),
 		Fields:   []*pb.SchemaUpdate{u},
 	})
 	return nil
@@ -39,12 +48,12 @@ func HandleReverseEdge(jsonName string, value reflect.Type, nsId uint64, sch *sc
 
 func CreateNQuadAndSchema(value any, gid uint64, jsonName string, t reflect.Type,
 	nsId uint64) (*api.NQuad, *pb.SchemaUpdate, error) {
-	valType, err := utils.ValueToPosting_ValType(value)
+	valType, err := dgraphtypes.ValueToPosting_ValType(value)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	val, err := utils.ValueToApiVal(value)
+	val, err := dgraphtypes.ValueToApiVal(value)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -52,11 +61,11 @@ func CreateNQuadAndSchema(value any, gid uint64, jsonName string, t reflect.Type
 	nquad := &api.NQuad{
 		Namespace: nsId,
 		Subject:   fmt.Sprint(gid),
-		Predicate: utils.GetPredicateName(t.Name(), jsonName),
+		Predicate: apiutils.GetPredicateName(t.Name(), jsonName),
 	}
 
 	u := &pb.SchemaUpdate{
-		Predicate: utils.AddNamespace(nsId, utils.GetPredicateName(t.Name(), jsonName)),
+		Predicate: apiutils.AddNamespace(nsId, apiutils.GetPredicateName(t.Name(), jsonName)),
 		ValueType: valType,
 	}
 
