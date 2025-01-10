@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hypermodeinc/modusdb"
-	"github.com/hypermodeinc/modusdb/api/utils"
+	"github.com/hypermodeinc/modusdb/api/apiutils"
 )
 
 type User struct {
@@ -110,23 +110,36 @@ func TestCreateApi(t *testing.T) {
 		string(resp.GetJson()))
 
 	// TODO schema{} should work
-	schemaQuery := `schema(pred: [User.name, User.age, User.clerk_id]) 
-	{
-		type
-		index
-		tokenizer
-	}`
+	schemaQuery := `schema{}`
 	resp, err = db1.Query(ctx, schemaQuery)
 	require.NoError(t, err)
 
 	require.JSONEq(t,
-		`{"schema":
-			[
-				{"predicate":"User.age","type":"int"},
-				{"predicate":"User.clerk_id","type":"string","index":true,"tokenizer":["exact"]},
-				{"predicate":"User.name","type":"string"}
-			]
-		}`,
+		`{
+            "types": [
+                {
+                    "name": "User",
+                    "fields": [
+                        {"name": "User.name"},
+                        {"name": "User.age"},
+                        {"name": "User.clerk_id"}
+                    ]
+                },
+                {
+                    "name": "dgraph.graphql",
+                    "fields": [
+                        {"name": "dgraph.graphql.schema"},
+                        {"name": "dgraph.graphql.xid"}
+                    ]
+                },
+                {
+                    "name": "dgraph.graphql.persisted_query", 
+                    "fields": [
+                        {"name": "dgraph.graphql.p_query"}
+                    ]
+                }
+            ]
+        }`,
 		string(resp.GetJson()))
 }
 
@@ -768,7 +781,7 @@ func TestNestedObjectMutationWithBadType(t *testing.T) {
 
 	_, _, err = modusdb.Create(db, branch, db1.ID())
 	require.Error(t, err)
-	require.Equal(t, fmt.Sprintf(utils.NoUniqueConstr, "BadProject"), err.Error())
+	require.Equal(t, fmt.Sprintf(apiutils.NoUniqueConstr, "BadProject"), err.Error())
 
 	proj := BadProject{
 		Name:    "P",
@@ -777,7 +790,7 @@ func TestNestedObjectMutationWithBadType(t *testing.T) {
 
 	_, _, err = modusdb.Create(db, proj, db1.ID())
 	require.Error(t, err)
-	require.Equal(t, fmt.Sprintf(utils.NoUniqueConstr, "BadProject"), err.Error())
+	require.Equal(t, fmt.Sprintf(apiutils.NoUniqueConstr, "BadProject"), err.Error())
 
 }
 

@@ -13,14 +13,17 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/dgraph-io/dgo/v240/protos/api"
 	"github.com/dgraph-io/dgraph/v24/dql"
 	"github.com/dgraph-io/dgraph/v24/protos/pb"
 	"github.com/dgraph-io/dgraph/v24/schema"
 	"github.com/dgraph-io/dgraph/v24/x"
+	"github.com/hypermodeinc/modusdb/api/apiutils"
+	"github.com/hypermodeinc/modusdb/api/dgraphtypes"
 	"github.com/hypermodeinc/modusdb/api/mutations"
-	"github.com/hypermodeinc/modusdb/api/utils"
+	"github.com/hypermodeinc/modusdb/api/structreflect"
 )
 
 func generateSetDqlMutationsAndSchema[T any](ctx context.Context, n *Namespace, object T,
@@ -30,11 +33,11 @@ func generateSetDqlMutationsAndSchema[T any](ctx context.Context, n *Namespace, 
 		return fmt.Errorf("expected struct, got %s", t.Kind())
 	}
 
-	fieldToJsonTags, jsonToDbTags, jsonToReverseEdgeTags, err := utils.GetFieldTags(t)
+	tagMaps, err := structreflect.GetFieldTags(t)
 	if err != nil {
 		return err
 	}
-	jsonTagToValue := utils.GetJsonTagToValues(object, fieldToJsonTags)
+	jsonTagToValue := structreflect.GetJsonTagToValues(object, tagMaps.FieldToJson)
 
 	nquads := make([]*api.NQuad, 0)
 	uniqueConstraintFound := false
@@ -43,9 +46,34 @@ func generateSetDqlMutationsAndSchema[T any](ctx context.Context, n *Namespace, 
 		reflectValueType := reflect.TypeOf(value)
 		var nquad *api.NQuad
 
-		if jsonToReverseEdgeTags[jsonName] != "" {
-			if err := mutations.HandleReverseEdge(jsonName, reflectValueType, n.ID(), sch, jsonToReverseEdgeTags); err != nil {
+		if tagMaps.JsonToReverseEdge[jsonName] != "" {
+			reverseEdgeStr := tagMaps.JsonToReverseEdge[jsonName]
+			typeName := strings.Split(reverseEdgeStr, ".")[0]
+			currSchema, err := getSchema(ctx, n)
+			if err != nil {
 				return err
+			}
+
+			typeFound := false
+			predicateFound := false
+			for _, t := range currSchema.Types {
+				if t.Name == typeName {
+					typeFound = true
+					for _, f := range t.Fields {
+						if f.Name == reverseEdgeStr {
+							predicateFound = true
+							break
+						}
+					}
+					break
+				}
+			}
+
+			if !(typeFound && predicateFound) {
+				if err := mutations.HandleReverseEdge(jsonName, reflectValueType, n.ID(), sch,
+					reverseEdgeStr); err != nil {
+					return err
+				}
 			}
 			continue
 		}
@@ -69,7 +97,8 @@ func generateSetDqlMutationsAndSchema[T any](ctx context.Context, n *Namespace, 
 			return err
 		}
 
-		uniqueConstraintFound, err = utils.HandleConstraints(u, jsonToDbTags, jsonName, u.ValueType, uniqueConstraintFound)
+		uniqueConstraintFound, err = dgraphtypes.HandleConstraints(u, tagMaps.JsonToDb,
+			jsonName, u.ValueType, uniqueConstraintFound)
 		if err != nil {
 			return err
 		}
@@ -78,15 +107,15 @@ func generateSetDqlMutationsAndSchema[T any](ctx context.Context, n *Namespace, 
 		nquads = append(nquads, nquad)
 	}
 	if !uniqueConstraintFound {
-		return fmt.Errorf(utils.NoUniqueConstr, t.Name())
+		return fmt.Errorf(apiutils.NoUniqueConstr, t.Name())
 	}
 
 	sch.Types = append(sch.Types, &pb.TypeUpdate{
-		TypeName: utils.AddNamespace(n.ID(), t.Name()),
+		TypeName: apiutils.AddNamespace(n.ID(), t.Name()),
 		Fields:   sch.Preds,
 	})
 
-	val, err := utils.ValueToApiVal(t.Name())
+	val, err := dgraphtypes.ValueToApiVal(t.Name())
 	if err != nil {
 		return err
 	}

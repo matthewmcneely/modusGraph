@@ -1,10 +1,32 @@
-package query_gen
+/*
+ * Copyright 2025 Hypermode Inc.
+ * Licensed under the terms of the Apache License, Version 2.0
+ * See the LICENSE file that accompanied this code for further details.
+ *
+ * SPDX-FileCopyrightText: 2025 Hypermode Inc. <hello@hypermode.com>
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+package querygen
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
 )
+
+type SchemaField struct {
+	Name string `json:"name"`
+}
+
+type SchemaType struct {
+	Name   string        `json:"name,omitempty"`
+	Fields []SchemaField `json:"fields,omitempty"`
+}
+
+type SchemaResponse struct {
+	Types []SchemaType `json:"types,omitempty"`
+}
 
 type QueryFunc func() string
 
@@ -46,6 +68,10 @@ const (
 			dgraph.type
 		}
   `
+
+	SchemaQuery = `
+	schema{}
+	`
 
 	FuncUid        = `uid(%d)`
 	FuncEq         = `eq(%s, %s)`
