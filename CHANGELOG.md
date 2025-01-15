@@ -10,6 +10,9 @@
 - fix: alter schema on reverse edge after querying schema
   [#55](https://github.com/hypermodeinc/modusDB/pull/55)
 
+- feat: update interface to engine and namespace
+  [#57](https://github.com/hypermodeinc/modusDB/pull/57)
+
 ## 2025-01-02 - Version 0.1.0
 
 Baseline for the changelog.
