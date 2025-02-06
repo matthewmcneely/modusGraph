@@ -1,8 +1,8 @@
 module github.com/hypermodeinc/modusdb
 
-go 1.22.7
+go 1.22.11
 
-toolchain go1.23.3
+toolchain go1.23.6
 
 require (
 	github.com/cavaliergopher/grab/v3 v3.0.1
