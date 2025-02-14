@@ -6,15 +6,15 @@ toolchain go1.23.6
 
 require (
 	github.com/cavaliergopher/grab/v3 v3.0.1
-	github.com/dgraph-io/badger/v4 v4.5.0
+	github.com/dgraph-io/badger/v4 v4.5.1
 	github.com/dgraph-io/dgo/v240 v240.1.0
 	github.com/dgraph-io/ristretto/v2 v2.1.0
 	github.com/hypermodeinc/dgraph/v24 v24.0.3-0.20250123224129-a0d027dcffe0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
-	github.com/twpayne/go-geom v1.5.7
-	golang.org/x/sync v0.10.0
-	google.golang.org/protobuf v1.36.2
+	github.com/twpayne/go-geom v1.6.0
+	golang.org/x/sync v0.11.0
+	google.golang.org/protobuf v1.36.5
 )
 
 require (
@@ -69,7 +69,7 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/codesearch v1.2.0 // indirect
-	github.com/google/flatbuffers v24.3.25+incompatible // indirect
+	github.com/google/flatbuffers v24.12.23+incompatible // indirect
 	github.com/google/pprof v0.0.0-20221118152302-e6195bd50e26 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
