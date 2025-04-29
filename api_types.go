@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package modusdb
+package modusgraph
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/hypermodeinc/dgraph/v24/x"
-	"github.com/hypermodeinc/modusdb/api/apiutils"
-	"github.com/hypermodeinc/modusdb/api/querygen"
+	"github.com/hypermodeinc/modusgraph/api/apiutils"
+	"github.com/hypermodeinc/modusgraph/api/querygen"
 )
 
 type UniqueField interface {
@@ -74,7 +74,7 @@ type modusDbOptions struct {
 	ns uint64
 }
 
-func WithNamespace(ns uint64) ModusDbOption {
+func WithNamespaceOLD(ns uint64) ModusDbOption {
 	return func(o *modusDbOptions) {
 		o.ns = ns
 	}
@@ -85,7 +85,7 @@ func getDefaultNamespace(ctx context.Context, engine *Engine, nsId ...uint64) (c
 		ns: engine.db0.ID(),
 	}
 	for _, ns := range nsId {
-		WithNamespace(ns)(dbOpts)
+		WithNamespaceOLD(ns)(dbOpts)
 	}
 
 	d, err := engine.getNamespaceWithLock(dbOpts.ns)
