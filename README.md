@@ -1,11 +1,11 @@
 <div align="center">
 
-[![modus](https://github.com/user-attachments/assets/1a6020bd-d041-4dd0-b4a9-ce01dc015b65)](https://github.com/hypermodeinc/modusdb)
+[![modus](https://github.com/user-attachments/assets/1a6020bd-d041-4dd0-b4a9-ce01dc015b65)](https://github.com/hypermodeinc/modusgraph)
 
-[![GitHub License](https://img.shields.io/github/license/hypermodeinc/modusdb)](https://github.com/hypermodeinc/modusdb?tab=Apache-2.0-1-ov-file#readme)
+[![GitHub License](https://img.shields.io/github/license/hypermodeinc/modusdb)](https://github.com/hypermodeinc/modusgraph?tab=Apache-2.0-1-ov-file#readme)
 [![chat](https://img.shields.io/discord/1267579648657850441)](https://discord.gg/NJQ4bJpffF)
-[![GitHub Repo stars](https://img.shields.io/github/stars/hypermodeinc/modusdb)](https://github.com/hypermodeinc/modusdb/stargazers)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/hypermodeinc/modusdb)](https://github.com/hypermodeinc/modusdb/commits/main/)
+[![GitHub Repo stars](https://img.shields.io/github/stars/hypermodeinc/modusdb)](https://github.com/hypermodeinc/modusgraph/stargazers)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/hypermodeinc/modusdb)](https://github.com/hypermodeinc/modusgraph/commits/main/)
 
 </div>
 
@@ -15,17 +15,20 @@
    <a href="https://discord.gg/4z4GshR7fq">Discord</a>
 <p>
 
-**ModusDB is a high-performance, transactional database system.** It's designed to be type-first,
-schema-agnostic, and portable. ModusDB provides object-oriented APIs that makes it simple to build
+**modusGraph is a high-performance, transactional database system.** It's designed to be type-first,
+schema-agnostic, and portable. ModusGraph provides object-oriented APIs that make it simple to build
 new apps, paired with support for advanced use cases through the Dgraph Query Language (DQL). A
 dynamic schema allows for natural relations to be expressed in your data with performance that
 scales with your use case.
 
-ModusDB is available as a Go package for running in-process, providing low-latency reads, writes,
-and vector searches. We’ve made trade-offs to prioritize speed and simplicity.
+ModusGraph is available as a Go package for running in-process, providing low-latency reads, writes,
+and vector searches. We’ve made trade-offs to prioritize speed and simplicity. When runnning
+in-process, modusGraph internalizes Dgraph's server components, and data is written to a local
+file-based database. modusGraph also supports remote Dgraph servers, allowing you deploy your apps
+to any Dgraph cluster simply by changing the connection string.
 
 The [modus framework](https://github.com/hypermodeinc/modus) is optimized for apps that require
-sub-second response times. ModusDB augments polyglot functions with simple to use data and vector
+sub-second response times. ModusGraph augments polyglot functions with simple to use data and vector
 storage. When paired together, you can build a complete AI semantic search or retrieval-augmented
 generation (RAG) feature with a single framework.
 
@@ -35,49 +38,63 @@ generation (RAG) feature with a single framework.
 package main
 
 import (
-  "github.com/hypermodeinc/modusdb"
+    "context"
+    "fmt"
+    "time"
+
+    mg "github.com/hypermodeinc/modusgraph"
 )
 
-type User struct {
-  Gid  uint64 `json:"gid,omitempty"`
-  Id   string `json:"id,omitempty" db:"constraint=unique"`
-  Name string `json:"name,omitempty"`
-  Age  int    `json:"age,omitempty"`
+type TestEntity struct {
+    Name        string    `json:"name,omitempty" dgraph:"index=exact"`
+    Description string    `json:"description,omitempty" dgraph:"index=term"`
+    CreatedAt   time.Time `json:"createdAt,omitempty"`
+
+    // UID is a required field for nodes
+    UID string `json:"uid,omitempty"`
+    // DType is a required field for nodes, will get populated with the struct name
+    DType []string `json:"dgraph.type,omitempty"`
 }
 
 func main() {
-  engine, err := modusdb.NewEngine(modusdb.NewDefaultConfig("/local/modusdb"))
-  if err != nil {
-    panic(err)
-  }
-  defer engine.Close()
+    // Use a file URI to connect to a in-process modusGraph instance, ensure that the directory exists
+    uri := "file:///tmp/modusgraph"
+    // Assigning a Dgraph URI will connect to a remote Dgraph server
+    // uri := "dgraph://localhost:9080"
 
-  gid, user, err := modusdb.Upsert(ns, User{
-    Id:   "123",
-    Name: "A",
-    Age:  10,
-  })
-  if err != nil {
-    panic(err)
-  }
-  fmt.Println(user)
+    client, err := mg.NewClient(uri, mg.WithAutoSchema(true))
+    if err != nil {
+        panic(err)
+    }
+    defer client.Close()
 
-  _, queriedUser, err := modusdb.Get[User](ns, gid)
-  if err != nil {
-    panic(err)
-  }
-  fmt.Println(queriedUser)
+    entity := TestEntity{
+        Name:        "Test Entity",
+        Description: "This is a test entity",
+        CreatedAt:   time.Now(),
+    }
 
-  _, _, err = modusdb.Delete[User](ns, gid)
-  if err != nil {
-    panic(err)
-  }
+    ctx := context.Background()
+    err = client.Insert(ctx, &entity)
+
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println("Insert successful, entity UID:", entity.UID)
+
+    // Query the entity
+    var result TestEntity
+    err = client.Get(ctx, &result, entity.UID)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println("Query successful, entity:", result.UID)
 }
 ```
 
 ## Open Source
 
-The modus framework, including modusDB, is developed by [Hypermode](https://hypermode.com/) as an
+The modus framework, including modusGraph, is developed by [Hypermode](https://hypermode.com/) as an
 open-source project, integral but independent from Hypermode.
 
 We welcome external contributions. See the [CONTRIBUTING.md](./CONTRIBUTING.md) file if you would
@@ -90,9 +107,11 @@ us at <hello@hypermode.com>.
 
 ## Acknowledgements
 
-ModusDB builds heavily upon packages from the open source projects of
+modusGraph builds heavily upon packages from the open source projects of
 [Dgraph](https://github.com/hypermodeinc/dgraph) (graph query processing and transaction
 management), [Badger](https://github.com/dgraph-io/badger) (data storage), and
-[Ristretto](https://github.com/dgraph-io/ristretto) (cache). We expect the architecture and
-implementations of modusDB and Dgraph to expand in differentiation over time as the projects
-optimize for different core use cases, while maintaining Dgraph Query Language (DQL) compatibility.
+[Ristretto](https://github.com/dgraph-io/ristretto) (cache). modusGraph also relies on the
+[dgman](https://github.com/dolan-in/dgman) repository for much of its functionality. We expect the
+architecture and implementations of modusGraph and Dgraph to expand in differentiation over time as
+the projects optimize for different core use cases, while maintaining Dgraph Query Language (DQL)
+compatibility.

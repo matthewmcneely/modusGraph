@@ -10,13 +10,12 @@ import (
 	"testing"
 
 	"github.com/dgraph-io/dgo/v240/protos/api"
+	"github.com/hypermodeinc/modusgraph"
 	"github.com/stretchr/testify/require"
-
-	"github.com/hypermodeinc/modusdb"
 )
 
 func TestNonGalaxyDB(t *testing.T) {
-	engine, err := modusdb.NewEngine(modusdb.NewDefaultConfig(t.TempDir()))
+	engine, err := modusgraph.NewEngine(modusgraph.NewDefaultConfig(t.TempDir()))
 	require.NoError(t, err)
 	defer engine.Close()
 
@@ -51,7 +50,7 @@ func TestNonGalaxyDB(t *testing.T) {
 }
 
 func TestDropData(t *testing.T) {
-	engine, err := modusdb.NewEngine(modusdb.NewDefaultConfig(t.TempDir()))
+	engine, err := modusgraph.NewEngine(modusgraph.NewDefaultConfig(t.TempDir()))
 	require.NoError(t, err)
 	defer engine.Close()
 
@@ -91,7 +90,7 @@ func TestDropData(t *testing.T) {
 }
 
 func TestMultipleDBs(t *testing.T) {
-	engine, err := modusdb.NewEngine(modusdb.NewDefaultConfig(t.TempDir()))
+	engine, err := modusgraph.NewEngine(modusgraph.NewDefaultConfig(t.TempDir()))
 	require.NoError(t, err)
 	defer engine.Close()
 
@@ -150,7 +149,7 @@ func TestMultipleDBs(t *testing.T) {
 }
 
 func TestQueryWrongDB(t *testing.T) {
-	engine, err := modusdb.NewEngine(modusdb.NewDefaultConfig(t.TempDir()))
+	engine, err := modusgraph.NewEngine(modusgraph.NewDefaultConfig(t.TempDir()))
 	require.NoError(t, err)
 	defer engine.Close()
 
@@ -189,7 +188,7 @@ func TestQueryWrongDB(t *testing.T) {
 }
 
 func TestTwoDBs(t *testing.T) {
-	engine, err := modusdb.NewEngine(modusdb.NewDefaultConfig(t.TempDir()))
+	engine, err := modusgraph.NewEngine(modusgraph.NewDefaultConfig(t.TempDir()))
 	require.NoError(t, err)
 	defer engine.Close()
 
@@ -249,7 +248,7 @@ func TestTwoDBs(t *testing.T) {
 
 func TestDBDBRestart(t *testing.T) {
 	dataDir := t.TempDir()
-	engine, err := modusdb.NewEngine(modusdb.NewDefaultConfig(dataDir))
+	engine, err := modusgraph.NewEngine(modusgraph.NewDefaultConfig(dataDir))
 	require.NoError(t, err)
 	defer func() { engine.Close() }()
 
@@ -272,7 +271,7 @@ func TestDBDBRestart(t *testing.T) {
 	require.NoError(t, err)
 
 	engine.Close()
-	engine, err = modusdb.NewEngine(modusdb.NewDefaultConfig(dataDir))
+	engine, err = modusgraph.NewEngine(modusgraph.NewDefaultConfig(dataDir))
 	require.NoError(t, err)
 
 	db2, err := engine.CreateNamespace()

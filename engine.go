@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package modusdb
+package modusgraph
 
 import (
 	"context"
@@ -15,8 +15,10 @@ import (
 	"sync/atomic"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/dgraph-io/dgo/v240"
 	"github.com/dgraph-io/dgo/v240/protos/api"
 	"github.com/dgraph-io/ristretto/v2/z"
+	"github.com/go-logr/logr"
 	"github.com/hypermodeinc/dgraph/v24/dql"
 	"github.com/hypermodeinc/dgraph/v24/edgraph"
 	"github.com/hypermodeinc/dgraph/v24/posting"
@@ -25,6 +27,8 @@ import (
 	"github.com/hypermodeinc/dgraph/v24/schema"
 	"github.com/hypermodeinc/dgraph/v24/worker"
 	"github.com/hypermodeinc/dgraph/v24/x"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/test/bufconn"
 )
 
 var (
@@ -47,16 +51,24 @@ type Engine struct {
 
 	// points to default / 0 / galaxy namespace
 	db0 *Namespace
+
+	listener *bufconn.Listener
+	server   *grpc.Server
+	logger   logr.Logger
 }
 
 // NewEngine returns a new modusDB instance.
 func NewEngine(conf Config) (*Engine, error) {
 	// Ensure that we do not create another instance of modusDB in the same process
 	if !singleton.CompareAndSwap(false, true) {
+		conf.logger.Error(ErrSingletonOnly, "Failed to create engine")
 		return nil, ErrSingletonOnly
 	}
 
+	conf.logger.V(1).Info("Creating new modusDB engine", "dataDir", conf.dataDir)
+
 	if err := conf.validate(); err != nil {
+		conf.logger.Error(err, "Invalid configuration")
 		return nil, err
 	}
 
@@ -78,16 +90,31 @@ func NewEngine(conf Config) (*Engine, error) {
 	schema.Init(worker.State.Pstore)
 	posting.Init(worker.State.Pstore, 0, false) // TODO: set cache size
 
-	engine := &Engine{}
+	engine := &Engine{
+		logger: conf.logger,
+	}
 	engine.isOpen.Store(true)
+	engine.logger.V(1).Info("Initializing engine state")
 	if err := engine.reset(); err != nil {
+		engine.logger.Error(err, "Failed to reset database")
 		return nil, fmt.Errorf("error resetting db: %w", err)
 	}
 
 	x.UpdateHealthStatus(true)
 
 	engine.db0 = &Namespace{id: 0, engine: engine}
+
+	engine.listener, engine.server = setupBufconnServer(engine)
 	return engine, nil
+}
+
+func (engine *Engine) GetClient() (*dgo.Dgraph, error) {
+	engine.logger.V(2).Info("Getting Dgraph client from engine")
+	client, err := createDgraphClient(context.Background(), engine.listener)
+	if err != nil {
+		engine.logger.Error(err, "Failed to create Dgraph client")
+	}
+	return client, err
 }
 
 func (engine *Engine) CreateNamespace() (*Namespace, error) {
@@ -226,14 +253,20 @@ func (engine *Engine) alterSchemaWithParsed(ctx context.Context, sc *schema.Pars
 	return nil
 }
 
-func (engine *Engine) query(ctx context.Context, ns *Namespace, q string) (*api.Response, error) {
+func (engine *Engine) query(ctx context.Context,
+	ns *Namespace,
+	q string,
+	vars map[string]string) (*api.Response, error) {
 	engine.mutex.RLock()
 	defer engine.mutex.RUnlock()
 
-	return engine.queryWithLock(ctx, ns, q)
+	return engine.queryWithLock(ctx, ns, q, vars)
 }
 
-func (engine *Engine) queryWithLock(ctx context.Context, ns *Namespace, q string) (*api.Response, error) {
+func (engine *Engine) queryWithLock(ctx context.Context,
+	ns *Namespace,
+	q string,
+	vars map[string]string) (*api.Response, error) {
 	if !engine.isOpen.Load() {
 		return nil, ErrClosedEngine
 	}
@@ -243,6 +276,7 @@ func (engine *Engine) queryWithLock(ctx context.Context, ns *Namespace, q string
 		ReadOnly: true,
 		Query:    q,
 		StartTs:  engine.z.readTs(),
+		Vars:     vars,
 	})
 }
 

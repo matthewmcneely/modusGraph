@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package modusdb
+package modusgraph
 
 import (
 	"context"
@@ -21,6 +21,11 @@ func (ns *Namespace) ID() uint64 {
 	return ns.id
 }
 
+// DropAll drops all the data and schema in the modusDB instance.
+func (ns *Namespace) DropAll(ctx context.Context) error {
+	return ns.engine.DropAll(ctx)
+}
+
 // DropData drops all the data in the modusDB instance.
 func (ns *Namespace) DropData(ctx context.Context) error {
 	return ns.engine.dropData(ctx, ns)
@@ -36,5 +41,10 @@ func (ns *Namespace) Mutate(ctx context.Context, ms []*api.Mutation) (map[string
 
 // Query performs query or mutation or upsert on the given modusDB instance.
 func (ns *Namespace) Query(ctx context.Context, query string) (*api.Response, error) {
-	return ns.engine.query(ctx, ns, query)
+	return ns.engine.query(ctx, ns, query, nil)
+}
+
+// QueryWithVars performs query or mutation or upsert on the given modusDB instance.
+func (ns *Namespace) QueryWithVars(ctx context.Context, query string, vars map[string]string) (*api.Response, error) {
+	return ns.engine.query(ctx, ns, query, vars)
 }
