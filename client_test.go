@@ -25,7 +25,7 @@ func TestClientPool(t *testing.T) {
 	}{
 		{
 			name: "ClientPoolWithFileURI",
-			uri:  "file://" + t.TempDir(),
+			uri:  "file://" + GetTempDir(t),
 		},
 		{
 			name: "ClientPoolWithDgraphURI",
@@ -110,8 +110,8 @@ func TestClientPool(t *testing.T) {
 		})
 	}
 
-	// Reset singleton at the end of the test to ensure the next test can start fresh
-	mg.ResetSingleton()
+	// Shutdown at the end of the test to ensure the next test can start fresh
+	mg.Shutdown()
 }
 
 func TestClientPoolStress(t *testing.T) {
@@ -122,7 +122,7 @@ func TestClientPoolStress(t *testing.T) {
 	}{
 		{
 			name: "ClientPoolStressWithFileURI",
-			uri:  "file://" + t.TempDir(),
+			uri:  "file://" + GetTempDir(t),
 		},
 		{
 			name: "ClientPoolStressWithDgraphURI",
@@ -205,6 +205,6 @@ func TestClientPoolStress(t *testing.T) {
 			require.Greater(t, successCount, 0)
 		})
 
-		mg.ResetSingleton()
+		mg.Shutdown()
 	}
 }
