@@ -10,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/dgraph-io/dgo/v240"
@@ -34,18 +36,14 @@ import (
 var (
 	// This ensures that we only have one instance of modusDB in this process.
 	singleton atomic.Bool
+	// activeEngine tracks the current Engine instance for global access
+	activeEngine *Engine
 
 	ErrSingletonOnly = errors.New("only one instance of modusDB can exist in a process")
 	ErrEmptyDataDir  = errors.New("data directory is required")
 	ErrClosedEngine  = errors.New("modusDB engine is closed")
 	ErrNonExistentDB = errors.New("namespace does not exist")
 )
-
-// ResetSingleton resets the singleton state for testing purposes.
-// This should ONLY be called during testing, typically in cleanup functions.
-func ResetSingleton() {
-	singleton.Store(false)
-}
 
 // Engine is an instance of modusDB.
 // For now, we only support one instance of modusDB per process.
@@ -105,13 +103,24 @@ func NewEngine(conf Config) (*Engine, error) {
 		engine.logger.Error(err, "Failed to reset database")
 		return nil, fmt.Errorf("error resetting db: %w", err)
 	}
-
+	// Store the engine as the active instance
+	activeEngine = engine
 	x.UpdateHealthStatus(true)
 
 	engine.db0 = &Namespace{id: 0, engine: engine}
 
 	engine.listener, engine.server = setupBufconnServer(engine)
 	return engine, nil
+}
+
+// Shutdown closes the active Engine instance and resets the singleton state.
+func Shutdown() {
+	if activeEngine != nil {
+		activeEngine.Close()
+		activeEngine = nil
+	}
+	// Reset the singleton state so a new engine can be created if needed
+	singleton.Store(false)
 }
 
 func (engine *Engine) GetClient() (*dgo.Dgraph, error) {
@@ -378,7 +387,7 @@ func (engine *Engine) LoadData(inCtx context.Context, dataDir string) error {
 	return engine.db0.LoadData(inCtx, dataDir)
 }
 
-// Close closes the modusDB instance.
+// Close closes the modusGraph instance.
 func (engine *Engine) Close() {
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()
@@ -388,13 +397,18 @@ func (engine *Engine) Close() {
 	}
 
 	if !singleton.CompareAndSwap(true, false) {
-		panic("modusDB instance was not properly opened")
+		panic("modusGraph instance was not properly opened")
 	}
 
 	engine.isOpen.Store(false)
 	x.UpdateHealthStatus(false)
 	posting.Cleanup()
 	worker.State.Dispose()
+
+	if runtime.GOOS == "windows" {
+		runtime.GC()
+		time.Sleep(200 * time.Millisecond)
+	}
 }
 
 func (ns *Engine) reset() error {

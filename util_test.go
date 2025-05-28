@@ -9,8 +9,12 @@ import (
 	"context"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-logr/stdr"
 	mg "github.com/hypermodeinc/modusgraph"
@@ -45,11 +49,45 @@ func CreateTestClient(t *testing.T, uri string) (mg.Client, func()) {
 		}
 		client.Close()
 
-		// Reset the singleton state so the next test can create a new engine
-		mg.ResetSingleton()
+		// Properly shutdown the engine and reset the singleton state
+		mg.Shutdown()
 	}
 
 	return client, cleanup
+}
+
+// GetTempDir returns a temporary directory for testing purposes.
+// It creates a unique directory for each test and registers a cleanup function to remove it.
+// On Windows, it uses the standard temp directory and creates a unique directory for each test.
+// On other platforms, it uses the standard toolchain TempDir function.
+func GetTempDir(t *testing.T) string {
+	if runtime.GOOS == "windows" {
+		baseDir := os.TempDir()
+		testName := t.Name()
+		testName = strings.ReplaceAll(testName, "/", "_")
+		testName = strings.ReplaceAll(testName, "\\", "_")
+		testName = strings.ReplaceAll(testName, ":", "_")
+
+		tempDir := filepath.Join(baseDir, "modusgraph_test_"+testName)
+
+		err := os.MkdirAll(tempDir, 0755)
+		if err != nil {
+			t.Logf("Failed to create temp directory %s: %v, falling back to standard temp dir", tempDir, err)
+			return os.TempDir()
+		}
+
+		t.Cleanup(func() {
+			runtime.GC()
+			time.Sleep(200 * time.Millisecond)
+
+			if err := os.RemoveAll(tempDir); err != nil {
+				t.Logf("Warning: failed to remove temp directory %s: %v", tempDir, err)
+			}
+		})
+
+		return tempDir
+	}
+	return t.TempDir()
 }
 
 // SetupTestEnv configures the environment variables for tests.
