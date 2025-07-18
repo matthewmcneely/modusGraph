@@ -100,6 +100,7 @@ type clientOptions struct {
 	autoSchema       bool
 	poolSize         int
 	maxEdgeTraversal int
+	cacheSizeMB      int
 	namespace        string
 	logger           logr.Logger
 }
@@ -114,7 +115,7 @@ func WithAutoSchema(enable bool) ClientOpt {
 	}
 }
 
-// WithPoolSize sets the size of the dgo client connection pool
+// WithPoolSize sets the size of the dgraph client connection pool
 func WithPoolSize(size int) ClientOpt {
 	return func(o *clientOptions) {
 		o.poolSize = size
@@ -135,10 +136,20 @@ func WithLogger(logger logr.Logger) ClientOpt {
 	}
 }
 
-// WithMaxEdgeTraversal sets the maximum number of edges to traverse when fetching an object
+// WithMaxEdgeTraversal sets the maximum depth of edges to traverse when fetching an object
 func WithMaxEdgeTraversal(max int) ClientOpt {
 	return func(o *clientOptions) {
 		o.maxEdgeTraversal = max
+	}
+}
+
+// WithCacheSizeMB sets the memory cache size in MB (only applicable for embedded databases).
+// A good starting point for a system with a moderate amount of RAM (e.g., 8-16GB) would be
+// between 256 MB and 1 GB. Dgraph itself often defaults to a 1GB cache. In order to minimize
+// resource usage sans configuration, the default is set to 64 MB.
+func WithCacheSizeMB(size int) ClientOpt {
+	return func(o *clientOptions) {
+		o.cacheSizeMB = size
 	}
 }
 
@@ -154,6 +165,7 @@ func WithMaxEdgeTraversal(max int) ClientOpt {
 //   - WithMaxEdgeTraversal(int) - Set the maximum number of edges to traverse when fetching an object
 //   - WithNamespace(string) - Set the database namespace for multi-tenant installations
 //   - WithLogger(logr.Logger) - Configure structured logging with custom verbosity levels
+//   - WithCacheSizeMB(int) - Set the memory cache size in MB (only applicable for embedded databases)
 //
 // The returned Client provides a consistent interface regardless of whether you're
 // connected to a remote Dgraph cluster or a local embedded database. This abstraction
@@ -168,6 +180,7 @@ func NewClient(uri string, opts ...ClientOpt) (Client, error) {
 		poolSize:         10,
 		namespace:        "",
 		maxEdgeTraversal: 10,
+		cacheSizeMB:      64,             // 64 MB
 		logger:           logr.Discard(), // No-op logger by default
 	}
 
@@ -210,8 +223,9 @@ func NewClient(uri string, opts ...ClientOpt) (Client, error) {
 			return nil, err
 		}
 		engine, err := NewEngine(Config{
-			dataDir: uri,
-			logger:  client.logger,
+			dataDir:     uri,
+			logger:      client.logger,
+			cacheSizeMB: options.cacheSizeMB,
 		})
 		if err != nil {
 			return nil, err
@@ -242,8 +256,8 @@ func (c client) isLocal() bool {
 }
 
 func (c client) key() string {
-	return fmt.Sprintf("%s:%t:%d:%d:%s", c.uri, c.options.autoSchema, c.options.poolSize,
-		c.options.maxEdgeTraversal, c.options.namespace)
+	return fmt.Sprintf("%s:%t:%d:%d:%d:%s", c.uri, c.options.autoSchema, c.options.poolSize,
+		c.options.maxEdgeTraversal, c.options.cacheSizeMB, c.options.namespace)
 }
 
 func checkPointer(obj any) error {
