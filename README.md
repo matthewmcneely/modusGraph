@@ -1,22 +1,12 @@
 <div align="center">
 
-[![modus](https://github.com/user-attachments/assets/1a6020bd-d041-4dd0-b4a9-ce01dc015b65)](https://github.com/hypermodeinc/modusgraph)
-
-[![GitHub License](https://img.shields.io/github/license/hypermodeinc/modusdb)](https://github.com/hypermodeinc/modusgraph?tab=Apache-2.0-1-ov-file#readme)
-[![chat](https://img.shields.io/discord/1267579648657850441)](https://discord.gg/NJQ4bJpffF)
-[![GitHub Repo stars](https://img.shields.io/github/stars/hypermodeinc/modusdb)](https://github.com/hypermodeinc/modusgraph/stargazers)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/hypermodeinc/modusdb)](https://github.com/hypermodeinc/modusgraph/commits/main/)
+[![GitHub Repo stars](https://img.shields.io/github/stars/matthewmcneely/modusgraph)](https://github.com/matthewmcneely/modusgraph/stargazers)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/matthewmcneely/modusgraph)](https://github.com/matthewmcneely/modusgraph/commits/main/)
 
 </div>
 
-<p align="center">
-   <a href="https://docs.hypermode.com/">Docs</a>
-   <span> · </span>
-   <a href="https://discord.gg/4z4GshR7fq">Discord</a>
-<p>
-
 **modusGraph is a high-performance, transactional database system.** It's designed to be type-first,
-schema-agnostic, and portable. ModusGraph provides object-oriented APIs that make it simple to build
+schema-agnostic, and portable. modusGraph provides object-oriented APIs that make it simple to build
 new apps, paired with support for advanced use cases through the Dgraph Query Language (DQL). A
 dynamic schema allows for natural relations to be expressed in your data with performance that
 scales with your use case.
@@ -26,11 +16,6 @@ and vector searches. We’ve made trade-offs to prioritize speed and simplicity.
 in-process, modusGraph internalizes Dgraph's server components, and data is written to a local
 file-based database. modusGraph also supports remote Dgraph servers, allowing you deploy your apps
 to any Dgraph cluster simply by changing the connection string.
-
-The [modus framework](https://github.com/hypermodeinc/modus) is optimized for apps that require
-sub-second response times. ModusGraph augments polyglot functions with simple to use data and vector
-storage. When paired together, you can build a complete AI semantic search or retrieval-augmented
-generation (RAG) feature with a single framework.
 
 ## Quickstart
 
@@ -42,7 +27,7 @@ import (
     "fmt"
     "time"
 
-    mg "github.com/hypermodeinc/modusgraph"
+    mg "github.com/matthewmcneely/modusgraph"
 )
 
 type TestEntity struct {
@@ -194,7 +179,8 @@ to your struct fields, you tell modusGraph how to store and index your data in t
 
 ### Basic Structure
 
-Every struct that represents a node in your graph should include:
+Every struct that represents a node in your graph must include a `UID` and `DType` field, for
+example:
 
 ```go
 type MyNode struct {
@@ -522,6 +508,11 @@ With AutoSchema enabled, modusGraph will:
 
 This is particularly useful during development when your schema is evolving frequently.
 
+Special note regarding changing/deleting fields: removing a field from a struct WILL NOT remove the
+field and any associated data from the database. See the `TestDeletePredicate` in `delete_test.go`
+for an example of how to delete a predicate(field) from all nodes that have it. Similarly, changing
+the type of a field will not convert existing data to the new type.
+
 ### Schema Operations
 
 For more control over schema management, modusGraph provides several methods in the Client
@@ -652,6 +643,11 @@ tests in subfolders may not work as expected.
 Temporary folders created during tests may not be cleaned up properly on Windows. Users should
 periodically clean up these folders. The temporary folders are created in the Windows temp
 directory, `C:\Users\<username>\AppData\Local\Temp\modusgraph_test*`.
+
+## Contributing
+
+See the [CONTRIBUTING.md](./CONTRIBUTING.md) file for information on how to contribute to
+modusGraph.
 
 ## Acknowledgements
 

@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/go-logr/stdr"
-	"github.com/hypermodeinc/modusgraph"
+	"github.com/matthewmcneely/modusgraph"
 )
 
 func main() {

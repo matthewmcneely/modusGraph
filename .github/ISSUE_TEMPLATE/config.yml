@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Modus Community Support
-    url: https://discord.hypermode.com
+  - name: Matthew McNeely
+    url: https://github.com/matthewmcneely/modusGraph/discussions
     about: Please ask and answer questions here
