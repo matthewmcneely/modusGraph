@@ -17,7 +17,7 @@ import (
 	"github.com/go-logr/stdr"
 	"github.com/hypermodeinc/dgraph/v25/dgraphapi"
 	"github.com/hypermodeinc/dgraph/v25/systest/1million/common"
-	"github.com/hypermodeinc/modusgraph"
+	"github.com/matthewmcneely/modusgraph"
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,6 +87,9 @@ func TestLiveLoaderSmall(t *testing.T) {
 }
 
 func TestLiveLoader1Million(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 	stdLogger := log.New(os.Stdout, "", log.LstdFlags)
 	logger := stdr.NewWithOptions(stdLogger, stdr.Options{LogCaller: stdr.All}).WithName("mg")
 	conf := modusgraph.NewDefaultConfig(t.TempDir()).WithLogger(logger).WithCacheSizeMB(0)

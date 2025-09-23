@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	mg "github.com/hypermodeinc/modusgraph"
+	mg "github.com/matthewmcneely/modusgraph"
 	"github.com/stretchr/testify/require"
 )
 

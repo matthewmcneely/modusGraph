@@ -1,4 +1,4 @@
-module github.com/hypermodeinc/modusgraph
+module github.com/matthewmcneely/modusgraph
 
 go 1.24.4
 

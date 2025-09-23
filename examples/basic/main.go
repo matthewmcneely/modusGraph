@@ -17,7 +17,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
-	mg "github.com/hypermodeinc/modusgraph"
+	mg "github.com/matthewmcneely/modusgraph"
 )
 
 type Thread struct {

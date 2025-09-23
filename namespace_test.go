@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/dgraph-io/dgo/v250/protos/api"
-	"github.com/hypermodeinc/modusgraph"
+	"github.com/matthewmcneely/modusgraph"
 	"github.com/stretchr/testify/require"
 )
 

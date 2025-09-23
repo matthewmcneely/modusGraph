@@ -17,7 +17,7 @@ import (
 	"github.com/cavaliergopher/grab/v3"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
-	"github.com/hypermodeinc/modusgraph"
+	"github.com/matthewmcneely/modusgraph"
 )
 
 const (

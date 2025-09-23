@@ -13,7 +13,7 @@ import (
 	"runtime/pprof"
 	"testing"
 
-	"github.com/hypermodeinc/modusgraph"
+	"github.com/matthewmcneely/modusgraph"
 	"github.com/stretchr/testify/require"
 )
 

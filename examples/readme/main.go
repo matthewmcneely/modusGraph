@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"time"
 
-	mg "github.com/hypermodeinc/modusgraph"
+	mg "github.com/matthewmcneely/modusgraph"
 )
 
 // This example is featured on the repo README
