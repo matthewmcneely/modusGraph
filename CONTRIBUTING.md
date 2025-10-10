@@ -12,10 +12,6 @@ Before jumping to a pull request, ensure you've looked at
 [issues](https://github.com/matthewmcneely/modusgraph/issues) (open and closed) for existing work
 related to your idea.
 
-If in doubt or contemplating a larger change, join the
-[Hypermode Discord](https://discord.hypermode.com) and start a discussion in the
-[#modus](https://discord.com/channels/1267579648657850441/1292948253796466730) channel.
-
 ## Codebase
 
 The development language of modusGraph is Go.
@@ -50,21 +46,7 @@ Discord.
 
 Pull requests are awesome, but there are many ways to help.
 
-### Documentation improvements
-
-Modus docs are maintained in a [separate repository](https://github.com/hypermodeinc/docs). Relevant
-updates and issues should be opened in that repo.
-
 ### Blogging and presenting your work
 
 Share what you're building with modusGraph in your preferred medium. We'd love to help amplify your
 work and/or provide feedback, so get in touch if you'd like some help!
-
-### Join the community
-
-There are lots of people building with modusGraph who are excited to connect!
-
-- Chat on [Discord](https://discord.hypermode.com)
-- Join the conversation on [X](https://x.com/hypermodeinc)
-- Read the latest posts on the [Blog](https://hypermode.com/blog)
-- Connect with us on [LinkedIn](https://linkedin.com/company/hypermode)

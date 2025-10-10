@@ -621,9 +621,6 @@ integrating modusGraph into your workflow.
 
 ## Open Source
 
-The modus framework, including modusGraph, is developed by [Hypermode](https://hypermode.com/) as an
-open-source project, integral but independent from Hypermode.
-
 We welcome external contributions. See the [CONTRIBUTING.md](./CONTRIBUTING.md) file if you would
 like to get involved.
 
