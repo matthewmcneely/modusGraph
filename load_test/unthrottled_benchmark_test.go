@@ -129,6 +129,7 @@ func runModusGraphUnthrottled(t *testing.T, config UnthrottledConfig) {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
+			// nolint:gosec // G404: math/rand is sufficient for test data
 			rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
 			for {
 				select {
@@ -170,7 +171,8 @@ func runModusGraphUnthrottled(t *testing.T, config UnthrottledConfig) {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)*1000))
+			// nolint:gosec // G404: math/rand is sufficient for test data
+			rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
 			for {
 				select {
 				case <-stopChan:
@@ -268,7 +270,8 @@ func runModusGraphUnthrottled(t *testing.T, config UnthrottledConfig) {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)*10000))
+			// nolint:gosec // G404: math/rand is sufficient for test data
+			rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
 			for {
 				select {
 				case <-stopChan:
@@ -369,7 +372,7 @@ func saveUnthrottledStatsToFile(t *testing.T, stats map[string]interface{}, dbTy
 		t.Logf("Warning: Failed to marshal stats: %v", err)
 		return
 	}
-	if err := os.WriteFile(filename, data, 0644); err != nil {
+	if err := os.WriteFile(filename, data, 0600); err != nil {
 		t.Logf("Warning: Failed to write stats file: %v", err)
 	} else {
 		t.Logf("\nUnthrottled benchmark results saved to: %s", filename)

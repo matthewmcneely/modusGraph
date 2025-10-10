@@ -57,7 +57,6 @@ type OperationStats struct {
 	entitiesInDB    atomic.Int64
 	lastReportTime  time.Time
 	startTime       time.Time
-	initialMemAlloc uint64
 }
 
 // RecordWrite records write operation metrics
@@ -124,7 +123,8 @@ func (s *OperationStats) Report() string {
 	totalAllocMB := float64(m.TotalAlloc) / 1024 / 1024
 	sysMB := float64(m.Sys) / 1024 / 1024
 
-	report := fmt.Sprintf("\n=== Performance Report (%.1fs interval, %.1fs total) ===\n", elapsed.Seconds(), totalElapsed.Seconds())
+	report := fmt.Sprintf("\n=== Performance Report (%.1fs interval, %.1fs total) ===\n",
+		elapsed.Seconds(), totalElapsed.Seconds())
 	report += fmt.Sprintf("Entities in DB: %d | Memory: Alloc=%.1fMB, TotalAlloc=%.1fMB, Sys=%.1fMB\n\n",
 		s.entitiesInDB.Load(), allocMB, totalAllocMB, sysMB)
 
@@ -247,7 +247,7 @@ func (p *EntityPool) GetRandom() (string, bool) {
 	if len(p.uids) == 0 {
 		return "", false
 	}
-	return p.uids[rand.Intn(len(p.uids))], true
+	return p.uids[rand.Intn(len(p.uids))], true // nolint:gosec // G404: math/rand is sufficient for test data
 }
 
 // GetRandomBatch returns a batch of random UIDs
@@ -262,7 +262,7 @@ func (p *EntityPool) GetRandomBatch(n int) []string {
 	}
 
 	// Create a random sample without replacement
-	indices := rand.Perm(len(p.uids))[:n]
+	indices := rand.Perm(len(p.uids))[:n] // nolint:gosec // G404: math/rand is sufficient for test data
 	result := make([]string, n)
 	for i, idx := range indices {
 		result[i] = p.uids[idx]
@@ -297,6 +297,7 @@ func (p *EntityPool) Size() int {
 }
 
 // generateEntity creates a random test entity
+// nolint:gosec // G404: math/rand is sufficient for generating test data
 func generateEntity(id int) *BenchmarkEntity {
 	tags := []string{"tag1", "tag2", "tag3", "tag4", "tag5"}
 	numTags := rand.Intn(3) + 1
@@ -369,7 +370,7 @@ func runLongRunningBenchmark(t *testing.T, config BenchmarkConfig) {
 	}
 	pool := &EntityPool{uids: make([]string, 0)}
 	entityCounter := 0
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(time.Now().UnixNano())) // nolint:gosec // G404: math/rand is sufficient for test data
 
 	// Setup tickers for different operations
 	writeTicker := time.NewTicker(config.WriteInterval)
@@ -621,7 +622,7 @@ func saveStatsToFile(t *testing.T, stats map[string]interface{}) {
 		t.Logf("Warning: Failed to marshal stats: %v", err)
 		return
 	}
-	if err := os.WriteFile(filename, data, 0644); err != nil {
+	if err := os.WriteFile(filename, data, 0600); err != nil {
 		t.Logf("Warning: Failed to write stats file: %v", err)
 	} else {
 		t.Logf("\nBenchmark results saved to: %s", filename)
