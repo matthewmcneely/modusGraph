@@ -23,8 +23,7 @@ jobs:
     timeout-minutes: 20
     name: Test ${{ matrix.os }}
     runs-on:
-      "${{ matrix.os == 'linux' && 'warp-ubuntu-latest-x64-4x' || matrix.os == 'macos' &&
-      'warp-macos-15-arm64-6x'}}"
+      "${{ matrix.os == 'linux' && 'ubuntu-latest' || matrix.os == 'macos' && 'macos-latest'}}"
 
     strategy:
       fail-fast: false
