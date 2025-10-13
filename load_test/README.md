@@ -7,7 +7,7 @@ This directory contains load tests and benchmarks for modusGraph.
 The `TestLongRunningBenchmark` provides a comprehensive stress test that performs periodic write,
 update, delete, and query operations on modusGraph while tracking performance metrics.
 
-### Features
+### Long-Running Benchmark Features
 
 - **Concurrent Operations**: Simulates realistic workload with concurrent writes, updates, deletes,
   and queries
@@ -19,7 +19,7 @@ update, delete, and query operations on modusGraph while tracking performance me
 - **Graceful Shutdown**: Handles Ctrl+C (SIGINT) and SIGTERM signals to save results before exit
 - **Atomic Counters**: Thread-safe entity tracking prevents race conditions
 
-### Running the Benchmark
+### Running the Long-Running Benchmark
 
 #### Quick Test (5 seconds)
 
@@ -54,7 +54,7 @@ Press **Ctrl+C** during the test to trigger graceful shutdown. The benchmark wil
 - Save results to JSON file
 - Exit cleanly
 
-### Configuration
+### Long-Running Benchmark Configuration
 
 The benchmark can be configured by modifying `DefaultBenchmarkConfig()` in the code:
 
@@ -67,7 +67,7 @@ The benchmark can be configured by modifying `DefaultBenchmarkConfig()` in the c
 - **BatchSize**: Number of entities per batch operation (default: 10)
 - **DeletePercentage**: Percentage of entities to delete (default: 0.1 = 10%)
 
-### Operations Performed
+### Long-Running Benchmark Operations
 
 1. **Writes**: Batch inserts of new entities with random data
 2. **Updates**: Fetches random entities and updates their fields
@@ -87,9 +87,9 @@ For each operation type:
 - Average latency
 - Operations per second
 
-### Sample Output
+### Long-Running Benchmark Sample Output
 
-```
+```text
 === Performance Report (10.0s interval, 30.0s total) ===
 Entities in DB: 408 | Memory: Alloc=295.9MB, TotalAlloc=1382.1MB, Sys=709.3MB
 
@@ -131,7 +131,7 @@ performance and identify bottlenecks under heavy load.
 - **Maximum Throughput**: Tests the absolute limits of the system
 - **Worker-Based**: Uses dedicated goroutines for each operation type
 
-### Features
+### Unthrottled Benchmark Features
 
 - **Concurrent Workers**: Separate worker pools for writes, updates, deletes, and queries
 - **Continuous Load**: Each worker operates as fast as possible without artificial delays
@@ -139,7 +139,7 @@ performance and identify bottlenecks under heavy load.
 - **Graceful Shutdown**: Properly stops all workers and waits for in-flight operations
 - **Cancellation Handling**: Distinguishes between real errors and expected shutdown errors
 
-### Running the Benchmark
+### Running the Unthrottled Benchmark
 
 #### Quick Test (30 seconds)
 
@@ -159,7 +159,7 @@ go test -v -run=TestModusGraphUnthrottledBenchmark ./load_test -timeout=5m
 BENCHMARK_DURATION=10m go test -v -run=TestModusGraphUnthrottledBenchmark ./load_test -timeout=15m
 ```
 
-### Configuration
+### Unthrottled Benchmark Configuration
 
 The benchmark can be configured by modifying `DefaultUnthrottledConfig()` in the code:
 
@@ -172,7 +172,7 @@ The benchmark can be configured by modifying `DefaultUnthrottledConfig()` in the
 - **BatchSize**: Number of entities per batch operation (default: 10)
 - **DeletePercentage**: Percentage of entities to delete (default: 0.1 = 10%)
 
-### Client Configuration
+### Unthrottled Benchmark Client Configuration
 
 The test uses optimized client settings:
 
@@ -181,7 +181,7 @@ modusgraph.WithCacheSizeMB(1024)  // 1GB posting cache
 modusgraph.WithPoolSize(20)       // 20 connections in pool
 ```
 
-### Operations Performed
+### Unthrottled Benchmark Operations
 
 Each worker type operates in a continuous loop:
 
@@ -190,9 +190,9 @@ Each worker type operates in a continuous loop:
 3. **Delete Workers**: Continuously delete random batches of entities
 4. **Query Workers**: Continuously execute various query types
 
-### Sample Output
+### Unthrottled Benchmark Sample Output
 
-```
+```text
 === Performance Report (10.0s interval, 60.0s total) ===
 Entities in DB: 12847 | Memory: Alloc=512.3MB, TotalAlloc=8472.1MB, Sys=1024.7MB
 
