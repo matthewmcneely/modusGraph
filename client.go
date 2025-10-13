@@ -7,6 +7,7 @@ package modusgraph
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -25,6 +26,14 @@ type Client interface {
 	// Insert adds a new object or slice of objects to the database.
 	// The object must be a pointer to a struct with appropriate dgraph tags.
 	Insert(context.Context, any) error
+
+	// InsertRaw adds a new object or slice of objects to the database.
+	// The object must be a pointer to a struct with appropriate dgraph tags.
+	// This is a no-op for remote Dgraph clients. For local clients, this
+	// function mutates the Dgraph engine directly. No unique checks are performed.
+	// The `UID` field for any objects must be set using the Dgraph blank node
+	// prefix concept (e.g. "_:user1") to allow the engine to generate a UID for the object.
+	InsertRaw(context.Context, any) error
 
 	// Upsert inserts an object if it doesn't exist or updates it if it does.
 	// This operation requires a field with a unique directive in the dgraph tag.
@@ -268,7 +277,7 @@ func checkPointer(obj any) error {
 }
 
 // Insert implements inserting an object or slice of objects in the database.
-// Passed object must be a pointer to a struct.
+// Passed object must be a pointer to a struct with appropriate dgraph tags.
 func (c client) Insert(ctx context.Context, obj any) error {
 	if c.isLocal() {
 		return c.mutateWithUniqueVerification(ctx, obj, true)
@@ -276,6 +285,83 @@ func (c client) Insert(ctx context.Context, obj any) error {
 	return c.process(ctx, obj, "Insert", func(tx *dg.TxnContext, obj any) ([]string, error) {
 		return tx.MutateBasic(obj)
 	})
+}
+
+// InsertRaw adds a new object or slice of objects to the database.
+// The object must be a pointer to a struct with appropriate dgraph tags.
+// This is a no-op for remote Dgraph clients. For local clients, this
+// function mutates the Dgraph engine directly. No unique checks are performed.
+// The `UID` field for any objects must be set using the Dgraph blank node
+// prefix concept (e.g. "_:user1") to allow the engine to generate a UID for the object.
+func (c client) InsertRaw(ctx context.Context, obj any) error {
+	if c.isLocal() {
+		// Validate object and update schema if autoSchema is enabled
+		schemaObj, err := checkObject(obj)
+		if err != nil {
+			return err
+		}
+		if c.options.autoSchema {
+			if err := c.UpdateSchema(ctx, schemaObj); err != nil {
+				return err
+			}
+		}
+
+		val := reflect.ValueOf(obj)
+		var sliceValue reflect.Value
+
+		mutations := []*api.Mutation{}
+		// Handle pointer to slice
+		if val.Kind() == reflect.Ptr && val.Elem().Kind() == reflect.Slice {
+			sliceValue = val.Elem()
+		} else if val.Kind() == reflect.Slice {
+			// Direct slice
+			sliceValue = val
+		} else {
+			// Single object - create a slice with one element
+			valElem := val
+			for valElem.Kind() == reflect.Ptr {
+				valElem = valElem.Elem()
+			}
+			sliceType := reflect.SliceOf(valElem.Type())
+			sliceValue = reflect.MakeSlice(sliceType, 1, 1)
+			sliceValue.Index(0).Set(valElem)
+		}
+
+		// Recursively validate and prepare all structs (including nested ones)
+		if err := validateAndPrepareStruct(sliceValue, "obj", make(map[uintptr]bool)); err != nil {
+			return err
+		}
+
+		// iterate sliceValue and create mutations
+		for i := 0; i < sliceValue.Len(); i++ {
+			elem := sliceValue.Index(i)
+			if elem.Kind() == reflect.Ptr {
+				elem = elem.Elem()
+			}
+			if elem.Kind() != reflect.Struct {
+				continue
+			}
+
+			data, err := json.Marshal(elem.Interface())
+			if err != nil {
+				return err
+			}
+			mutations = append(mutations, &api.Mutation{SetJson: data, CommitNow: false})
+		}
+		uidMap, err := c.engine.db0.Mutate(ctx, mutations)
+		if err != nil {
+			return err
+		}
+
+		// Replace blank node UIDs with actual generated UIDs in the original obj
+		replaceUIDs(obj, uidMap)
+
+		return nil
+	} else {
+		return c.process(ctx, obj, "Insert", func(tx *dg.TxnContext, obj any) ([]string, error) {
+			return tx.MutateBasic(obj)
+		})
+	}
 }
 
 // Upsert implements inserting or updating an object or slice of objects in the database.
@@ -460,6 +546,142 @@ func (c client) DgraphClient() (client *dgo.Dgraph, cleanup func(), err error) {
 		}
 	}
 	return client, cleanup, err
+}
+
+// validateAndPrepareStruct recursively validates and prepares structs for insertion
+// by ensuring UID fields are in the correct format and DType fields are set
+func validateAndPrepareStruct(val reflect.Value, path string, visited map[uintptr]bool) error {
+	if !val.IsValid() {
+		return nil
+	}
+
+	// Dereference pointers
+	for val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return nil
+		}
+		// Prevent infinite recursion on circular references
+		ptr := val.Pointer()
+		if visited[ptr] {
+			return nil
+		}
+		visited[ptr] = true
+		val = val.Elem()
+	}
+
+	switch val.Kind() {
+	case reflect.Struct:
+		// Check and validate UID field
+		uidField := val.FieldByName("UID")
+		if uidField.IsValid() && uidField.Kind() == reflect.String {
+			uidStr := uidField.String()
+			if uidStr == "" {
+				return fmt.Errorf("UID is empty at %s", path)
+			}
+			if !strings.HasPrefix(uidStr, "_:") {
+				return fmt.Errorf("UID at %s is not in the form of _:<string>", path)
+			}
+		}
+
+		// Check and set DType field if empty
+		dtypeField := val.FieldByName("DType")
+		if dtypeField.IsValid() && dtypeField.CanSet() {
+			if dtypeField.Kind() == reflect.Slice && dtypeField.Len() == 0 {
+				dtypeSlice := reflect.MakeSlice(reflect.TypeOf([]string{}), 1, 1)
+				dtypeSlice.Index(0).SetString(val.Type().Name())
+				dtypeField.Set(dtypeSlice)
+			}
+		}
+
+		// Recursively process all struct fields
+		for i := 0; i < val.NumField(); i++ {
+			field := val.Field(i)
+			fieldName := val.Type().Field(i).Name
+			fieldPath := path + "." + fieldName
+			if field.CanInterface() {
+				if err := validateAndPrepareStruct(field, fieldPath, visited); err != nil {
+					return err
+				}
+			}
+		}
+
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < val.Len(); i++ {
+			indexPath := fmt.Sprintf("%s[%d]", path, i)
+			if err := validateAndPrepareStruct(val.Index(i), indexPath, visited); err != nil {
+				return err
+			}
+		}
+
+	case reflect.Map:
+		for _, key := range val.MapKeys() {
+			mapVal := val.MapIndex(key)
+			keyPath := fmt.Sprintf("%s[%v]", path, key.Interface())
+			if err := validateAndPrepareStruct(mapVal, keyPath, visited); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// replaceUIDs recursively walks through obj and replaces UID field values
+// that match keys in the uidMap with their corresponding hex-encoded values
+func replaceUIDs(obj any, uidMap map[string]uint64) {
+	val := reflect.ValueOf(obj)
+	replaceUIDsValue(val, uidMap, make(map[uintptr]bool))
+}
+
+func replaceUIDsValue(val reflect.Value, uidMap map[string]uint64, visited map[uintptr]bool) {
+	if !val.IsValid() {
+		return
+	}
+
+	// Dereference pointers
+	for val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return
+		}
+		// Prevent infinite recursion on circular references
+		ptr := val.Pointer()
+		if visited[ptr] {
+			return
+		}
+		visited[ptr] = true
+		val = val.Elem()
+	}
+
+	switch val.Kind() {
+	case reflect.Struct:
+		// Check for UID field first
+		uidField := val.FieldByName("UID")
+		if uidField.IsValid() && uidField.CanSet() && uidField.Kind() == reflect.String {
+			currentUID := uidField.String()
+			if newUID, ok := uidMap[currentUID]; ok {
+				uidField.SetString(fmt.Sprintf("%#x", newUID))
+			}
+		}
+
+		// Recursively process all fields
+		for i := 0; i < val.NumField(); i++ {
+			field := val.Field(i)
+			if field.CanInterface() {
+				replaceUIDsValue(field, uidMap, visited)
+			}
+		}
+
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < val.Len(); i++ {
+			replaceUIDsValue(val.Index(i), uidMap, visited)
+		}
+
+	case reflect.Map:
+		for _, key := range val.MapKeys() {
+			mapVal := val.MapIndex(key)
+			replaceUIDsValue(mapVal, uidMap, visited)
+		}
+	}
 }
 
 type clientPool struct {

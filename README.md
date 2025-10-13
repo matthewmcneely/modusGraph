@@ -297,6 +297,12 @@ if err != nil {
 fmt.Println("Created user with UID:", user.UID)
 ```
 
+Note: For local-based instances, the `InsertRaw` function is available. It applies mutations
+directly to the Dgraph engine, by-passing unique checks and the transaction workflow. The UID field
+must be set using the Dgraph blank node prefix concept (e.g. "\_:user1") to allow the engine to
+generate a UID for the object. This function can operate at a much higher transaction rate than the
+standard `Insert` function.
+
 ### Upserting Data
 
 modusGraph provides a simple API for upserting data into the database.
