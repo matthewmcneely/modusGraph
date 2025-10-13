@@ -369,8 +369,9 @@ func runLongRunningBenchmark(t *testing.T, config BenchmarkConfig) {
 		startTime:      time.Now(),
 	}
 	pool := &EntityPool{uids: make([]string, 0)}
-	entityCounter := 0
+	var entityCounter atomic.Int64
 	rng := rand.New(rand.NewSource(time.Now().UnixNano())) // nolint:gosec // G404: math/rand is sufficient for test data
+	var rngMu sync.Mutex                                   // Protects rng from concurrent access
 
 	// Setup tickers for different operations
 	writeTicker := time.NewTicker(config.WriteInterval)
@@ -456,8 +457,8 @@ func runLongRunningBenchmark(t *testing.T, config BenchmarkConfig) {
 				}
 				entities := make([]*BenchmarkEntity, config.BatchSize)
 				for i := 0; i < config.BatchSize; i++ {
-					entities[i] = generateEntity(entityCounter)
-					entityCounter++
+					id := int(entityCounter.Add(1) - 1)
+					entities[i] = generateEntity(id)
 				}
 
 				start := time.Now()
@@ -500,8 +501,10 @@ func runLongRunningBenchmark(t *testing.T, config BenchmarkConfig) {
 						if err := client.Get(ctx, &entity, uid); err == nil {
 							entity.Description = fmt.Sprintf("Updated at %s", time.Now().Format(time.RFC3339))
 							entity.UpdatedAt = time.Now()
+							rngMu.Lock()
 							entity.Value = rng.Intn(1000)
 							entity.Score = rng.Float64() * 100
+							rngMu.Unlock()
 							entities = append(entities, &entity)
 						}
 					}
@@ -562,7 +565,9 @@ func runLongRunningBenchmark(t *testing.T, config BenchmarkConfig) {
 				if ctx.Err() != nil {
 					return // Context canceled, skip operation
 				}
+				rngMu.Lock()
 				queryType := rng.Intn(4)
+				rngMu.Unlock()
 				start := time.Now()
 				var err error
 
@@ -574,13 +579,19 @@ func runLongRunningBenchmark(t *testing.T, config BenchmarkConfig) {
 				case 1:
 					// Query by value range
 					var results []BenchmarkEntity
+					rngMu.Lock()
+					minVal := rng.Intn(500)
+					maxVal := rng.Intn(500) + 500
+					rngMu.Unlock()
 					err = client.Query(ctx, BenchmarkEntity{}).
-						Filter(fmt.Sprintf("ge(value, %d) AND le(value, %d)", rng.Intn(500), rng.Intn(500)+500)).
+						Filter(fmt.Sprintf("ge(value, %d) AND le(value, %d)", minVal, maxVal)).
 						Nodes(&results)
 				case 2:
 					// Query by tag
 					tags := []string{"tag1", "tag2", "tag3", "tag4", "tag5"}
+					rngMu.Lock()
 					tag := tags[rng.Intn(len(tags))]
+					rngMu.Unlock()
 					var results []BenchmarkEntity
 					err = client.Query(ctx, BenchmarkEntity{}).
 						Filter(fmt.Sprintf("anyofterms(tags, \"%s\")", tag)).
