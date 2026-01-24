@@ -36,9 +36,10 @@ type Enrollment struct {
 
 // Level 2 (middle): Course has forward edge to Department (single), managed reverse to Enrollments
 type Course struct {
-	UID          string        `json:"uid,omitempty"`
-	Name         string        `json:"course_name,omitempty" dgraph:"index=term,hash"`
-	Code         string        `json:"code,omitempty" dgraph:"index=exact"`
+	UID  string `json:"uid,omitempty"`
+	Name string `json:"course_name,omitempty" dgraph:"index=term,hash"`
+	Code string `json:"code,omitempty" dgraph:"index=exact"`
+	/* trunk-ignore(golangci-lint/lll) */
 	InDepartment *Department   `json:"in_department,omitempty" dgraph:"reverse"` // single edge (course belongs to one department)
 	Enrollments  []*Enrollment `json:"~in_course,omitempty" dgraph:"reverse"`    // managed reverse edge
 	DType        []string      `json:"dgraph.type,omitempty"`
