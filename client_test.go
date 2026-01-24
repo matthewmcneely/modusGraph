@@ -303,3 +303,115 @@ func TestRemoteClientAccess(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+func TestClientValidator(t *testing.T) {
+	testCases := []struct {
+		name string
+		uri  string
+		skip bool
+	}{
+		{
+			name: "ValidatorWithFileURI",
+			uri:  "file://" + GetTempDir(t),
+		},
+		{
+			name: "ValidatorWithDgraphURI",
+			uri:  "dgraph://" + os.Getenv("MODUSGRAPH_TEST_ADDR"),
+			skip: os.Getenv("MODUSGRAPH_TEST_ADDR") == "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.skip {
+				t.Skip("Skipping test as MODUSGRAPH_TEST_ADDR is not set")
+			}
+
+			// Create a validator instance
+			validate := mg.NewValidator()
+
+			// Create a client with validator
+			client, err := mg.NewClient(tc.uri, mg.WithValidator(validate))
+			require.NoError(t, err)
+			defer client.Close()
+
+			ctx := context.Background()
+
+			// Test struct with validation tags
+			type TestUser struct {
+				UID   string   `json:"uid,omitempty"`
+				Name  string   `json:"name,omitempty" validate:"required,min=3,max=50"`
+				Email string   `json:"email,omitempty" validate:"required,email"`
+				Age   int      `json:"age,omitempty" validate:"gte=0,lte=130"`
+				Tags  []string `json:"tags,omitempty"`
+			}
+
+			// Test valid user
+			validUser := &TestUser{
+				Name:  "John Doe",
+				Email: "john@example.com",
+				Age:   30,
+				Tags:  []string{"developer", "golang"},
+			}
+
+			err = client.Insert(ctx, validUser)
+			require.NoError(t, err)
+
+			// Test invalid user - name too short
+			invalidUser := &TestUser{
+				Name:  "Jo", // Too short (min=3)
+				Email: "jo@example.com",
+				Age:   25,
+			}
+
+			err = client.Insert(ctx, invalidUser)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "Name")
+
+			// Test invalid user - invalid email
+			invalidUser2 := &TestUser{
+				Name:  "Jane Doe",
+				Email: "invalid-email", // Invalid email format
+				Age:   28,
+			}
+
+			err = client.Insert(ctx, invalidUser2)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "Email")
+
+			// Test invalid user - age too high
+			invalidUser3 := &TestUser{
+				Name:  "Old Person",
+				Email: "old@example.com",
+				Age:   150, // Too high (max=130)
+			}
+
+			err = client.Insert(ctx, invalidUser3)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "Age")
+
+			// Test update with validation
+			updateUser := &TestUser{
+				UID:   validUser.UID,
+				Name:  "John Updated",
+				Email: "john.updated@example.com",
+				Age:   31,
+			}
+
+			err = client.Update(ctx, updateUser)
+			require.NoError(t, err)
+
+			// Test update with invalid data
+			invalidUpdate := &TestUser{
+				UID:   validUser.UID,
+				Name:  "", // Empty name (required)
+				Email: "john.updated@example.com",
+				Age:   31,
+			}
+
+			err = client.Update(ctx, invalidUpdate)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "Name")
+		})
+	}
+}

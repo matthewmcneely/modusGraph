@@ -42,6 +42,15 @@ func CreateTestClient(t *testing.T, uri string) (mg.Client, func()) {
 	client, err := mg.NewClient(uri, mg.WithAutoSchema(true), mg.WithLogger(logger))
 	require.NoError(t, err)
 
+	// Drop all data at test START to ensure clean state
+	// (handles case where previous test run was interrupted)
+	if strings.HasPrefix(uri, "dgraph://") {
+		err = client.DropAll(context.Background())
+		if err != nil {
+			t.Logf("Warning: failed to drop data at test start: %v", err)
+		}
+	}
+
 	cleanup := func() {
 		err := client.DropAll(context.Background())
 		if err != nil {
