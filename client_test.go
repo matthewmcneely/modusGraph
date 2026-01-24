@@ -344,7 +344,7 @@ func TestClientValidator(t *testing.T) {
 				Email string   `json:"email,omitempty" validate:"required,email"`
 				Age   int      `json:"age,omitempty" validate:"gte=0,lte=130"`
 				Tags  []string `json:"tags,omitempty"`
-				DType string   `json:"dgraph.type,omitempty" validate:"required"`
+				DType string   `json:"dgraph.type,omitempty"`
 			}
 
 			// Test valid user
