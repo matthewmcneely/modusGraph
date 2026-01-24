@@ -314,6 +314,9 @@ func (c client) validateStruct(ctx context.Context, obj any) error {
 	// Handle both single structs and slices
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return fmt.Errorf("cannot validate nil pointer")
+		}
 		val = val.Elem()
 	}
 
@@ -321,6 +324,9 @@ func (c client) validateStruct(ctx context.Context, obj any) error {
 		for i := 0; i < val.Len(); i++ {
 			elem := val.Index(i)
 			if elem.Kind() == reflect.Ptr {
+				if elem.IsNil() {
+					return fmt.Errorf("cannot validate nil pointer at index %d", i)
+				}
 				elem = elem.Elem()
 			}
 			if err := c.options.validator.StructCtx(ctx, elem.Interface()); err != nil {
