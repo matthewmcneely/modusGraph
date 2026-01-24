@@ -517,3 +517,90 @@ func TestClientInsertRawMultipleEntities(t *testing.T) {
 		})
 	}
 }
+
+func TestClientInsertMultipleEntitiesWithEmbeddedStructs(t *testing.T) {
+	testCases := []struct {
+		name string
+		uri  string
+		skip bool
+	}{
+		{
+			name: "InsertMultipleEmbeddedWithFileURI",
+			uri:  "file://" + GetTempDir(t),
+		},
+		{
+			name: "InsertMultipleEmbeddedWithDgraphURI",
+			uri:  "dgraph://" + os.Getenv("MODUSGRAPH_TEST_ADDR"),
+			skip: os.Getenv("MODUSGRAPH_TEST_ADDR") == "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.skip {
+				t.Skipf("Skipping %s: MODUSGRAPH_TEST_ADDR not set", tc.name)
+				return
+			}
+
+			client, cleanup := CreateTestClient(t, tc.uri)
+			defer cleanup()
+
+			timestamp := time.Now().UTC().Truncate(time.Second)
+
+			// Note: elements in the slice must be pointers
+			entities := []*OuterTestEntity{
+				{
+					Name: "Outer Entity 1",
+					Entity: &TestEntity{
+						Name:        "Inner Entity 1",
+						Description: "First embedded entity",
+						CreatedAt:   timestamp.Add(-1 * time.Hour),
+					},
+				},
+				{
+					Name: "Outer Entity 2",
+					Entity: &TestEntity{
+						Name:        "Inner Entity 2",
+						Description: "Second embedded entity",
+						CreatedAt:   timestamp,
+					},
+				},
+				{
+					Name: "Outer Entity 3",
+					Entity: &TestEntity{
+						Name:        "Inner Entity 3",
+						Description: "Third embedded entity",
+						CreatedAt:   timestamp.Add(1 * time.Hour),
+					},
+				},
+			}
+
+			ctx := context.Background()
+			err := client.Insert(ctx, entities)
+			require.NoError(t, err, "Insert should succeed")
+
+			// Verify all entities got UIDs assigned
+			for i, entity := range entities {
+				require.NotEmpty(t, entity.UID, "UID should be assigned for entity %d", i)
+				require.NotEmpty(t, entity.Entity.UID, "Embedded entity UID should be assigned for entity %d", i)
+			}
+
+			// Verify we can retrieve each entity with its embedded struct
+			for _, original := range entities {
+				var retrieved OuterTestEntity
+				err = client.Get(ctx, &retrieved, original.UID)
+				require.NoError(t, err, "Get should succeed for %s", original.Name)
+				assert.Equal(t, original.Name, retrieved.Name, "Name should match")
+				require.NotNil(t, retrieved.Entity, "Embedded entity should not be nil")
+				assert.Equal(t, original.Entity.Name, retrieved.Entity.Name, "Embedded entity name should match")
+				assert.Equal(t, original.Entity.Description, retrieved.Entity.Description, "Embedded entity description should match")
+			}
+
+			// Query all outer entities and verify count
+			var results []OuterTestEntity
+			err = client.Query(ctx, OuterTestEntity{}).Nodes(&results)
+			require.NoError(t, err, "Query should succeed")
+			assert.Len(t, results, 3, "Should have found all three entities")
+		})
+	}
+}

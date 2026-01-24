@@ -411,11 +411,9 @@ func TestReverseEdgeQuery(t *testing.T) {
 			var result []Class
 			query := dg.NewQuery().Model(&result).Query(`
 			{
-				name
-				uid
+				expand(_all_)
 				~takes_class {
-					name
-					uid
+					expand(_all_)
 				}
 			}`)
 			dgo, cleanup, err := client.DgraphClient()
@@ -428,6 +426,8 @@ func TestReverseEdgeQuery(t *testing.T) {
 			require.Len(t, result, 1, "Should have found 1 class")
 			require.Equal(t, "Math", result[0].Name, "Class name should match")
 			require.Len(t, result[0].Students, 2, "Should have found 2 students")
+			require.Equal(t, "Bob", result[0].Students[0].Name, "Student name should match")
+			require.Equal(t, "Alice", result[0].Students[1].Name, "Student name should match")
 		})
 	}
 }
