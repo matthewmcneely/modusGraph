@@ -19,6 +19,7 @@ import (
 	"github.com/dgraph-io/dgo/v250/protos/api"
 	dg "github.com/dolan-in/dgman/v2"
 	"github.com/go-logr/logr"
+	"github.com/go-playground/validator/v10"
 )
 
 // Client provides an interface for ModusGraph operations
@@ -98,6 +99,13 @@ var (
 	clientMapLock sync.RWMutex
 )
 
+// StructValidator is the interface for struct validation.
+// This is compatible with github.com/go-playground/validator/v10.Validate.
+type StructValidator interface {
+	// StructCtx validates a struct with context support.
+	StructCtx(ctx context.Context, s interface{}) error
+}
+
 // clientOptions holds configuration options for the client.
 //
 // autoSchema: whether to automatically manage the schema.
@@ -105,6 +113,7 @@ var (
 // maxEdgeTraversal: the maximum number of edges to traverse when querying.
 // namespace: the namespace for the client.
 // logger: the logger for the client.
+// validator: the validator instance for struct validation.
 type clientOptions struct {
 	autoSchema       bool
 	poolSize         int
@@ -112,6 +121,7 @@ type clientOptions struct {
 	cacheSizeMB      int
 	namespace        string
 	logger           logr.Logger
+	validator        StructValidator
 }
 
 // ClientOpt is a function that configures a client
@@ -162,6 +172,24 @@ func WithCacheSizeMB(size int) ClientOpt {
 	}
 }
 
+// WithValidator sets a validator instance for struct validation.
+// The validator will be used to validate structs before insert, upsert, and update operations.
+// If no validator is provided, validation will be skipped.
+// Any type implementing StructValidator can be used, including *validator.Validate from
+// github.com/go-playground/validator/v10.
+func WithValidator(v StructValidator) ClientOpt {
+	return func(o *clientOptions) {
+		o.validator = v
+	}
+}
+
+// NewValidator creates a new validator instance with default settings.
+// This is a convenience function for creating a validator to use with WithValidator.
+// It returns a *validator.Validate from github.com/go-playground/validator/v10.
+func NewValidator() *validator.Validate {
+	return validator.New()
+}
+
 // NewClient creates a new graph database client instance based on the provided URI.
 //
 // The function supports two URI schemes:
@@ -175,6 +203,7 @@ func WithCacheSizeMB(size int) ClientOpt {
 //   - WithNamespace(string) - Set the database namespace for multi-tenant installations
 //   - WithLogger(logr.Logger) - Configure structured logging with custom verbosity levels
 //   - WithCacheSizeMB(int) - Set the memory cache size in MB (only applicable for embedded databases)
+//   - WithValidator(*validator.Validate) - Set a validator instance for struct validation before mutations
 //
 // The returned Client provides a consistent interface regardless of whether you're
 // connected to a remote Dgraph cluster or a local embedded database. This abstraction
@@ -276,9 +305,43 @@ func checkPointer(obj any) error {
 	return nil
 }
 
+// validateStruct validates a struct using the configured validator
+func (c client) validateStruct(ctx context.Context, obj any) error {
+	if c.options.validator == nil {
+		return nil // No validator configured, skip validation
+	}
+
+	// Handle both single structs and slices
+	val := reflect.ValueOf(obj)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+
+	if val.Kind() == reflect.Slice {
+		for i := 0; i < val.Len(); i++ {
+			elem := val.Index(i)
+			if elem.Kind() == reflect.Ptr {
+				elem = elem.Elem()
+			}
+			if err := c.options.validator.StructCtx(ctx, elem.Interface()); err != nil {
+				return err
+			}
+		}
+	} else {
+		return c.options.validator.StructCtx(ctx, obj)
+	}
+
+	return nil
+}
+
 // Insert implements inserting an object or slice of objects in the database.
 // Passed object must be a pointer to a struct with appropriate dgraph tags.
 func (c client) Insert(ctx context.Context, obj any) error {
+	// Validate struct before insertion
+	if err := c.validateStruct(ctx, obj); err != nil {
+		return err
+	}
+
 	if c.isLocal() {
 		return c.mutateWithUniqueVerification(ctx, obj, true)
 	}
@@ -294,6 +357,11 @@ func (c client) Insert(ctx context.Context, obj any) error {
 // The `UID` field for any objects must be set using the Dgraph blank node
 // prefix concept (e.g. "_:user1") to allow the engine to generate a UID for the object.
 func (c client) InsertRaw(ctx context.Context, obj any) error {
+	// Validate struct before insertion
+	if err := c.validateStruct(ctx, obj); err != nil {
+		return err
+	}
+
 	if c.isLocal() {
 		// Validate object and update schema if autoSchema is enabled
 		schemaObj, err := checkObject(obj)
@@ -371,6 +439,11 @@ func (c client) InsertRaw(ctx context.Context, obj any) error {
 // Note for local file clients, only the first struct field marked with `upsert` will be used
 // if none are specified in the predicates argument.
 func (c client) Upsert(ctx context.Context, obj any, predicates ...string) error {
+	// Validate struct before upsert
+	if err := c.validateStruct(ctx, obj); err != nil {
+		return err
+	}
+
 	if c.isLocal() {
 		var upsertPredicate string
 		if len(predicates) > 0 {
@@ -390,6 +463,11 @@ func (c client) Upsert(ctx context.Context, obj any, predicates ...string) error
 // Update implements updating an existing object in the database.
 // Passed object must be a pointer to a struct.
 func (c client) Update(ctx context.Context, obj any) error {
+	// Validate struct before update
+	if err := c.validateStruct(ctx, obj); err != nil {
+		return err
+	}
+
 	if c.isLocal() {
 		return c.mutateWithUniqueVerification(ctx, obj, false)
 	}
