@@ -593,7 +593,8 @@ func TestClientInsertMultipleEntitiesWithEmbeddedStructs(t *testing.T) {
 				assert.Equal(t, original.Name, retrieved.Name, "Name should match")
 				require.NotNil(t, retrieved.Entity, "Embedded entity should not be nil")
 				assert.Equal(t, original.Entity.Name, retrieved.Entity.Name, "Embedded entity name should match")
-				assert.Equal(t, original.Entity.Description, retrieved.Entity.Description, "Embedded entity description should match")
+				assert.Equal(t, original.Entity.Description, retrieved.Entity.Description,
+					"Embedded entity description should match")
 			}
 
 			// Query all outer entities and verify count
