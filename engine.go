@@ -540,7 +540,7 @@ func parseUniqueCheckResponse(jsonData []byte) (uint64, bool) {
 	return 0, false
 }
 
-func (engine *Engine) commitOrAbort(ctx context.Context, tc *api.TxnContext) (*api.TxnContext, error) {
+func (engine *Engine) commitOrAbort(ctx context.Context, ns *Namespace, tc *api.TxnContext) (*api.TxnContext, error) {
 	if tc.Aborted {
 		return tc, nil
 	}
@@ -550,7 +550,6 @@ func (engine *Engine) commitOrAbort(ctx context.Context, tc *api.TxnContext) (*a
 		CommitNow: true,
 	}
 
-	ns := engine.db0
 	_, err := ns.Mutate(ctx, []*api.Mutation{emptyMutation})
 	if err != nil {
 		return nil, fmt.Errorf("error committing transaction: %w", err)
