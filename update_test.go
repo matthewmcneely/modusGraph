@@ -285,3 +285,114 @@ func TestClientUpdateAllTypes(t *testing.T) {
 		})
 	}
 }
+
+type UniqueEmbeddedNode struct {
+	Email string `json:"email,omitempty" dgraph:"unique"`
+	Name  string `json:"name,omitempty"`
+
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
+}
+
+type ParentWithUniqueEmbedded struct {
+	Name  string                `json:"name,omitempty"`
+	Node  *UniqueEmbeddedNode   `json:"node,omitempty"`
+	Nodes []*UniqueEmbeddedNode `json:"nodes,omitempty"`
+
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
+}
+
+func TestClientUpdateWithUniqueEmbedded(t *testing.T) {
+
+	testCases := []struct {
+		name string
+		uri  string
+		skip bool
+	}{
+		{
+			name: "UpdateWithUniqueEmbeddedWithFileURI",
+			uri:  "file://" + GetTempDir(t),
+		},
+		{
+			name: "UpdateWithUniqueEmbeddedWithDgraph",
+			uri:  "dgraph://" + os.Getenv("MODUSGRAPH_TEST_ADDR"),
+			skip: os.Getenv("MODUSGRAPH_TEST_ADDR") == "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.skip {
+				t.Skipf("Skipping %s: MODUSGRAPH_TEST_ADDR not set", tc.name)
+				return
+			}
+
+			client, cleanup := CreateTestClient(t, tc.uri)
+			defer cleanup()
+
+			ctx := context.Background()
+
+			// 1. Test unique constraint violation in embedded node
+			parent1 := ParentWithUniqueEmbedded{
+				Name: "Parent 1",
+				Node: &UniqueEmbeddedNode{
+					Email: "test@example.com",
+					Name:  "Test Node",
+				},
+			}
+			err := client.Insert(ctx, &parent1)
+			require.NoError(t, err, "Insert should succeed for parent1")
+			require.NotEmpty(t, parent1.UID, "Parent1 UID should be assigned")
+			require.NotEmpty(t, parent1.Node.UID, "Node UID should be assigned")
+
+			parent2 := ParentWithUniqueEmbedded{
+				Name: "Parent 2",
+				Node: &UniqueEmbeddedNode{
+					Email: "test2@example.com",
+					Name:  "Test Node 2",
+				},
+			}
+			err = client.Insert(ctx, &parent2)
+			require.NoError(t, err, "Insert should succeed for parent2")
+			require.NotEmpty(t, parent2.UID, "Parent2 UID should be assigned")
+
+			// Try to update parent2's node to use the same email as parent1's node
+			parent2.Node.Email = "test@example.com"
+			err = client.Update(ctx, &parent2)
+			require.Error(t, err, "Update should fail due to unique constraint violation in embedded node")
+
+			// 2. Test unique constraint violation in embedded node array
+			parent3 := ParentWithUniqueEmbedded{
+				Name: "Parent 3",
+				Nodes: []*UniqueEmbeddedNode{
+					{Email: "node1@example.com", Name: "Node 1"},
+					{Email: "node2@example.com", Name: "Node 2"},
+				},
+			}
+			err = client.Insert(ctx, &parent3)
+			require.NoError(t, err, "Insert should succeed for parent3")
+			require.NotEmpty(t, parent3.Nodes[0].UID, "Nodes[0] UID should be assigned")
+			require.NotEmpty(t, parent3.Nodes[1].UID, "Nodes[1] UID should be assigned")
+			t.Logf("After insert: Nodes[0].UID=%s, Nodes[1].UID=%s", parent3.Nodes[0].UID, parent3.Nodes[1].UID)
+
+			// Try to update parent3's nodes to have duplicate emails
+			parent3.Nodes[1].Email = "node1@example.com"
+			err = client.Update(ctx, &parent3)
+			require.Error(t, err, "Update should fail due to duplicate emails in embedded node array")
+
+			// 3. Test valid update of embedded nodes
+			parent3.Nodes[1].Email = "node3@example.com"
+			parent3.Nodes[1].Name = "Updated Node 2"
+			err = client.Update(ctx, &parent3)
+			require.NoError(t, err, "Update should succeed with valid embedded node changes")
+
+			// Verify the update
+			updated := ParentWithUniqueEmbedded{UID: parent3.UID}
+			err = client.Get(ctx, &updated, parent3.UID)
+			require.NoError(t, err, "Get should succeed")
+			require.Equal(t, "node3@example.com", updated.Nodes[1].Email, "Email should be updated")
+			require.Equal(t, "Updated Node 2", updated.Nodes[1].Name, "Name should be updated")
+		})
+	}
+}

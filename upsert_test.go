@@ -241,3 +241,112 @@ func TestClientUpsertSlice(t *testing.T) {
 		})
 	}
 }
+
+type EmbeddedUpsertEntity struct {
+	Name        string    `json:"name,omitempty" dgraph:"index=exact upsert"`
+	Description string    `json:"description,omitempty" dgraph:"index=term"`
+	CreatedAt   time.Time `json:"createdAt,omitzero"`
+
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
+}
+
+type OuterUpsertEntity struct {
+	Title  string                `json:"title,omitempty"`
+	Entity *EmbeddedUpsertEntity `json:"entity"`
+
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
+}
+
+func TestEmbeddedUpsert(t *testing.T) {
+	testCases := []struct {
+		name string
+		uri  string
+		skip bool
+	}{
+		{
+			name: "EmbeddedUpsertWithFileURI",
+			uri:  "file://" + GetTempDir(t),
+		},
+		{
+			name: "EmbeddedUpsertWithDgraphURI",
+			uri:  "dgraph://" + os.Getenv("MODUSGRAPH_TEST_ADDR"),
+			skip: os.Getenv("MODUSGRAPH_TEST_ADDR") == "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.skip {
+				t.Skipf("Skipping %s: MODUSGRAPH_TEST_ADDR not set", tc.name)
+				return
+			}
+
+			client, cleanup := CreateTestClient(t, tc.uri)
+			defer cleanup()
+
+			ctx := context.Background()
+
+			// First upsert - creates new entity with embedded entity
+			firstEntity := OuterUpsertEntity{
+				Title: "First Title",
+				Entity: &EmbeddedUpsertEntity{
+					Name:        "Unique Embedded Name",
+					Description: "First description",
+					CreatedAt:   time.Date(2021, 6, 9, 17, 22, 33, 0, time.UTC),
+				},
+			}
+
+			err := client.Upsert(ctx, &firstEntity)
+			require.NoError(t, err, "First upsert should succeed")
+			require.NotEmpty(t, firstEntity.UID, "Outer UID should be assigned")
+			require.NotEmpty(t, firstEntity.Entity.UID, "Embedded UID should be assigned")
+
+			firstUID := firstEntity.UID
+			firstEmbeddedUID := firstEntity.Entity.UID
+
+			// Verify first entity was created correctly
+			retrieved := OuterUpsertEntity{}
+			err = client.Get(ctx, &retrieved, firstUID)
+			require.NoError(t, err, "Get should succeed")
+			require.Equal(t, "First Title", retrieved.Title, "Title should match")
+			require.Equal(t, "Unique Embedded Name", retrieved.Entity.Name, "Embedded name should match")
+			require.Equal(t, "First description", retrieved.Entity.Description, "Embedded description should match")
+
+			// Second upsert - embedded entity with same upsert key should be UPDATED, not created
+			secondEntity := OuterUpsertEntity{
+				Title: "Second Title",
+				Entity: &EmbeddedUpsertEntity{
+					Name:        "Unique Embedded Name", // Same name - should trigger upsert on embedded entity
+					Description: "Updated description",
+					CreatedAt:   time.Date(2022, 7, 10, 18, 30, 45, 0, time.UTC),
+				},
+			}
+
+			err = client.Upsert(ctx, &secondEntity)
+			require.NoError(t, err, "Second upsert should succeed")
+			require.NotEmpty(t, secondEntity.UID, "Outer UID should be assigned")
+			require.NotEmpty(t, secondEntity.Entity.UID, "Embedded UID should be assigned")
+
+			// The embedded entity should have the SAME UID (upserted, not created new)
+			require.Equal(t, firstEmbeddedUID, secondEntity.Entity.UID, "Embedded UID should be the same (upserted)")
+
+			// Verify only ONE embedded entity exists (it was upserted, not duplicated)
+			var embeddedEntities []EmbeddedUpsertEntity
+			err = client.Query(ctx, EmbeddedUpsertEntity{}).Nodes(&embeddedEntities)
+			require.NoError(t, err, "Query embedded entities should succeed")
+			require.Len(t, embeddedEntities, 1, "There should be only one embedded entity (upserted)")
+
+			// Verify the embedded entity has the updated description
+			require.Equal(t, "Unique Embedded Name", embeddedEntities[0].Name, "Name should match")
+			require.Equal(t, "Updated description", embeddedEntities[0].Description, "Description should be updated")
+
+			// Verify there are two outer entities (they have different titles, so not upserted)
+			var outerEntities []OuterUpsertEntity
+			err = client.Query(ctx, OuterUpsertEntity{}).Nodes(&outerEntities)
+			require.NoError(t, err, "Query outer entities should succeed")
+			require.Len(t, outerEntities, 2, "There should be two outer entities")
+		})
+	}
+}

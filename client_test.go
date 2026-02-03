@@ -330,8 +330,8 @@ func TestClientValidator(t *testing.T) {
 			// Create a validator instance
 			validate := mg.NewValidator()
 
-			// Create a client with validator
-			client, err := mg.NewClient(tc.uri, mg.WithValidator(validate))
+			// Create a client with validator and AutoSchema
+			client, err := mg.NewClient(tc.uri, mg.WithValidator(validate), mg.WithAutoSchema(true))
 			require.NoError(t, err)
 			defer client.Close()
 
