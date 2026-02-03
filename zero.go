@@ -9,10 +9,10 @@ import (
 	"fmt"
 
 	"github.com/dgraph-io/badger/v4"
-	"github.com/hypermodeinc/dgraph/v25/posting"
-	"github.com/hypermodeinc/dgraph/v25/protos/pb"
-	"github.com/hypermodeinc/dgraph/v25/worker"
-	"github.com/hypermodeinc/dgraph/v25/x"
+	"github.com/dgraph-io/dgraph/v25/posting"
+	"github.com/dgraph-io/dgraph/v25/protos/pb"
+	"github.com/dgraph-io/dgraph/v25/worker"
+	"github.com/dgraph-io/dgraph/v25/x"
 	"google.golang.org/protobuf/proto"
 )
 

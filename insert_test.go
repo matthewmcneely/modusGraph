@@ -7,6 +7,7 @@ package modusgraph_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -81,8 +82,9 @@ func TestClientInsert(t *testing.T) {
 			err = client.Insert(ctx, &entity)
 			require.Error(t, err, "Insert should fail")
 			if strings.HasPrefix(tc.uri, "file://") {
-				require.IsType(t, &modusgraph.UniqueError{}, err, "Error should be a UniqueError")
-				require.Equal(t, uid, err.(*modusgraph.UniqueError).UID, "UID should match")
+				var uniqueErr *modusgraph.UniqueError
+				require.True(t, errors.As(err, &uniqueErr), "Error should be a UniqueError")
+				require.Equal(t, uid, uniqueErr.UID, "UID should match")
 			}
 
 			var entities []TestEntity
@@ -152,6 +154,83 @@ func TestEmbeddedInsert(t *testing.T) {
 			require.Equal(t, "This is a test entity for the Insert method",
 				entity.Entity.Description, "Entity.Description should match")
 			require.Equal(t, timestamp, entity.Entity.CreatedAt, "Entity.CreatedAt should match")
+		})
+	}
+}
+
+func TestEmbeddedUniqueConstraintViolation(t *testing.T) {
+	testCases := []struct {
+		name string
+		uri  string
+		skip bool
+	}{
+		{
+			name: "EmbeddedUniqueViolationWithFileURI",
+			uri:  "file://" + GetTempDir(t),
+		},
+		{
+			name: "EmbeddedUniqueViolationWithDgraphURI",
+			uri:  "dgraph://" + os.Getenv("MODUSGRAPH_TEST_ADDR"),
+			skip: os.Getenv("MODUSGRAPH_TEST_ADDR") == "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.skip {
+				t.Skipf("Skipping %s: MODUSGRAPH_TEST_ADDR not set", tc.name)
+				return
+			}
+
+			client, cleanup := CreateTestClient(t, tc.uri)
+			defer cleanup()
+
+			ctx := context.Background()
+
+			// Insert first entity with embedded unique entity
+			firstEntity := OuterTestEntity{
+				Name: "First Outer Entity",
+				Entity: &TestEntity{
+					Name:        "Unique Inner Name",
+					Description: "First description",
+					CreatedAt:   time.Now(),
+				},
+			}
+
+			err := client.Insert(ctx, &firstEntity)
+			require.NoError(t, err, "First insert should succeed")
+			require.NotEmpty(t, firstEntity.UID, "First UID should be assigned")
+			require.NotEmpty(t, firstEntity.Entity.UID, "Embedded entity UID should be assigned")
+
+			// Try to insert second entity with same embedded unique name
+			secondEntity := OuterTestEntity{
+				Name: "Second Outer Entity",
+				Entity: &TestEntity{
+					Name:        "Unique Inner Name", // Same name - should violate unique constraint
+					Description: "Second description",
+					CreatedAt:   time.Now(),
+				},
+			}
+
+			err = client.Insert(ctx, &secondEntity)
+			require.Error(t, err, "Second insert should fail due to unique constraint violation in embedded entity")
+
+			// Verify the error is a UniqueError
+			var uniqueErr *modusgraph.UniqueError
+			require.True(t, errors.As(err, &uniqueErr), "Error should be a UniqueError")
+			// UID is only available for file URIs (embedded engine checks the database)
+			// Dgraph errors don't include the UID of the existing entity
+			if strings.HasPrefix(tc.uri, "file://") {
+				require.Equal(t, firstEntity.Entity.UID, uniqueErr.UID, "UID should match the first embedded entity")
+			}
+
+			// Verify only the first entity exists
+			var entities []OuterTestEntity
+			err = client.Query(ctx, OuterTestEntity{}).Nodes(&entities)
+			require.NoError(t, err, "Query should succeed")
+			require.Len(t, entities, 1, "There should only be one outer entity")
+			require.Equal(t, "First Outer Entity", entities[0].Name, "Should be the first entity")
+			require.Equal(t, "Unique Inner Name", entities[0].Entity.Name, "Embedded entity name should match")
 		})
 	}
 }

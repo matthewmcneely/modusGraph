@@ -7,30 +7,30 @@ package modusgraph
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"github.com/dgraph-io/dgo/v250"
 	"github.com/dgraph-io/dgo/v250/protos/api"
+	"github.com/dgraph-io/dgraph/v25/dql"
+	"github.com/dgraph-io/dgraph/v25/edgraph"
+	"github.com/dgraph-io/dgraph/v25/hooks"
+	"github.com/dgraph-io/dgraph/v25/posting"
+	"github.com/dgraph-io/dgraph/v25/protos/pb"
+	"github.com/dgraph-io/dgraph/v25/query"
+	"github.com/dgraph-io/dgraph/v25/schema"
+	"github.com/dgraph-io/dgraph/v25/worker"
+	"github.com/dgraph-io/dgraph/v25/x"
 	"github.com/dgraph-io/ristretto/v2/z"
 	"github.com/go-logr/logr"
-	"github.com/hypermodeinc/dgraph/v25/dql"
-	"github.com/hypermodeinc/dgraph/v25/edgraph"
-	"github.com/hypermodeinc/dgraph/v25/posting"
-	"github.com/hypermodeinc/dgraph/v25/protos/pb"
-	"github.com/hypermodeinc/dgraph/v25/query"
-	"github.com/hypermodeinc/dgraph/v25/schema"
-	"github.com/hypermodeinc/dgraph/v25/worker"
-	"github.com/hypermodeinc/dgraph/v25/x"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/test/bufconn"
 )
 
 var (
@@ -57,9 +57,7 @@ type Engine struct {
 	// points to default / 0 / galaxy namespace
 	db0 *Namespace
 
-	listener *bufconn.Listener
-	server   *grpc.Server
-	logger   logr.Logger
+	logger logr.Logger
 }
 
 // NewEngine returns a new modusGraph instance.
@@ -88,6 +86,8 @@ func NewEngine(conf Config) (*Engine, error) {
 	x.Config.MaxRetries = 10
 	x.Config.Limit = z.NewSuperFlag("max-pending-queries=100000")
 	x.Config.LimitNormalizeNode = conf.limitNormalizeNode
+	x.Config.LimitQueryEdge = 1000000      // Allow up to 1M edges in upsert queries
+	x.Config.LimitMutationsNquad = 1000000 // Allow up to 1M nquads in mutations
 
 	// initialize each package
 	edgraph.Init()
@@ -106,13 +106,59 @@ func NewEngine(conf Config) (*Engine, error) {
 		engine.logger.Error(err, "Failed to reset database")
 		return nil, fmt.Errorf("error resetting db: %w", err)
 	}
+
+	// Enable embedded mode with Zero hooks to bypass distributed Zero node
+	hooks.Enable(&hooks.Config{
+		ZeroHooks: hooks.ZeroHooksFns{
+			AssignUIDsFn: func(ctx context.Context, num *pb.Num) (*pb.AssignedIds, error) {
+				num.Type = pb.Num_UID
+				return engine.z.nextUIDs(num)
+			},
+			AssignTimestampsFn: func(ctx context.Context, num *pb.Num) (*pb.AssignedIds, error) {
+				ts, err := engine.z.nextTs()
+				if err != nil {
+					return nil, err
+				}
+				return &pb.AssignedIds{StartId: ts, EndId: ts}, nil
+			},
+			AssignNsIDsFn: func(ctx context.Context, num *pb.Num) (*pb.AssignedIds, error) {
+				num.Type = pb.Num_NS_ID
+				nsID, err := engine.z.nextNamespace()
+				if err != nil {
+					return nil, err
+				}
+				return &pb.AssignedIds{StartId: nsID, EndId: nsID}, nil
+			},
+			CommitOrAbortFn: func(ctx context.Context, tc *api.TxnContext) (*api.TxnContext, error) {
+				if tc.Aborted {
+					return &api.TxnContext{StartTs: tc.StartTs, Aborted: true}, nil
+				}
+				commitTs, err := engine.z.nextTs()
+				if err != nil {
+					return nil, err
+				}
+				// Apply the commit to the oracle
+				delta := &pb.OracleDelta{
+					Txns: []*pb.TxnStatus{{StartTs: tc.StartTs, CommitTs: commitTs}},
+				}
+				posting.Oracle().ProcessDelta(delta)
+				return &api.TxnContext{StartTs: tc.StartTs, CommitTs: commitTs}, nil
+			},
+			ApplyMutationsFn: func(ctx context.Context, m *pb.Mutations) (*api.TxnContext, error) {
+				// Create a proposal with the mutations
+				p := &pb.Proposal{Mutations: m}
+				err := worker.ApplyMutations(ctx, p)
+				return &api.TxnContext{StartTs: m.StartTs}, err
+			},
+		},
+	})
+
 	// Store the engine as the active instance
 	activeEngine = engine
 	x.UpdateHealthStatus(true)
 
 	engine.db0 = &Namespace{id: 0, engine: engine}
 
-	engine.listener, engine.server = setupBufconnServer(engine)
 	return engine, nil
 }
 
@@ -124,15 +170,6 @@ func Shutdown() {
 	}
 	// Reset the singleton state so a new engine can be created if needed
 	singleton.Store(false)
-}
-
-func (engine *Engine) GetClient() (*dgo.Dgraph, error) {
-	engine.logger.V(2).Info("Getting Dgraph client from engine")
-	client, err := createDgraphClient(context.Background(), engine.listener)
-	if err != nil {
-		engine.logger.Error(err, "Failed to create Dgraph client")
-	}
-	return client, err
 }
 
 func (engine *Engine) CreateNamespace() (*Namespace, error) {
@@ -348,6 +385,11 @@ func (engine *Engine) mutateWithDqlMutation(ctx context.Context, ns *Namespace, 
 		return nil, ErrClosedEngine
 	}
 
+	// Check unique constraints before applying mutations
+	if err := engine.verifyUniqueConstraints(ctx, ns, edges, newUids); err != nil {
+		return nil, err
+	}
+
 	startTs, err := engine.z.nextTs()
 	if err != nil {
 		return nil, err
@@ -382,6 +424,144 @@ func (engine *Engine) mutateWithDqlMutation(ctx context.Context, ns *Namespace, 
 	})
 }
 
+// verifyUniqueConstraints checks that mutations don't violate @unique constraints
+func (engine *Engine) verifyUniqueConstraints(ctx context.Context, ns *Namespace, edges []*pb.DirectedEdge, newUids map[string]uint64) error {
+	namespace := ns.ID()
+
+	// Track values seen within this mutation batch for in-batch duplicate detection
+	// Key: "predName:value", Value: subject UID
+	seenValues := make(map[string]uint64)
+
+	for _, edge := range edges {
+		// Skip delete operations
+		if edge.Op == pb.DirectedEdge_DEL {
+			continue
+		}
+
+		// Get predicate name - edge.Attr may or may not have namespace prefix
+		predName := edge.Attr
+		if strings.Contains(predName, x.NsSeparator) {
+			predName = x.ParseAttr(edge.Attr)
+		}
+
+		// Check if predicate has @unique constraint
+		predSchema, ok := schema.State().Get(ctx, x.NamespaceAttr(namespace, predName))
+		if !ok || !predSchema.Unique {
+			continue
+		}
+
+		// Get the value being set
+		val := edge.Value
+		if len(val) == 0 {
+			continue
+		}
+
+		valStr := string(val)
+		subjectUID := edge.Entity
+
+		// Check for in-batch duplicates first
+		key := predName + ":" + valStr
+		if existingUID, seen := seenValues[key]; seen {
+			if existingUID != subjectUID {
+				return &UniqueError{
+					Field: predName,
+					Value: valStr,
+					UID:   fmt.Sprintf("0x%x", existingUID),
+				}
+			}
+		}
+		seenValues[key] = subjectUID
+
+		// Build query to check for existing value in database
+		queryStr := fmt.Sprintf(`{
+			check(func: eq(%s, %q)) {
+				uid
+			}
+		}`, predName, valStr)
+
+		resp, err := engine.queryWithLock(ctx, ns, queryStr, nil)
+		if err != nil {
+			return fmt.Errorf("error checking unique constraint for %s: %w", predName, err)
+		}
+
+		// Parse response to check if any existing UIDs found
+		existingUID, found := parseUniqueCheckResponse(resp.Json)
+		if !found {
+			continue
+		}
+
+		// If found, check if it's the same UID (update case is allowed)
+		if existingUID != subjectUID {
+			return &UniqueError{
+				Field: predName,
+				Value: valStr,
+				UID:   fmt.Sprintf("0x%x", existingUID),
+			}
+		}
+	}
+
+	return nil
+}
+
+// parseUniqueCheckResponse parses the query response to find existing UID
+func parseUniqueCheckResponse(jsonData []byte) (uint64, bool) {
+	if len(jsonData) == 0 {
+		return 0, false
+	}
+
+	var result struct {
+		Check []struct {
+			UID string `json:"uid"`
+		} `json:"check"`
+	}
+
+	if err := json.Unmarshal(jsonData, &result); err != nil {
+		return 0, false
+	}
+
+	if len(result.Check) == 0 {
+		return 0, false
+	}
+
+	uidStr := result.Check[0].UID
+	if uidStr == "" {
+		return 0, false
+	}
+
+	// Parse UID (format: "0x123")
+	if len(uidStr) > 2 && uidStr[:2] == "0x" {
+		uid, err := strconv.ParseUint(uidStr[2:], 16, 64)
+		if err != nil {
+			return 0, false
+		}
+		return uid, true
+	}
+
+	return 0, false
+}
+
+func (engine *Engine) commitOrAbort(ctx context.Context, tc *api.TxnContext) (*api.TxnContext, error) {
+	if tc.Aborted {
+		return tc, nil
+	}
+
+	// For commit, use an empty mutation to trigger the commit mechanism
+	emptyMutation := &api.Mutation{
+		CommitNow: true,
+	}
+
+	ns := engine.db0
+	_, err := ns.Mutate(ctx, []*api.Mutation{emptyMutation})
+	if err != nil {
+		return nil, fmt.Errorf("error committing transaction: %w", err)
+	}
+
+	return &api.TxnContext{
+		StartTs:  tc.StartTs,
+		CommitTs: tc.StartTs + 1,
+	}, nil
+}
+
 func (engine *Engine) Load(ctx context.Context, schemaPath, dataPath string) error {
 	return engine.db0.Load(ctx, schemaPath, dataPath)
 }
@@ -405,6 +585,7 @@ func (engine *Engine) Close() {
 
 	engine.isOpen.Store(false)
 	x.UpdateHealthStatus(false)
+	hooks.Disable()
 	posting.Cleanup()
 	worker.State.Dispose()
 
