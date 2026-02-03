@@ -425,7 +425,12 @@ func (engine *Engine) mutateWithDqlMutation(ctx context.Context, ns *Namespace, 
 }
 
 // verifyUniqueConstraints checks that mutations don't violate @unique constraints
-func (engine *Engine) verifyUniqueConstraints(ctx context.Context, ns *Namespace, edges []*pb.DirectedEdge, newUids map[string]uint64) error {
+func (engine *Engine) verifyUniqueConstraints(
+	ctx context.Context,
+	ns *Namespace,
+	edges []*pb.DirectedEdge,
+	newUids map[string]uint64,
+) error {
 	namespace := ns.ID()
 
 	// Track values seen within this mutation batch for in-batch duplicate detection
