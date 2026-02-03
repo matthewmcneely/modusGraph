@@ -143,7 +143,7 @@ func (c *embeddedDgraphClient) Alter(ctx context.Context, in *api.Operation, opt
 }
 
 func (c *embeddedDgraphClient) CommitOrAbort(ctx context.Context, in *api.TxnContext, opts ...grpc.CallOption) (*api.TxnContext, error) {
-	return c.engine.commitOrAbort(ctx, in)
+	return c.engine.commitOrAbort(ctx, c.ns, in)
 }
 
 func (c *embeddedDgraphClient) CheckVersion(ctx context.Context, in *api.Check, opts ...grpc.CallOption) (*api.Version, error) {
