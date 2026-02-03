@@ -284,6 +284,7 @@ func NewClient(uri string, opts ...ClientOpt) (Client, error) {
 		}
 		client.pool = newClientPool(1, func() (*dgo.Dgraph, error) {
 			embeddedClient := newEmbeddedDgraphClient(engine, ns)
+			//nolint:staticcheck // dgo.NewDgraphClient is deprecated but required for embedded client
 			return dgo.NewDgraphClient(embeddedClient), nil
 		}, client.logger)
 		dg.SetLogger(client.logger)
