@@ -246,6 +246,77 @@ func TestTwoDBs(t *testing.T) {
 	require.JSONEq(t, `{"me":[{"bar":"B"}]}`, string(resp.GetJson()))
 }
 
+func TestCommitOrAbortNamespaceIsolation(t *testing.T) {
+	engine, err := modusgraph.NewEngine(modusgraph.NewDefaultConfig(t.TempDir()))
+	require.NoError(t, err)
+	defer engine.Close()
+
+	// Create two separate namespaces
+	ns1, err := engine.CreateNamespace()
+	require.NoError(t, err)
+
+	ns2, err := engine.CreateNamespace()
+	require.NoError(t, err)
+
+	// Set up schema in both namespaces
+	require.NoError(t, ns1.AlterSchema(context.Background(), "name: string @index(exact) ."))
+	require.NoError(t, ns2.AlterSchema(context.Background(), "name: string @index(exact) ."))
+
+	// Add data to namespace 1
+	_, err = ns1.Mutate(context.Background(), []*api.Mutation{
+		{
+			Set: []*api.NQuad{
+				{
+					Subject:     "_:entity1",
+					Predicate:   "name",
+					ObjectValue: &api.Value{Val: &api.Value_StrVal{StrVal: "Namespace1Entity"}},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Add data to namespace 2
+	_, err = ns2.Mutate(context.Background(), []*api.Mutation{
+		{
+			Set: []*api.NQuad{
+				{
+					Subject:     "_:entity2",
+					Predicate:   "name",
+					ObjectValue: &api.Value{Val: &api.Value_StrVal{StrVal: "Namespace2Entity"}},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Verify data is isolated - each namespace should only see its own data
+	query := `{
+		me(func: has(name)) {
+			name
+		}
+	}`
+
+	resp1, err := ns1.Query(context.Background(), query)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"me":[{"name":"Namespace1Entity"}]}`, string(resp1.GetJson()))
+
+	resp2, err := ns2.Query(context.Background(), query)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"me":[{"name":"Namespace2Entity"}]}`, string(resp2.GetJson()))
+
+	// Verify that dropping data from one namespace doesn't affect the other
+	require.NoError(t, ns1.DropData(context.Background()))
+
+	resp1After, err := ns1.Query(context.Background(), query)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"me":[]}`, string(resp1After.GetJson()))
+
+	resp2After, err := ns2.Query(context.Background(), query)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"me":[{"name":"Namespace2Entity"}]}`, string(resp2After.GetJson()))
+}
+
 func TestDBDBRestart(t *testing.T) {
 	dataDir := t.TempDir()
 	engine, err := modusgraph.NewEngine(modusgraph.NewDefaultConfig(dataDir))
