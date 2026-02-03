@@ -14,15 +14,15 @@ import (
 	"time"
 
 	"github.com/cavaliergopher/grab/v3"
+	"github.com/dgraph-io/dgraph/v25/dgraphapi"
+	"github.com/dgraph-io/dgraph/v25/systest/1million/common"
 	"github.com/go-logr/stdr"
-	"github.com/hypermodeinc/dgraph/v25/dgraphapi"
-	"github.com/hypermodeinc/dgraph/v25/systest/1million/common"
 	"github.com/matthewmcneely/modusgraph"
 	"github.com/stretchr/testify/require"
 )
 
 const (
-	baseURL          = "https://github.com/hypermodeinc/dgraph-benchmarks/blob/main/data"
+	baseURL          = "https://github.com/dgraph-io/benchmarks/blob/main/data"
 	oneMillionSchema = baseURL + "/1million.schema?raw=true"
 	oneMillionRDF    = baseURL + "/1million.rdf.gz?raw=true"
 	DbSchema         = `

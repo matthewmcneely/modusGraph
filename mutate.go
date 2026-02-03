@@ -12,10 +12,16 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	dg "github.com/dolan-in/dgman/v2"
 )
+
+// parseNamespaceID parses a namespace string to uint64
+func parseNamespaceID(ns string) (uint64, error) {
+	return strconv.ParseUint(ns, 10, 64)
+}
 
 // checkObject validates the passed obj. If it's a slice or a pointer
 // to a slice, it returns the first element of the slice. Ultimately,
@@ -63,6 +69,25 @@ func (c client) process(ctx context.Context,
 		if err != nil {
 			return err
 		}
+	} else {
+		// When AutoSchema is disabled, check schema consistency
+		currentSchema, err := c.GetSchema(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get current schema: %w", err)
+		}
+
+		// Get the type name from the object
+		schemaObjVal := reflect.ValueOf(schemaObj)
+		if schemaObjVal.Kind() == reflect.Ptr {
+			schemaObjVal = schemaObjVal.Elem()
+		}
+		typeName := schemaObjVal.Type().Name()
+
+		// When AutoSchema is disabled, validate that required schema exists
+		// Fail if user schema for the type doesn't exist, even if only system schema exists
+		if typeName != "" && !strings.Contains(currentSchema, "type "+typeName) {
+			return fmt.Errorf("schema validation failed: database schema does not contain type %s", typeName)
+		}
 	}
 
 	client, err := c.pool.get()
@@ -75,170 +100,14 @@ func (c client) process(ctx context.Context,
 	tx := dg.NewTxnContext(ctx, client).SetCommitNow()
 	uids, err := txFunc(tx, obj)
 	if err != nil {
+		// Check if this is a unique constraint violation error from Dgraph
+		if uniqueErr := parseUniqueError(err); uniqueErr != nil {
+			return uniqueErr
+		}
 		return err
 	}
 	c.logger.V(2).Info(operation+" successful", "uidCount", len(uids))
 	return nil
-}
-
-func (c client) mutateWithUniqueVerification(ctx context.Context, obj any, insert bool) error {
-
-	schemaObj, err := checkObject(obj)
-	if err != nil {
-		return err
-	}
-	if c.options.autoSchema {
-		if err := c.UpdateSchema(ctx, schemaObj); err != nil {
-			return err
-		}
-	}
-
-	// Get the value and prepare for unified slice processing
-	val := reflect.ValueOf(obj)
-	var sliceValue reflect.Value
-
-	// Handle pointer to slice
-	if val.Kind() == reflect.Ptr && val.Elem().Kind() == reflect.Slice {
-		sliceValue = val.Elem()
-	} else if val.Kind() == reflect.Slice {
-		// Direct slice
-		sliceValue = val
-	} else {
-		// Single object - create a slice with one element
-		valElem := val
-		for valElem.Kind() == reflect.Ptr {
-			valElem = valElem.Elem()
-		}
-		sliceType := reflect.SliceOf(valElem.Type())
-		sliceValue = reflect.MakeSlice(sliceType, 1, 1)
-		sliceValue.Index(0).Set(valElem)
-	}
-
-	seen := make(map[string]int)
-	for i := 0; i < sliceValue.Len(); i++ {
-		elem := sliceValue.Index(i).Interface()
-		preds := getUniquePredicates(elem)
-		if len(preds) == 0 {
-			continue
-		}
-		// In-memory duplicate check
-		sig := ""
-		for k, v := range preds {
-			sig += fmt.Sprintf("%s=%v;", k, v)
-		}
-		if prev, ok := seen[sig]; ok {
-			return fmt.Errorf("duplicate unique predicates in slice at indices %d and %d", prev, i)
-		}
-		seen[sig] = i
-		// Persistent uniqueness check
-		nodeType := getNodeType(elem)
-		query, vars := generateUniquePredicateQuery(preds, nodeType)
-		resp, err := c.QueryRaw(ctx, query, vars)
-		if err != nil {
-			return err
-		}
-		uid, err := extractUIDFromDgraphQueryResult(resp)
-		if err != nil {
-			return err
-		}
-		if uid != "" && (insert || uid != getUIDValue(elem)) {
-			return &dg.UniqueError{NodeType: nodeType, UID: uid}
-		}
-	}
-
-	client, err := c.pool.get()
-	if err != nil {
-		c.logger.Error(err, "Failed to get client from pool")
-		return err
-	}
-	defer c.pool.put(client)
-
-	tx := dg.NewTxnContext(ctx, client).SetCommitNow()
-	uids, err := tx.MutateBasic(obj)
-	if err != nil {
-		return err
-	}
-	c.logger.V(2).Info("mutation successful", "uidCount", len(uids))
-	return nil
-}
-
-func (c client) upsert(ctx context.Context, obj any, upsertPredicate string) error {
-
-	schemaObj, err := checkObject(obj)
-	if err != nil {
-		return err
-	}
-
-	// users can pass slices, so check for that
-	val := reflect.ValueOf(obj)
-	var sliceValue reflect.Value
-
-	// Handle pointer to slice
-	if val.Kind() == reflect.Ptr && val.Elem().Kind() == reflect.Slice {
-		sliceValue = val.Elem()
-	} else if val.Kind() == reflect.Slice {
-		// Direct slice
-		sliceValue = val
-	}
-	if sliceValue.IsValid() && sliceValue.Len() > 0 {
-		for i := 0; i < sliceValue.Len(); i++ {
-			elem := sliceValue.Index(i).Interface()
-			err := c.upsert(ctx, elem, upsertPredicate)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	} else {
-		if c.options.autoSchema {
-			err := c.UpdateSchema(ctx, schemaObj)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	upsertPredicates := getUpsertPredicates(schemaObj, upsertPredicate == "")
-	if len(upsertPredicates) == 0 {
-		return errors.New("no upsert predicates found")
-	}
-	var firstPredicate string
-	for k := range upsertPredicates {
-		firstPredicate = k
-		break
-	}
-	if len(upsertPredicates) > 1 {
-		c.logger.V(1).Info("Multiple upsert predicates found, using first", "predicate", firstPredicate)
-	}
-	if upsertPredicate == "" {
-		upsertPredicate = firstPredicate
-	} else {
-		if _, ok := upsertPredicates[upsertPredicate]; !ok {
-			return fmt.Errorf("upsert predicate %q not found", upsertPredicate)
-		}
-	}
-
-	query := fmt.Sprintf(`{
-		q(func: eq(%s, "%s")) {
-			uid
-		}
-	}`, upsertPredicate, upsertPredicates[upsertPredicate])
-
-	resp, err := c.QueryRaw(ctx, query, nil)
-	if err != nil {
-		return err
-	}
-	uid, err := extractUIDFromDgraphQueryResult(resp)
-	if err != nil {
-		return err
-	}
-
-	if uid == "" {
-		return c.Insert(ctx, obj)
-	}
-	objValue := reflect.ValueOf(schemaObj)
-	objValue.Elem().FieldByName("UID").SetString(uid)
-	return c.Update(ctx, objValue.Interface())
 }
 
 func generateUniquePredicateQuery(predicates map[string]interface{}, nodeType string) (string, map[string]string) {

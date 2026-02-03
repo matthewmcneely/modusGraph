@@ -162,6 +162,34 @@ logger := logr.New(logr.Discard())
 client, err := mg.NewClient(uri, mg.WithLogger(logger))
 ```
 
+#### WithValidator(Validator)
+
+Configures custom validation for entities before mutations. The validator is called during insert,
+update, and upsert operations to ensure data integrity.
+
+```go
+import "github.com/go-playground/validator/v10"
+
+type User struct {
+    Name  string `json:"name" validate:"required,min=2,max=100"`
+    Email string `json:"email" validate:"required,email"`
+    Age   int    `json:"age" validate:"gte=0,lte=130"`
+}
+
+// Create a validator instance
+validate := validator.New()
+
+// You can also register custom validations if needed
+validate.RegisterValidation("custom", func(fl validator.FieldLevel) bool {
+    return fl.Field().String() == "custom_value"
+})
+
+// Create client with the validator
+client, err := mg.NewClient(uri, mg.WithValidator(validate))
+```
+
+See the [validator test](validate_test.go) for more examples.
+
 You can combine multiple options:
 
 ```go
@@ -241,37 +269,63 @@ type Person struct {
 
 ### Reverse Edges
 
-Reverse edges allow efficient bidirectional traversal. When you query in the reverse direction, use
-the tilde prefix in your JSON tag:
+Reverse edges enable efficient bidirectional graph traversal. modusGraph supports two patterns:
+
+**1. Forward edges with automatic reverse indexing** - Use `dgraph:"reverse"` on a forward edge to
+enable querying in both directions:
 
 ```go
-type Student struct {
-    Name       string   `json:"name,omitempty" dgraph:"index=exact"`
-    Takes_Class []*Class `json:"takes_class,omitempty" dgraph:"reverse"`
-
-    UID   string   `json:"uid,omitempty"`
-    DType []string `json:"dgraph.type,omitempty"`
-}
-
-type Class struct {
-    Name     string     `json:"name,omitempty" dgraph:"index=exact"`
-    Students []*Student `json:"~takes_class,omitempty"` // Reverse edge
-
-    UID   string   `json:"uid,omitempty"`
-    DType []string `json:"dgraph.type,omitempty"`
+type FoafPerson struct {
+    UID       string        `json:"uid,omitempty"`
+    Name      string        `json:"person_name,omitempty" dgraph:"index=term,hash"`
+    Friends   []*FoafPerson `json:"friends,omitempty" dgraph:"reverse"`  // Forward edge with reverse index
+    FriendsOf []*FoafPerson `json:"~friends,omitempty" dgraph:"reverse"` // Query reverse direction
+    DType     []string      `json:"dgraph.type,omitempty"`
 }
 ```
 
-Advanced querying is required to properly bind reverse edges in query results. See the
-`TestReverseEdgeQuery` test in [query_test.go](./query_test.go) for an example.
+**2. Managed reverse edges** - Define relationships from the parent side using the `~predicate` JSON
+tag prefix. When inserting, modusGraph automatically creates the forward edges on child entities:
+
+```go
+// Child: Enrollment has forward edge to Course
+type Enrollment struct {
+    UID      string    `json:"uid,omitempty"`
+    Grade    string    `json:"grade,omitempty"`
+    InCourse []*Course `json:"in_course,omitempty" dgraph:"reverse"`
+    DType    []string  `json:"dgraph.type,omitempty"`
+}
+
+// Parent: Course defines managed reverse edge to Enrollments
+type Course struct {
+    UID         string        `json:"uid,omitempty"`
+    Name        string        `json:"course_name,omitempty" dgraph:"index=term"`
+    Enrollments []*Enrollment `json:"~in_course,omitempty" dgraph:"reverse"` // Managed reverse edge
+    DType       []string      `json:"dgraph.type,omitempty"`
+}
+```
+
+With managed reverse edges, you can insert from the parent and modusGraph handles the edge direction
+automatically:
+
+```go
+course := &Course{
+    Name: "Algorithms",
+    Enrollments: []*Enrollment{
+        {Grade: "A"},
+        {Grade: "B"},
+    },
+}
+client.Insert(ctx, course)
+// Creates: Enrollment1.in_course = [Course.UID], Enrollment2.in_course = [Course.UID]
+```
+
+See [reverse_test.go](./reverse_test.go) for comprehensive examples including multi-level
+hierarchies and friend-of-a-friend patterns.
 
 ## Basic Operations
 
 modusGraph provides a simple API for common database operations.
-
-Note that in local-mode, unique fields are limited to the top-level object. Fields marked as unique
-in embedded or lists of embedded objects that have `unique` tags will not be checked for uniqueness
-when the top-level object is inserted.
 
 ### Inserting Data
 
@@ -297,19 +351,9 @@ if err != nil {
 fmt.Println("Created user with UID:", user.UID)
 ```
 
-Note: For local-based instances, the `InsertRaw` function is available. It applies mutations
-directly to the Dgraph engine, by-passing unique checks and the transaction workflow. The UID field
-must be set using the Dgraph blank node prefix concept (e.g. "\_:user1") to allow the engine to
-generate a UID for the object. This function can operate at a much higher transaction rate than the
-standard `Insert` function.
-
 ### Upserting Data
 
 modusGraph provides a simple API for upserting data into the database.
-
-Note that in local-mode, upserts are only supported on the top-level object. Fields in embedded or
-lists of embedded objects that have `upsert` tags will be ignored when the top-level object is
-upserted.
 
 ```go
 ctx := context.Background()
@@ -333,10 +377,6 @@ if err != nil {
 ### Updating Data
 
 To update an existing node, first retrieve it, modify it, then save it back.
-
-Note that in local-mode, unique update checks are only supported on the top-level object. Fields in
-embedded or lists of embedded objects that have `unique` tags will not be checked for uniqueness
-when the top-level object is updated.
 
 ```go
 ctx := context.Background()
