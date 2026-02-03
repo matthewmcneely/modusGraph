@@ -32,12 +32,20 @@ func newEmbeddedDgraphClient(engine *Engine, ns *Namespace) *embeddedDgraphClien
 	}
 }
 
-func (c *embeddedDgraphClient) Login(ctx context.Context, in *api.LoginRequest, opts ...grpc.CallOption) (*api.Response, error) {
+func (c *embeddedDgraphClient) Login(
+	ctx context.Context,
+	in *api.LoginRequest,
+	opts ...grpc.CallOption,
+) (*api.Response, error) {
 	// For embedded mode, login is a no-op (no auth required)
 	return &api.Response{}, nil
 }
 
-func (c *embeddedDgraphClient) Query(ctx context.Context, in *api.Request, opts ...grpc.CallOption) (*api.Response, error) {
+func (c *embeddedDgraphClient) Query(
+	ctx context.Context,
+	in *api.Request,
+	opts ...grpc.CallOption,
+) (*api.Response, error) {
 	// Attach namespace context
 	ctx = x.AttachNamespace(ctx, c.ns.ID())
 
@@ -121,7 +129,11 @@ func (c *embeddedDgraphClient) handleUpsert(ctx context.Context, in *api.Request
 	}, nil
 }
 
-func (c *embeddedDgraphClient) Alter(ctx context.Context, in *api.Operation, opts ...grpc.CallOption) (*api.Payload, error) {
+func (c *embeddedDgraphClient) Alter(
+	ctx context.Context,
+	in *api.Operation,
+	opts ...grpc.CallOption,
+) (*api.Payload, error) {
 	if in.DropAll {
 		if err := c.engine.DropAll(ctx); err != nil {
 			return nil, err
@@ -142,34 +154,61 @@ func (c *embeddedDgraphClient) Alter(ctx context.Context, in *api.Operation, opt
 	return &api.Payload{}, nil
 }
 
-func (c *embeddedDgraphClient) CommitOrAbort(ctx context.Context, in *api.TxnContext, opts ...grpc.CallOption) (*api.TxnContext, error) {
+func (c *embeddedDgraphClient) CommitOrAbort(
+	ctx context.Context,
+	in *api.TxnContext,
+	opts ...grpc.CallOption,
+) (*api.TxnContext, error) {
 	return c.engine.commitOrAbort(ctx, c.ns, in)
 }
 
-func (c *embeddedDgraphClient) CheckVersion(ctx context.Context, in *api.Check, opts ...grpc.CallOption) (*api.Version, error) {
+func (c *embeddedDgraphClient) CheckVersion(
+	ctx context.Context,
+	in *api.Check,
+	opts ...grpc.CallOption,
+) (*api.Version, error) {
 	return &api.Version{Tag: "embedded"}, nil
 }
 
-func (c *embeddedDgraphClient) RunDQL(ctx context.Context, in *api.RunDQLRequest, opts ...grpc.CallOption) (*api.Response, error) {
+func (c *embeddedDgraphClient) RunDQL(
+	ctx context.Context,
+	in *api.RunDQLRequest,
+	opts ...grpc.CallOption,
+) (*api.Response, error) {
 	return c.engine.query(ctx, c.ns, in.DqlQuery, in.Vars)
 }
 
-func (c *embeddedDgraphClient) AllocateIDs(ctx context.Context, in *api.AllocateIDsRequest, opts ...grpc.CallOption) (*api.AllocateIDsResponse, error) {
+func (c *embeddedDgraphClient) AllocateIDs(
+	ctx context.Context,
+	in *api.AllocateIDsRequest,
+	opts ...grpc.CallOption,
+) (*api.AllocateIDsResponse, error) {
 	// Not used in embedded mode - UIDs are allocated during mutation
 	return &api.AllocateIDsResponse{}, nil
 }
 
-func (c *embeddedDgraphClient) UpdateExtSnapshotStreamingState(ctx context.Context, in *api.UpdateExtSnapshotStreamingStateRequest, opts ...grpc.CallOption) (*api.UpdateExtSnapshotStreamingStateResponse, error) {
+func (c *embeddedDgraphClient) UpdateExtSnapshotStreamingState(
+	ctx context.Context,
+	in *api.UpdateExtSnapshotStreamingStateRequest,
+	opts ...grpc.CallOption,
+) (*api.UpdateExtSnapshotStreamingStateResponse, error) {
 	// Not supported in embedded mode
 	return &api.UpdateExtSnapshotStreamingStateResponse{}, nil
 }
 
-func (c *embeddedDgraphClient) StreamExtSnapshot(ctx context.Context, opts ...grpc.CallOption) (api.Dgraph_StreamExtSnapshotClient, error) {
+func (c *embeddedDgraphClient) StreamExtSnapshot(
+	ctx context.Context,
+	opts ...grpc.CallOption,
+) (api.Dgraph_StreamExtSnapshotClient, error) {
 	// Not supported in embedded mode
 	return nil, nil
 }
 
-func (c *embeddedDgraphClient) CreateNamespace(ctx context.Context, in *api.CreateNamespaceRequest, opts ...grpc.CallOption) (*api.CreateNamespaceResponse, error) {
+func (c *embeddedDgraphClient) CreateNamespace(
+	ctx context.Context,
+	in *api.CreateNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*api.CreateNamespaceResponse, error) {
 	ns, err := c.engine.CreateNamespace()
 	if err != nil {
 		return nil, err
@@ -177,12 +216,20 @@ func (c *embeddedDgraphClient) CreateNamespace(ctx context.Context, in *api.Crea
 	return &api.CreateNamespaceResponse{Namespace: ns.ID()}, nil
 }
 
-func (c *embeddedDgraphClient) DropNamespace(ctx context.Context, in *api.DropNamespaceRequest, opts ...grpc.CallOption) (*api.DropNamespaceResponse, error) {
+func (c *embeddedDgraphClient) DropNamespace(
+	ctx context.Context,
+	in *api.DropNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*api.DropNamespaceResponse, error) {
 	// Not implemented yet
 	return &api.DropNamespaceResponse{}, nil
 }
 
-func (c *embeddedDgraphClient) ListNamespaces(ctx context.Context, in *api.ListNamespacesRequest, opts ...grpc.CallOption) (*api.ListNamespacesResponse, error) {
+func (c *embeddedDgraphClient) ListNamespaces(
+	ctx context.Context,
+	in *api.ListNamespacesRequest,
+	opts ...grpc.CallOption,
+) (*api.ListNamespacesResponse, error) {
 	// Not implemented yet
 	return &api.ListNamespacesResponse{}, nil
 }
