@@ -272,8 +272,14 @@ func NewClient(uri string, opts ...ClientOpt) (Client, error) {
 		ns := engine.GetDefaultNamespace()
 		if options.namespace != "" {
 			nsID, err := parseNamespaceID(options.namespace)
-			if err == nil {
-				ns, _ = engine.GetNamespace(nsID)
+			if err != nil {
+				engine.Close()
+				return nil, fmt.Errorf("invalid namespace ID %q: %w", options.namespace, err)
+			}
+			ns, err = engine.GetNamespace(nsID)
+			if err != nil {
+				engine.Close()
+				return nil, fmt.Errorf("failed to get namespace %d: %w", nsID, err)
 			}
 		}
 		client.pool = newClientPool(1, func() (*dgo.Dgraph, error) {

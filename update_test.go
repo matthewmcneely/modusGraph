@@ -382,17 +382,26 @@ func TestClientUpdateWithUniqueEmbedded(t *testing.T) {
 			require.Error(t, err, "Update should fail due to duplicate emails in embedded node array")
 
 			// 3. Test valid update of embedded nodes
+			updatedNodeUID := parent3.Nodes[1].UID // Save UID before update
 			parent3.Nodes[1].Email = "node3@example.com"
 			parent3.Nodes[1].Name = "Updated Node 2"
 			err = client.Update(ctx, &parent3)
 			require.NoError(t, err, "Update should succeed with valid embedded node changes")
 
-			// Verify the update
+			// Verify the update - find node by UID since Dgraph doesn't guarantee array order
 			updated := ParentWithUniqueEmbedded{UID: parent3.UID}
 			err = client.Get(ctx, &updated, parent3.UID)
 			require.NoError(t, err, "Get should succeed")
-			require.Equal(t, "node3@example.com", updated.Nodes[1].Email, "Email should be updated")
-			require.Equal(t, "Updated Node 2", updated.Nodes[1].Name, "Name should be updated")
+			var updatedNode *UniqueEmbeddedNode
+			for _, n := range updated.Nodes {
+				if n.UID == updatedNodeUID {
+					updatedNode = n
+					break
+				}
+			}
+			require.NotNil(t, updatedNode, "Updated node should be found by UID")
+			require.Equal(t, "node3@example.com", updatedNode.Email, "Email should be updated")
+			require.Equal(t, "Updated Node 2", updatedNode.Name, "Name should be updated")
 		})
 	}
 }
