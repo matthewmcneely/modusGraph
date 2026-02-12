@@ -122,8 +122,8 @@ github.com/dgraph-io/badger/v4 v4.9.0 h1:tpqWb0NewSrCYqTvywbcXOhQdWcqephkVkbBmaa
 github.com/dgraph-io/badger/v4 v4.9.0/go.mod h1:5/MEx97uzdPUHR4KtkNt8asfI2T4JiEiQlV7kWUo8c0=
 github.com/dgraph-io/dgo/v250 v250.0.0 h1:zkVj8EOgNOK3s5XFEK7CJKRdftWqg5K6qGs4HEH5TcY=
 github.com/dgraph-io/dgo/v250 v250.0.0/go.mod h1:OVSaapUnuqaY4beLe98CajukINwbVm0JRNp0SRBCz/w=
-github.com/dgraph-io/dgraph/v25 v25.1.1-0.20260126222801-248eb8f1b040 h1:824td9rVnTXLEOpXWThTWdOoihN8Gce2+07/CVNkr8Q=
-github.com/dgraph-io/dgraph/v25 v25.1.1-0.20260126222801-248eb8f1b040/go.mod h1:ia5/Xt0we+ZZcLmfZQunbFSmxRO2EX7VCsuWxbmEfF4=
+github.com/dgraph-io/dgraph/v25 v25.1.1-0.20260202212142-15ef722329b1 h1:Z190qNq95esLskfMh4Zvdq7fuk3FCLg6Y8p4Uulvzdk=
+github.com/dgraph-io/dgraph/v25 v25.1.1-0.20260202212142-15ef722329b1/go.mod h1:ia5/Xt0we+ZZcLmfZQunbFSmxRO2EX7VCsuWxbmEfF4=
 github.com/dgraph-io/gqlgen v0.13.2 h1:TNhndk+eHKj5qE7BenKKSYdSIdOGhLqxR1rCiMso9KM=
 github.com/dgraph-io/gqlgen v0.13.2/go.mod h1:iCOrOv9lngN7KAo+jMgvUPVDlYHdf7qDwsTkQby2Sis=
 github.com/dgraph-io/gqlparser/v2 v2.1.1/go.mod h1:MYS4jppjyx8b9tuUtjV7jU1UFZK6P9fvO8TsIsQtRKU=
