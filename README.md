@@ -110,7 +110,7 @@ client, err := mg.NewClient("file:///path/to/data")
 #### `dgraph://` - Remote Dgraph Server
 
 Connects to a Dgraph cluster. For more details on the Dgraph URI format, see the
-[Dgraph Dgo documentation](https://github.com/hypermodeinc/dgo#connection-strings).
+[Dgraph Dgo documentation](https://github.com/dgraph-io/dgo#connection-strings).
 
 ```go
 // Connect to a remote Dgraph server
@@ -670,10 +670,10 @@ integrating modusGraph into your workflow.
 We welcome external contributions. See the [CONTRIBUTING.md](./CONTRIBUTING.md) file if you would
 like to get involved.
 
-Modus and its components are © Hypermode Inc., and licensed under the terms of the Apache License,
-Version 2.0. See the [LICENSE](./LICENSE) file for a complete copy of the license. If you have any
-questions about modus licensing, or need an alternate license or other arrangement, please contact
-us at <hello@hypermode.com>.
+Modus and its components are © Istari Digital, Inc., and licensed under the terms of the Apache
+License, Version 2.0. See the [LICENSE](./LICENSE) file for a complete copy of the license. If you
+have any questions about modus licensing, or need an alternate license or other arrangement, please
+contact us at <dgraph-admin@istaridigital.com>.
 
 ## Windows Users
 
@@ -695,8 +695,8 @@ modusGraph.
 ## Acknowledgements
 
 modusGraph builds heavily upon packages from the open source projects of
-[Dgraph](https://github.com/hypermodeinc/dgraph) (graph query processing and transaction
-management), [Badger](https://github.com/dgraph-io/badger) (data storage), and
+[Dgraph](https://github.com/dgraph-io/dgraph) (graph query processing and transaction management),
+[Badger](https://github.com/dgraph-io/badger) (data storage), and
 [Ristretto](https://github.com/dgraph-io/ristretto) (cache). modusGraph also relies on the
 [dgman](https://github.com/dolan-in/dgman) repository for much of its functionality. We expect the
 architecture and implementations of modusGraph and Dgraph to expand in differentiation over time as
