@@ -6,7 +6,7 @@ require (
 	github.com/cavaliergopher/grab/v3 v3.0.1
 	github.com/dgraph-io/badger/v4 v4.9.0
 	github.com/dgraph-io/dgo/v250 v250.0.0
-	github.com/dgraph-io/dgraph/v25 v25.1.1-0.20260126222801-248eb8f1b040
+	github.com/dgraph-io/dgraph/v25 v25.1.1-0.20260202212142-15ef722329b1
 	github.com/dgraph-io/ristretto/v2 v2.3.0
 	github.com/dolan-in/dgman/v2 v2.2.0-preview2
 	github.com/go-logr/logr v1.4.3
