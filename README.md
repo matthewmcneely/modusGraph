@@ -620,16 +620,6 @@ These operations are useful for testing or when you need to reset your database 
 
 modusGraph has a few limitations to be aware of:
 
-- **Unique constraints in file-based mode**: Due to the intricacies of how Dgraph handles unique
-  fields in its core package, when using file-based mode, unique field checks are only supported at
-  the top level object that is being in/upserted or updated. Embedded or lists of embedded objects
-  that have unique tags will NOT be checked for uniqueness when the top-level object is in/upserted
-  or updated.
-
-- **Upsert operations**: Upsert operations are only supported on the top-level object. Fields in
-  embedded or lists of embedded objects that have upsert tags will be ignored when the top-level
-  object is upserted.
-
 - **Schema evolution**: While modusGraph supports schema inference through tags, evolving an
   existing schema with new fields requires careful consideration to avoid data inconsistencies.
 
