@@ -6,7 +6,7 @@
 </div>
 
 **modusGraph is a high-performance, transactional database system.** It's designed to be type-first,
-schema-agnostic, and portable. modusGraph provides object-oriented APIs that make it simple to build
+schema-agnostic, and portable. modusGraph provides ORM-like mechanisms that make it simple to build
 new apps, paired with support for advanced use cases through the Dgraph Query Language (DQL). A
 dynamic schema allows for natural relations to be expressed in your data with performance that
 scales with your use case.
