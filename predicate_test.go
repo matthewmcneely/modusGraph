@@ -26,7 +26,7 @@ import (
 // PredicateFilm is a test struct where the dgraph predicate name differs from
 // the json tag name. This exercises the predicate= fix in dgman.
 type PredicateFilm struct {
-	Title       string    `json:"title,omitempty" dgraph:"predicate=film_title index=exact"`
+	Title       string    `json:"title,omitempty" dgraph:"predicate=film_title index=exact unique"`
 	ReleaseDate time.Time `json:"releaseDate,omitzero" dgraph:"predicate=release_date index=day"`
 	Rating      float64   `json:"rating,omitempty" dgraph:"predicate=film_rating index=float"`
 
@@ -151,13 +151,7 @@ func TestPredicateUpdate(t *testing.T) {
 }
 
 // TestPredicateUpsert tests that Upsert works correctly with predicate= fields.
-// NOTE: This test depends on the dgman fork (mlwelles/dgman) containing the
-// predicate= fixes for the read path. Upsert uses the do() path which correctly
-// writes data under predicate names, but the read path currently maps by json tags.
-// This test will fail until the dgman fork read-path fix is applied.
 func TestPredicateUpsert(t *testing.T) {
-	t.Skip("Depends on dgman fork predicate= read-path fix (not yet applied)")
-
 	testCases := []struct {
 		name string
 		uri  string
