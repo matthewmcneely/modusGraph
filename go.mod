@@ -2,8 +2,6 @@ module github.com/matthewmcneely/modusgraph
 
 go 1.25.6
 
-replace github.com/dolan-in/dgman/v2 => ../dgman
-
 require (
 	github.com/cavaliergopher/grab/v3 v3.0.1
 	github.com/dgraph-io/badger/v4 v4.9.0
