@@ -38,6 +38,7 @@ type PredicateFilm struct {
 // predicate= tag. This mirrors the pattern used by modusGraphGen where:
 //   - PredicateBook has a forward edge: predicate=written_by reverse
 //   - PredicateAuthor has a reverse edge: predicate=~written_by reverse
+//
 // The forward edge creates an @reverse index in Dgraph, and the reverse edge
 // declares a managed reverse that dgman expands in queries automatically.
 type PredicateBook struct {
