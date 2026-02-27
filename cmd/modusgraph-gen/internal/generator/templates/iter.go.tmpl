@@ -1,0 +1,63 @@
+package {{.Name}}
+
+import (
+	"context"
+	"iter"
+)
+{{range .Entities}}{{if .Searchable}}
+// SearchIter returns an iterator over {{.Name}} entities matching term.
+// It automatically pages through results using Go 1.23+ range-over-func.
+func (c *{{.Name}}Client) SearchIter(ctx context.Context, term string) iter.Seq2[{{.Name}}, error] {
+	return func(yield func({{.Name}}, error) bool) {
+		offset := 0
+		for {
+			results, err := c.Search(ctx, term, First(defaultPageSize), Offset(offset))
+			if err != nil {
+				var zero {{.Name}}
+				yield(zero, err)
+				return
+			}
+			if len(results) == 0 {
+				return
+			}
+			for _, r := range results {
+				if !yield(r, nil) {
+					return
+				}
+			}
+			if len(results) < defaultPageSize {
+				return
+			}
+			offset += len(results)
+		}
+	}
+}
+{{end}}
+// ListIter returns an iterator over all {{.Name}} entities.
+// It automatically pages through results using Go 1.23+ range-over-func.
+func (c *{{.Name}}Client) ListIter(ctx context.Context) iter.Seq2[{{.Name}}, error] {
+	return func(yield func({{.Name}}, error) bool) {
+		offset := 0
+		for {
+			results, err := c.List(ctx, First(defaultPageSize), Offset(offset))
+			if err != nil {
+				var zero {{.Name}}
+				yield(zero, err)
+				return
+			}
+			if len(results) == 0 {
+				return
+			}
+			for _, r := range results {
+				if !yield(r, nil) {
+					return
+				}
+			}
+			if len(results) < defaultPageSize {
+				return
+			}
+			offset += len(results)
+		}
+	}
+}
+{{end}}
