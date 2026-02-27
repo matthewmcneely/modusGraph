@@ -3,6 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// Deprecated: Use the generated CLI's "query" subcommand instead.
+// Example: movies query '{ q(func: has(name@en)) { uid name@en } }'
+// This standalone tool will be removed in a future release.
 package main
 
 import (
@@ -24,6 +27,8 @@ import (
 )
 
 func main() {
+	fmt.Fprintln(os.Stderr, "WARNING: cmd/query is deprecated. Use the generated CLI's 'query' subcommand instead.")
+
 	// Define flags
 	dirFlag := flag.String("dir", "", "Directory where the modusGraph database is stored")
 	prettyFlag := flag.Bool("pretty", true, "Pretty-print the JSON output")
