@@ -97,15 +97,37 @@ func (c client) process(ctx context.Context,
 	}
 	defer c.pool.put(client)
 
-	tx := dg.NewTxnContext(ctx, client).SetCommitNow()
+	provider := c.options.embeddingProvider
+	hasEmbedding := provider != nil && hasSimStringFields(obj)
+
+	var tx *dg.TxnContext
+	if hasEmbedding {
+		// Do not use SetCommitNow: we need to inject shadow vectors before committing.
+		tx = dg.NewTxnContext(ctx, client)
+	} else {
+		tx = dg.NewTxnContext(ctx, client).SetCommitNow()
+	}
+
 	uids, err := txFunc(tx, obj)
 	if err != nil {
+		_ = tx.Txn().Discard(ctx)
 		// Check if this is a unique constraint violation error from Dgraph
 		if uniqueErr := parseUniqueError(err); uniqueErr != nil {
 			return uniqueErr
 		}
 		return err
 	}
+
+	if hasEmbedding {
+		if err := injectShadowVectors(ctx, provider, tx, obj, uids); err != nil {
+			_ = tx.Txn().Discard(ctx)
+			return fmt.Errorf("injecting shadow vectors: %w", err)
+		}
+		if err := tx.Txn().Commit(ctx); err != nil {
+			return fmt.Errorf("committing transaction with shadow vectors: %w", err)
+		}
+	}
+
 	c.logger.V(2).Info(operation+" successful", "uidCount", len(uids))
 	return nil
 }
