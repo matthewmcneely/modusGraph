@@ -616,6 +616,69 @@ if err != nil {
 
 These operations are useful for testing or when you need to reset your database state.
 
+## Code Generation
+
+modusGraph includes a code generation tool that reads your Go structs and produces a fully typed
+client library with CRUD operations, query builders, auto-paging iterators, functional options, and
+an optional CLI.
+
+### Installation
+
+```sh
+go install github.com/matthewmcneely/modusgraph/cmd/modusgraphgen@latest
+```
+
+### Usage
+
+Add a `go:generate` directive to your package:
+
+```go
+//go:generate go run github.com/matthewmcneely/modusgraph/cmd/modusgraphgen
+```
+
+Then run:
+
+```sh
+go generate ./...
+```
+
+### What Gets Generated
+
+| Template | Output | Scope |
+|----------|--------|-------|
+| client | `client_gen.go` | Once -- typed `Client` with sub-clients per entity |
+| page_options | `page_options_gen.go` | Once -- `First(n)` and `Offset(n)` pagination |
+| iter | `iter_gen.go` | Once -- auto-paging `SearchIter` and `ListIter` |
+| entity | `<entity>_gen.go` | Per entity -- `Get`, `Add`, `Update`, `Delete`, `Search`, `List` |
+| options | `<entity>_options_gen.go` | Per entity -- functional options for each scalar field |
+| query | `<entity>_query_gen.go` | Per entity -- fluent query builder |
+| cli | `cmd/<pkg>/main.go` | Once -- Kong CLI with subcommands per entity |
+
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-pkg` | `.` | Path to the target Go package directory |
+| `-output` | same as `-pkg` | Output directory for generated files |
+| `-cli-dir` | `{output}/cmd/{package}` | Output directory for CLI main.go |
+| `-cli-name` | package name | Name for CLI binary |
+| `-with-validator` | `false` | Enable struct validation in generated CLI |
+
+### Entity Detection
+
+A struct is recognized as an entity when it has both of these fields:
+
+```go
+UID   string   `json:"uid,omitempty"`
+DType []string `json:"dgraph.type,omitempty"`
+```
+
+All other exported fields with `json` and optional `dgraph` struct tags are parsed as entity fields.
+Edge relationships are detected when a field type is `[]OtherEntity` where `OtherEntity` is another
+struct in the same package. See the
+[Defining Your Graph with Structs](#defining-your-graph-with-structs) section above for the full
+struct tag reference.
+
 ## Limitations
 
 modusGraph has a few limitations to be aware of:

@@ -1,0 +1,34 @@
+package {{.PackageName}}
+{{$entity := .Entity}}
+{{$name := .Entity.Name}}
+{{$fields := scalarFields .Entity.Fields}}
+{{- $needsTime := false}}
+{{- range $fields}}{{if hasPrefix .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
+{{- $extImports := externalImports $fields .Imports}}
+{{if or $needsTime (gt (len $extImports) 0)}}
+import (
+{{- if $needsTime}}
+	"time"
+{{- end}}
+{{range $extImports}}
+	"{{.}}"
+{{- end}}
+)
+{{end}}
+// {{$name}}Option is a functional option for configuring {{$name}} mutations.
+type {{$name}}Option func(*{{$name}})
+
+{{range $fields}}
+// With{{$name}}{{.Name}} sets the {{.Name}} field on a {{$name}}.
+func With{{$name}}{{.Name}}(v {{.GoType}}) {{$name}}Option {
+	return func(e *{{$name}}) {
+		e.{{.Name}} = v
+	}
+}
+{{end}}
+// Apply{{$name}}Options applies the given options to a {{$name}}.
+func Apply{{$name}}Options(e *{{$name}}, opts ...{{$name}}Option) {
+	for _, opt := range opts {
+		opt(e)
+	}
+}

@@ -19,3 +19,8 @@ go.work.sum
 .env
 
 cpu_profile.prof
+
+# Tool config directories
+.osgrep
+.opencode
+.claude
