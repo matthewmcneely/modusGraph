@@ -604,3 +604,90 @@ func TestWithCLIDirAndCLIName(t *testing.T) {
 		t.Errorf("CLI import should use real package name\nGot:\n%s", content)
 	}
 }
+
+func TestGeneratedClientHasQueryRaw(t *testing.T) {
+	dir := moviesDir(t)
+	pkg, err := parser.Parse(dir)
+	if err != nil {
+		t.Fatalf("Parse(%s) failed: %v", dir, err)
+	}
+
+	tmpDir := t.TempDir()
+	if err := Generate(pkg, tmpDir); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, "client_gen.go"))
+	if err != nil {
+		t.Fatalf("reading client_gen.go: %v", err)
+	}
+	content := string(data)
+
+	if !strings.Contains(content, "func (c *Client) QueryRaw(") {
+		t.Error("client_gen.go should contain QueryRaw method")
+	}
+	if !strings.Contains(content, "c.conn.QueryRaw(") {
+		t.Error("client_gen.go QueryRaw should delegate to c.conn.QueryRaw")
+	}
+}
+
+func TestGeneratedCLIHasQuerySubcommand(t *testing.T) {
+	dir := moviesDir(t)
+	pkg, err := parser.Parse(dir)
+	if err != nil {
+		t.Fatalf("Parse(%s) failed: %v", dir, err)
+	}
+
+	tmpDir := t.TempDir()
+	if err := Generate(pkg, tmpDir); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	cliPath := filepath.Join(tmpDir, "cmd", "movies", "main.go")
+	data, err := os.ReadFile(cliPath)
+	if err != nil {
+		t.Fatalf("reading CLI file: %v", err)
+	}
+	content := string(data)
+
+	// Should have query subcommand.
+	if !strings.Contains(content, "QueryCmd") {
+		t.Error("CLI should contain QueryCmd type")
+	}
+	if !strings.Contains(content, "Query") || !strings.Contains(content, "QueryCmd") {
+		t.Error("CLI root should have Query field of type QueryCmd")
+	}
+	// Should have --dir flag.
+	if !strings.Contains(content, `Dir  string`) {
+		t.Error("CLI should have Dir flag")
+	}
+	// Should have connectString helper.
+	if !strings.Contains(content, "func connectString()") {
+		t.Error("CLI should have connectString function")
+	}
+}
+
+func TestGeneratedCLIDirAndAddrMutuallyExclusive(t *testing.T) {
+	dir := moviesDir(t)
+	pkg, err := parser.Parse(dir)
+	if err != nil {
+		t.Fatalf("Parse(%s) failed: %v", dir, err)
+	}
+
+	tmpDir := t.TempDir()
+	if err := Generate(pkg, tmpDir); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	cliPath := filepath.Join(tmpDir, "cmd", "movies", "main.go")
+	data, err := os.ReadFile(cliPath)
+	if err != nil {
+		t.Fatalf("reading CLI file: %v", err)
+	}
+	content := string(data)
+
+	// Should contain mutual exclusion logic.
+	if !strings.Contains(content, `--addr and --dir are mutually exclusive`) {
+		t.Error("CLI should contain mutual exclusion error message")
+	}
+}

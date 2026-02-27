@@ -3,6 +3,8 @@
 package movies
 
 import (
+	"context"
+
 	"github.com/matthewmcneely/modusgraph"
 )
 
@@ -43,6 +45,13 @@ func NewFromClient(conn modusgraph.Client) *Client {
 		Performance:   &PerformanceClient{conn: conn},
 		Rating:        &RatingClient{conn: conn},
 	}
+}
+
+// QueryRaw executes a raw DQL query against the database.
+// The query parameter is the Dgraph query string (DQL syntax).
+// The vars parameter is an optional map of variable names to values for parameterized queries.
+func (c *Client) QueryRaw(ctx context.Context, query string, vars map[string]string) ([]byte, error) {
+	return c.conn.QueryRaw(ctx, query, vars)
 }
 
 // Close releases all resources used by the client.
