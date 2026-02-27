@@ -113,14 +113,16 @@ type StructValidator interface {
 // namespace: the namespace for the client.
 // logger: the logger for the client.
 // validator: the validator instance for struct validation.
+// embeddingProvider: optional provider for automatic SimString vector embeddings.
 type clientOptions struct {
-	autoSchema       bool
-	poolSize         int
-	maxEdgeTraversal int
-	cacheSizeMB      int
-	namespace        string
-	logger           logr.Logger
-	validator        StructValidator
+	autoSchema        bool
+	poolSize          int
+	maxEdgeTraversal  int
+	cacheSizeMB       int
+	namespace         string
+	logger            logr.Logger
+	validator         StructValidator
+	embeddingProvider EmbeddingProvider
 }
 
 // ClientOpt is a function that configures a client
@@ -179,6 +181,17 @@ func WithCacheSizeMB(size int) ClientOpt {
 func WithValidator(v StructValidator) ClientOpt {
 	return func(o *clientOptions) {
 		o.validator = v
+	}
+}
+
+// WithEmbeddingProvider sets the EmbeddingProvider used to automatically generate
+// and maintain shadow float32vector predicates for SimString fields tagged with
+// `dgraph:"embedding"`. When set, Insert, Upsert, and Update operations will
+// call the provider to embed any SimString values and persist the resulting
+// vectors alongside the primary string predicates.
+func WithEmbeddingProvider(p EmbeddingProvider) ClientOpt {
+	return func(o *clientOptions) {
+		o.embeddingProvider = p
 	}
 }
 
@@ -310,6 +323,12 @@ func (c client) key() string {
 	}
 	return fmt.Sprintf("%s:%t:%d:%d:%d:%s:%s", c.uri, c.options.autoSchema, c.options.poolSize,
 		c.options.maxEdgeTraversal, c.options.cacheSizeMB, c.options.namespace, validatorKey)
+}
+
+// embeddingProvider implements the embeddingClient interface, exposing the
+// configured EmbeddingProvider to package-level helpers like SimilarToText.
+func (c client) embeddingProvider() EmbeddingProvider {
+	return c.options.embeddingProvider
 }
 
 func checkPointer(obj any) error {
@@ -458,16 +477,33 @@ func (c client) Query(ctx context.Context, model any) *dg.Query {
 
 // UpdateSchema implements updating the Dgraph schema. Pass one or more
 // objects that will be used to generate the schema.
+// If any object contains SimString fields tagged `dgraph:"embedding"`, the
+// corresponding shadow float32vector predicates (<field>__vec) are also registered.
 func (c client) UpdateSchema(ctx context.Context, obj ...any) error {
-	client, err := c.pool.get()
+	dgClient, err := c.pool.get()
 	if err != nil {
 		c.logger.Error(err, "Failed to get client from pool")
 		return err
 	}
-	defer c.pool.put(client)
+	defer c.pool.put(dgClient)
 
-	_, err = dg.CreateSchema(client, obj...)
-	return err
+	if _, err = dg.CreateSchema(dgClient, obj...); err != nil {
+		return err
+	}
+
+	// Collect shadow vector schema lines for SimString fields across all objects.
+	var vecSchema strings.Builder
+	for _, o := range obj {
+		for _, info := range collectSimFields(o) {
+			vecSchema.WriteString(buildVecSchemaStatement(info))
+			vecSchema.WriteString("\n")
+		}
+	}
+	if vecSchema.Len() == 0 {
+		return nil
+	}
+
+	return dgClient.Alter(ctx, &api.Operation{Schema: vecSchema.String()})
 }
 
 // GetSchema implements retrieving the Dgraph schema.
