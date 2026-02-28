@@ -448,29 +448,29 @@ func SimilarTo(tx *dg.TxnContext, model any, field string, vec []float32, k int)
 }
 
 // SimilarToText embeds text on-the-fly using the client's configured EmbeddingProvider,
-// then returns a ready-to-execute QueryBlock rooted at similar_to(<field>__vec, k, $vec).
-// The vector variable is already bound; call Scan() directly on the returned QueryBlock.
+// executes a similar_to(<field>__vec, k, $vec) query, and scans the nearest-neighbour
+// results into model. The connection lifecycle is managed internally.
 //
-// Returns an error if no EmbeddingProvider is configured on the client or embedding fails.
+// Returns an error if no EmbeddingProvider is configured on the client, embedding fails,
+// or the query fails.
 //
 // Example:
 //
-//	qb, err := SimilarToText(client, ctx, &result, "description", "fast red sports car", 5)
+//	err := SimilarToText(client, ctx, &result, "description", "fast red sports car", 5)
 //	if err != nil { ... }
-//	err = qb.Scan()
-func SimilarToText(c Client, ctx context.Context, model any, field string, text string, k int) (*dg.QueryBlock, error) {
+func SimilarToText(c Client, ctx context.Context, model any, field string, text string, k int) error {
 	ec, ok := c.(embeddingClient)
 	if !ok {
-		return nil, fmt.Errorf("client does not expose embeddingProvider; ensure it is a modusgraph client")
+		return fmt.Errorf("client does not expose embeddingProvider; ensure it is a modusgraph client")
 	}
 	provider := ec.embeddingProvider()
 	if provider == nil {
-		return nil, fmt.Errorf("no EmbeddingProvider configured on client; use WithEmbeddingProvider")
+		return fmt.Errorf("no EmbeddingProvider configured on client; use WithEmbeddingProvider")
 	}
 
 	vec, err := provider.Embed(ctx, text)
 	if err != nil {
-		return nil, fmt.Errorf("SimilarToText: embed text: %w", err)
+		return fmt.Errorf("SimilarToText: embed text: %w", err)
 	}
 
 	vecStr := vectorToQueryString(vec)
@@ -478,13 +478,13 @@ func SimilarToText(c Client, ctx context.Context, model any, field string, text 
 
 	dgoClient, cleanup, err := c.DgraphClient()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer cleanup()
 
 	tx := dg.NewReadOnlyTxn(dgoClient)
 	q := dg.NewQuery().Model(model).RootFunc(rootFunc)
-	return tx.Query(q).Vars("similar_to($vec: string)", map[string]string{"$vec": vecStr}), nil
+	return tx.Query(q).Vars("similar_to($vec: string)", map[string]string{"$vec": vecStr}).Scan()
 }
 
 // embeddingClient is an internal interface implemented by client to expose
