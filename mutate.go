@@ -104,13 +104,15 @@ func (c client) process(ctx context.Context,
 	if hasEmbedding {
 		// Do not use SetCommitNow: we need to inject shadow vectors before committing.
 		tx = dg.NewTxnContext(ctx, client)
+		// Discard is a no-op after a successful Commit but ensures resources are
+		// cleaned up on all paths (error returns, panics, etc.).
+		defer func() { _ = tx.Txn().Discard(ctx) }()
 	} else {
 		tx = dg.NewTxnContext(ctx, client).SetCommitNow()
 	}
 
 	uids, err := txFunc(tx, obj)
 	if err != nil {
-		_ = tx.Txn().Discard(ctx)
 		// Check if this is a unique constraint violation error from Dgraph
 		if uniqueErr := parseUniqueError(err); uniqueErr != nil {
 			return uniqueErr
@@ -120,7 +122,6 @@ func (c client) process(ctx context.Context,
 
 	if hasEmbedding {
 		if err := injectShadowVectors(ctx, provider, tx, obj, uids); err != nil {
-			_ = tx.Txn().Discard(ctx)
 			return fmt.Errorf("injecting shadow vectors: %w", err)
 		}
 		if err := tx.Txn().Commit(ctx); err != nil {
