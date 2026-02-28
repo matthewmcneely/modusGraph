@@ -284,12 +284,8 @@ func TestSimilarToTextQuery(t *testing.T) {
 
 	// SimilarToText should embed "fruit like apple" → vecQueryFruit → nearest is Apple Product
 	var result embeddableProduct
-	qb, err := mg.SimilarToText(client, ctx, &result, "description", "fruit like apple", 1)
+	err := mg.SimilarToText(client, ctx, &result, "description", "fruit like apple", 1)
 	require.NoError(t, err, "SimilarToText should not error")
-	require.NotNil(t, qb, "QueryBlock should not be nil")
-
-	err = qb.Scan()
-	require.NoError(t, err)
 	require.Equal(t, "Apple Product", result.Name)
 }
 
@@ -554,9 +550,7 @@ func TestOllamaIntegration(t *testing.T) {
 
 	// 3. SimilarToText: query for running shoes
 	var shoeResult sportingGoodsProduct
-	qb, err := mg.SimilarToText(client, ctx, &shoeResult, "description", "running shoes for trails", 1)
-	require.NoError(t, err)
-	err = qb.Scan()
+	err = mg.SimilarToText(client, ctx, &shoeResult, "description", "running shoes for trails", 1)
 	require.NoError(t, err)
 	t.Logf("Running shoe query → %q (%s)", shoeResult.Name, shoeResult.Description)
 	require.NotEmpty(t, shoeResult.Name, "Should find a product")
@@ -565,9 +559,7 @@ func TestOllamaIntegration(t *testing.T) {
 
 	// 4. SimilarToText: query for waterproof outerwear
 	var jacketResult sportingGoodsProduct
-	qb, err = mg.SimilarToText(client, ctx, &jacketResult, "description", "waterproof jacket for bad weather", 1)
-	require.NoError(t, err)
-	err = qb.Scan()
+	err = mg.SimilarToText(client, ctx, &jacketResult, "description", "waterproof jacket for bad weather", 1)
 	require.NoError(t, err)
 	t.Logf("Jacket query → %q (%s)", jacketResult.Name, jacketResult.Description)
 	require.NotEmpty(t, jacketResult.Name)
@@ -582,9 +574,7 @@ func TestOllamaIntegration(t *testing.T) {
 
 	// Re-query with the updated semantics — still expects a trail running shoe
 	var updatedResult sportingGoodsProduct
-	qb, err = mg.SimilarToText(client, ctx, &updatedResult, "description", "waterproof trail shoe for mud", 1)
-	require.NoError(t, err)
-	err = qb.Scan()
+	err = mg.SimilarToText(client, ctx, &updatedResult, "description", "waterproof trail shoe for mud", 1)
 	require.NoError(t, err)
 	t.Logf("After update query → %q", updatedResult.Name)
 	require.NotEmpty(t, updatedResult.Name)
@@ -597,9 +587,7 @@ func TestOllamaIntegration(t *testing.T) {
 
 	// ── 7. SimilarToText: confirm marathon query still maps to road shoe ───────
 	var marathonResult sportingGoodsProduct
-	qb, err = mg.SimilarToText(client, ctx, &marathonResult, "description", "shoe for running a marathon", 1)
-	require.NoError(t, err)
-	err = qb.Scan()
+	err = mg.SimilarToText(client, ctx, &marathonResult, "description", "shoe for running a marathon", 1)
 	require.NoError(t, err)
 	t.Logf("Marathon query → %q", marathonResult.Name)
 	require.NotEmpty(t, marathonResult.Name)
