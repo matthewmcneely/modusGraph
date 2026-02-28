@@ -321,8 +321,12 @@ func (c client) key() string {
 	if c.options.validator != nil {
 		validatorKey = fmt.Sprintf("%p", c.options.validator)
 	}
-	return fmt.Sprintf("%s:%t:%d:%d:%d:%s:%s", c.uri, c.options.autoSchema, c.options.poolSize,
-		c.options.maxEdgeTraversal, c.options.cacheSizeMB, c.options.namespace, validatorKey)
+	embeddingKey := "nil"
+	if c.options.embeddingProvider != nil {
+		embeddingKey = fmt.Sprintf("%p", c.options.embeddingProvider)
+	}
+	return fmt.Sprintf("%s:%t:%d:%d:%d:%s:%s:%s", c.uri, c.options.autoSchema, c.options.poolSize,
+		c.options.maxEdgeTraversal, c.options.cacheSizeMB, c.options.namespace, validatorKey, embeddingKey)
 }
 
 // embeddingProvider implements the embeddingClient interface, exposing the
