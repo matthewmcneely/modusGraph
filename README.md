@@ -227,30 +227,34 @@ type MyNode struct {
 
 modusGraph uses struct tags to define how each field should be handled in the graph database:
 
-| Directive   | Option   | Description                                     | Example                                                                              |
-| ----------- | -------- | ----------------------------------------------- | ------------------------------------------------------------------------------------ |
-| **index**   | exact    | Creates an exact-match index for string fields  | Name string &#96;json:"name" dgraph:"index=exact"&#96;                               |
-|             | hash     | Creates a hash index (same as exact)            | Code string &#96;json:"code" dgraph:"index=hash"&#96;                                |
-|             | term     | Creates a term index for text search            | Description string &#96;json:"description" dgraph:"index=term"&#96;                  |
-|             | fulltext | Creates a full-text search index                | Content string &#96;json:"content" dgraph:"index=fulltext"&#96;                      |
-|             | int      | Creates an index for integer fields             | Age int &#96;json:"age" dgraph:"index=int"&#96;                                      |
-|             | geo      | Creates a geolocation index                     | Location &#96;json:"location" dgraph:"index=geo"&#96;                                |
-|             | day      | Creates a day-based index for datetime fields   | Created time.Time &#96;json:"created" dgraph:"index=day"&#96;                        |
-|             | year     | Creates a year-based index for datetime fields  | Birthday time.Time &#96;json:"birthday" dgraph:"index=year"&#96;                     |
-|             | month    | Creates a month-based index for datetime fields | Hired time.Time &#96;json:"hired" dgraph:"index=month"&#96;                          |
-|             | hour     | Creates an hour-based index for datetime fields | Login time.Time &#96;json:"login" dgraph:"index=hour"&#96;                           |
-|             | hnsw     | Creates a vector similarity index               | Vector \*dg.VectorFloat32 &#96;json:"vector" dgraph:"index=hnsw(metric:cosine)"&#96; |
-| **type**    | geo      | Specifies a geolocation field                   | Location &#96;json:"location" dgraph:"type=geo"&#96;                                 |
-|             | datetime | Specifies a datetime field                      | CreatedAt time.Time &#96;json:"createdAt" dgraph:"type=datetime"&#96;                |
-|             | int      | Specifies an integer field                      | Count int &#96;json:"count" dgraph:"type=int"&#96;                                   |
-|             | float    | Specifies a floating-point field                | Price float64 &#96;json:"price" dgraph:"type=float"&#96;                             |
-|             | bool     | Specifies a boolean field                       | Active bool &#96;json:"active" dgraph:"type=bool"&#96;                               |
-|             | password | Specifies a password field (stored securely)    | Password string &#96;json:"password" dgraph:"type=password"&#96;                     |
-| **count**   |          | Creates a count index                           | Visits int &#96;json:"visits" dgraph:"count"&#96;                                    |
-| **unique**  |          | Enforces uniqueness for the field               | Email string &#96;json:"email" dgraph:"index=hash unique"&#96;                       |
-| **upsert**  |          | Allows a field to be used in upsert operations  | UserID string &#96;json:"userID" dgraph:"index=hash upsert"&#96;                     |
-| **reverse** |          | Creates a bidirectional edge                    | Friends []\*Person &#96;json:"friends" dgraph:"reverse"&#96;                         |
-| **lang**    |          | Enables multi-language support for the field    | Description string &#96;json:"description" dgraph:"lang"&#96;                        |
+| Directive     | Option     | Description                                                                                                                                                                                                                                 | Example                                                                                |
+| ------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| **index**     | exact      | Creates an exact-match index for string fields                                                                                                                                                                                              | Name string &#96;json:"name" dgraph:"index=exact"&#96;                                 |
+|               | hash       | Creates a hash index (same as exact)                                                                                                                                                                                                        | Code string &#96;json:"code" dgraph:"index=hash"&#96;                                  |
+|               | term       | Creates a term index for text search                                                                                                                                                                                                        | Description string &#96;json:"description" dgraph:"index=term"&#96;                    |
+|               | fulltext   | Creates a full-text search index                                                                                                                                                                                                            | Content string &#96;json:"content" dgraph:"index=fulltext"&#96;                        |
+|               | int        | Creates an index for integer fields                                                                                                                                                                                                         | Age int &#96;json:"age" dgraph:"index=int"&#96;                                        |
+|               | geo        | Creates a geolocation index                                                                                                                                                                                                                 | Location &#96;json:"location" dgraph:"index=geo"&#96;                                  |
+|               | day        | Creates a day-based index for datetime fields                                                                                                                                                                                               | Created time.Time &#96;json:"created" dgraph:"index=day"&#96;                          |
+|               | year       | Creates a year-based index for datetime fields                                                                                                                                                                                              | Birthday time.Time &#96;json:"birthday" dgraph:"index=year"&#96;                       |
+|               | month      | Creates a month-based index for datetime fields                                                                                                                                                                                             | Hired time.Time &#96;json:"hired" dgraph:"index=month"&#96;                            |
+|               | hour       | Creates an hour-based index for datetime fields                                                                                                                                                                                             | Login time.Time &#96;json:"login" dgraph:"index=hour"&#96;                             |
+|               | hnsw       | Creates a vector similarity index                                                                                                                                                                                                           | Vector \*dg.VectorFloat32 &#96;json:"vector" dgraph:"index=hnsw(metric:cosine)"&#96;   |
+| **type**      | geo        | Specifies a geolocation field                                                                                                                                                                                                               | Location &#96;json:"location" dgraph:"type=geo"&#96;                                   |
+|               | datetime   | Specifies a datetime field                                                                                                                                                                                                                  | CreatedAt time.Time &#96;json:"createdAt" dgraph:"type=datetime"&#96;                  |
+|               | int        | Specifies an integer field                                                                                                                                                                                                                  | Count int &#96;json:"count" dgraph:"type=int"&#96;                                     |
+|               | float      | Specifies a floating-point field                                                                                                                                                                                                            | Price float64 &#96;json:"price" dgraph:"type=float"&#96;                               |
+|               | bool       | Specifies a boolean field                                                                                                                                                                                                                   | Active bool &#96;json:"active" dgraph:"type=bool"&#96;                                 |
+|               | password   | Specifies a password field (stored securely)                                                                                                                                                                                                | Password string &#96;json:"password" dgraph:"type=password"&#96;                       |
+| **count**     |            | Creates a count index                                                                                                                                                                                                                       | Visits int &#96;json:"visits" dgraph:"count"&#96;                                      |
+| **unique**    |            | Enforces uniqueness for the field                                                                                                                                                                                                           | Email string &#96;json:"email" dgraph:"index=hash unique"&#96;                         |
+| **upsert**    |            | Allows a field to be used in upsert operations                                                                                                                                                                                              | UserID string &#96;json:"userID" dgraph:"index=hash upsert"&#96;                       |
+| **reverse**   |            | Creates a bidirectional edge                                                                                                                                                                                                                | Friends []\*Person &#96;json:"friends" dgraph:"reverse"&#96;                           |
+| **lang**      |            | Enables multi-language support for the field                                                                                                                                                                                                | Description string &#96;json:"description" dgraph:"lang"&#96;                          |
+| **embedding** |            | Marks a `SimString` field for automatic vector embedding. modusGraph calls the configured `EmbeddingProvider` on insert/update and maintains a shadow `<field>__vec` predicate. Can be combined with `index=term` and other string indexes. | Description SimString &#96;json:"description" dgraph:"embedding,index=term"&#96;       |
+|               | metric=    | HNSW index metric (default: `cosine`). Options: `cosine`, `euclidean`, `dotproduct`                                                                                                                                                         | Description SimString &#96;json:"description" dgraph:"embedding,metric=euclidean"&#96; |
+|               | exponent=  | HNSW index exponent controlling index size (default: `4`)                                                                                                                                                                                   | Description SimString &#96;json:"description" dgraph:"embedding,exponent=5"&#96;       |
+|               | threshold= | Minimum rune count required to embed. Texts shorter than this have their shadow vector deleted rather than left stale, preventing false positives. Default: `0` (always embed)                                                              | Description SimString &#96;json:"description" dgraph:"embedding,threshold=20"&#96;     |
 
 ### Relationships
 
@@ -514,6 +518,123 @@ powerful feature in Dgraph. You can also access other advanced capabilities like
 with language-specific analyzers, geolocation queries, and more. The ability to access the raw
 Dgraph client gives you the full power of Dgraph's query language while still benefiting from
 modusGraph's simplified client interface and schema management.
+
+## Automatic Similarity Search (`SimString`)
+
+`SimString` is a string type that transparently manages vector embeddings and HNSW-indexed shadow
+predicates. When a struct field of this type is tagged with `dgraph:"embedding"`, modusGraph
+automatically calls the configured `EmbeddingProvider` on every insert, upsert, and update, storing
+the resulting vector in a `<fieldname>__vec` shadow predicate. This eliminates the need to manually
+maintain `VectorFloat32` fields or call embedding APIs.
+
+### Setup
+
+Configure an embedding provider when creating the client:
+
+```go
+import mg "github.com/matthewmcneely/modusgraph"
+
+// OpenAICompatibleProvider works with OpenAI, Ollama, and any OpenAI-compatible endpoint.
+provider := mg.NewOpenAICompatibleProvider(mg.OpenAICompatibleConfig{
+    BaseURL: "http://localhost:11434", // Ollama; use "https://api.openai.com" for OpenAI
+    Model:   "bge-m3:latest",
+    Dims:    1024,
+    // APIKey: os.Getenv("OPENAI_API_KEY"), // required for OpenAI
+})
+
+client, err := mg.NewClient(uri,
+    mg.WithAutoSchema(true),
+    mg.WithEmbeddingProvider(provider),
+)
+```
+
+### Defining a struct with `SimString`
+
+```go
+type Product struct {
+    Name        string       `json:"name,omitempty"        dgraph:"index=term"`
+    // index=term — also maintain a standard term index on the text predicate
+    // embedding  — auto-embed on every write
+    // threshold=20 — skip embedding (and delete stale vector) for very short strings
+    Description mg.SimString `json:"description,omitempty" dgraph:"index=term,embedding,threshold=20"`
+
+    UID   string   `json:"uid,omitempty"`
+    DType []string `json:"dgraph.type,omitempty"`
+}
+```
+
+When `AutoSchema` is enabled, `UpdateSchema` automatically registers the shadow predicate:
+
+```
+description__vec: float32vector @index(hnsw(exponent: "4", metric: "cosine")) .
+```
+
+### Inserting and updating
+
+No changes to the regular insert/update API — the embedding happens automatically:
+
+```go
+ctx := context.Background()
+
+product := &Product{
+    Name:        "Trail Runner X",
+    Description: "Lightweight trail running shoe with aggressive grip for mountain terrain",
+}
+err := client.Insert(ctx, product)
+// product.UID is now set; description__vec has been written automatically.
+
+// Update: the shadow vector is re-embedded along with the text change.
+product.Description = "Waterproof trail shoe with rock plate for muddy mountain terrain"
+err = client.Update(ctx, product)
+```
+
+### Querying by similarity
+
+Use `SimilarToText` to embed a query string and find the nearest neighbours in a single call:
+
+```go
+var result Product
+err := mg.SimilarToText(client, ctx, &result, "description", "running shoes for trails", 1)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println("Best match:", result.Name)
+```
+
+For queries where you already have a pre-computed vector, use `SimilarTo` with an explicit
+`*dg.TxnContext`:
+
+```go
+dgoClient, cleanup, err := client.DgraphClient()
+defer cleanup()
+
+tx := dg.NewReadOnlyTxn(dgoClient)
+
+var result Product
+err = mg.SimilarTo(tx, &result, "description", myVec, 5).Scan()
+```
+
+### `embedding` tag options
+
+| Option      | Default  | Description                                                                                |
+| ----------- | -------- | ------------------------------------------------------------------------------------------ |
+| `metric`    | `cosine` | HNSW distance metric: `cosine`, `euclidean`, or `dotproduct`                               |
+| `exponent`  | `4`      | HNSW index size exponent                                                                   |
+| `threshold` | `0`      | Minimum rune count to embed. Below this, the shadow vector is **deleted** (not left stale) |
+
+You can combine `embedding` with any standard string index, e.g. `dgraph:"embedding,index=term"` to
+enable both term search and similarity search on the same predicate.
+
+### Implementing a custom provider
+
+Any type that satisfies `EmbeddingProvider` can be used:
+
+```go
+type EmbeddingProvider interface {
+    Embed(ctx context.Context, text string) ([]float32, error)
+    Dims() int
+}
+```
 
 ## Schema Management
 
