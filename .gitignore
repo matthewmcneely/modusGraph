@@ -19,3 +19,20 @@ go.work.sum
 .env
 
 cpu_profile.prof
+
+# IDE config
+.idea/
+.vscode/
+
+# Tool config directories
+.osgrep
+.opencode
+.claude
+
+# Benchmark result files
+load_test/*.json
+
+# Built binaries
+query
+modusgraphgen
+modusgraph-gen

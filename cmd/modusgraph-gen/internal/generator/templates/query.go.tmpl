@@ -1,0 +1,99 @@
+package {{.PackageName}}
+
+import (
+	"context"
+
+	"github.com/matthewmcneely/modusgraph"
+)
+
+// {{.Entity.Name}}Query is a typed query builder for {{.Entity.Name}} entities.
+type {{.Entity.Name}}Query struct {
+	conn    modusgraph.Client
+	ctx     context.Context
+	filter  string
+	first   int
+	offset  int
+	orderBy string
+	orderDesc bool
+}
+
+// Query begins a new query for {{.Entity.Name}} entities.
+func (c *{{.Entity.Name}}Client) Query(ctx context.Context) *{{.Entity.Name}}Query {
+	return &{{.Entity.Name}}Query{conn: c.conn, ctx: ctx, first: defaultPageSize}
+}
+
+// Filter adds a DQL filter expression to the query.
+func (q *{{.Entity.Name}}Query) Filter(f string) *{{.Entity.Name}}Query {
+	q.filter = f
+	return q
+}
+
+// OrderAsc sets ascending order on the given field.
+func (q *{{.Entity.Name}}Query) OrderAsc(field string) *{{.Entity.Name}}Query {
+	q.orderBy = field
+	q.orderDesc = false
+	return q
+}
+
+// OrderDesc sets descending order on the given field.
+func (q *{{.Entity.Name}}Query) OrderDesc(field string) *{{.Entity.Name}}Query {
+	q.orderBy = field
+	q.orderDesc = true
+	return q
+}
+
+// First limits the result to n nodes.
+func (q *{{.Entity.Name}}Query) First(n int) *{{.Entity.Name}}Query {
+	q.first = n
+	return q
+}
+
+// Offset skips the first n nodes.
+func (q *{{.Entity.Name}}Query) Offset(n int) *{{.Entity.Name}}Query {
+	q.offset = n
+	return q
+}
+
+// Exec executes the query and populates dst with the results.
+func (q *{{.Entity.Name}}Query) Exec(dst *[]{{.Entity.Name}}) error {
+	dq := q.conn.Query(q.ctx, {{.Entity.Name}}{})
+	if q.filter != "" {
+		dq = dq.Filter(q.filter)
+	}
+	if q.first > 0 {
+		dq = dq.First(q.first)
+	}
+	if q.offset > 0 {
+		dq = dq.Offset(q.offset)
+	}
+	if q.orderBy != "" {
+		if q.orderDesc {
+			dq = dq.OrderDesc(q.orderBy)
+		} else {
+			dq = dq.OrderAsc(q.orderBy)
+		}
+	}
+	return dq.Nodes(dst)
+}
+
+// ExecAndCount executes the query and returns both the results and total count.
+func (q *{{.Entity.Name}}Query) ExecAndCount(dst *[]{{.Entity.Name}}) (int, error) {
+	dq := q.conn.Query(q.ctx, {{.Entity.Name}}{})
+	if q.filter != "" {
+		dq = dq.Filter(q.filter)
+	}
+	if q.first > 0 {
+		dq = dq.First(q.first)
+	}
+	if q.offset > 0 {
+		dq = dq.Offset(q.offset)
+	}
+	if q.orderBy != "" {
+		if q.orderDesc {
+			dq = dq.OrderDesc(q.orderBy)
+		} else {
+			dq = dq.OrderAsc(q.orderBy)
+		}
+	}
+	return dq.NodesAndCount(dst)
+}

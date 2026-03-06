@@ -1,0 +1,204 @@
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/alecthomas/kong"
+	"github.com/matthewmcneely/modusgraph"
+	"{{.ModulePath}}/{{.Name}}"
+)
+
+// CLI is the root command parsed by Kong.
+var CLI struct {
+	Addr string `help:"Dgraph gRPC address." default:"dgraph://localhost:9080" env:"DGRAPH_ADDR"`
+	Dir  string `help:"Local database directory (embedded mode, mutually exclusive with --addr)." env:"DGRAPH_DIR"`
+
+	Query QueryCmd `cmd:"" help:"Execute a raw DQL query."`
+{{- range .Entities}}
+	{{.Name}} {{.Name}}Cmd `cmd:"" help:"Manage {{.Name}} entities."`
+{{- end}}
+}
+
+// QueryCmd executes a raw DQL query against the database.
+type QueryCmd struct {
+	Query   string        `arg:"" optional:"" help:"DQL query string (reads stdin if omitted)."`
+	Pretty  bool          `help:"Pretty-print JSON output." default:"true" negatable:""`
+	Timeout time.Duration `help:"Query timeout." default:"30s"`
+}
+
+func (c *QueryCmd) Run(client *{{.Name}}.Client) error {
+	query := c.Query
+	if query == "" {
+		// Read from stdin.
+		reader := bufio.NewReader(os.Stdin)
+		var sb strings.Builder
+		for {
+			line, err := reader.ReadString('\n')
+			sb.WriteString(line)
+			if err != nil {
+				if err != io.EOF {
+					return fmt.Errorf("reading stdin: %w", err)
+				}
+				break
+			}
+		}
+		query = strings.TrimSpace(sb.String())
+	}
+
+	if query == "" {
+		return fmt.Errorf("empty query: provide a DQL query as an argument or via stdin")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
+	defer cancel()
+
+	resp, err := client.QueryRaw(ctx, query, nil)
+	if err != nil {
+		return err
+	}
+
+	if c.Pretty {
+		var data any
+		if err := json.Unmarshal(resp, &data); err != nil {
+			return fmt.Errorf("parsing response: %w", err)
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(data)
+	}
+	_, err = fmt.Println(string(resp))
+	return err
+}
+
+{{range .Entities}}
+// {{.Name}}Cmd groups subcommands for {{.Name}}.
+type {{.Name}}Cmd struct {
+	Get    {{.Name}}GetCmd    `cmd:"" help:"Get a {{.Name}} by UID."`
+	List   {{.Name}}ListCmd   `cmd:"" help:"List {{.Name}} entities."`
+	Add    {{.Name}}AddCmd    `cmd:"" help:"Add a new {{.Name}}."`
+	Delete {{.Name}}DeleteCmd `cmd:"" help:"Delete a {{.Name}} by UID."`
+{{- if .Searchable}}
+	Search {{.Name}}SearchCmd `cmd:"" help:"Search {{.Name}} by {{.SearchField}}."`
+{{- end}}
+}
+
+type {{.Name}}GetCmd struct {
+	UID string `arg:"" required:"" help:"The UID of the {{.Name}}."`
+}
+
+func (c *{{.Name}}GetCmd) Run(client *{{$.Name}}.Client) error {
+	result, err := client.{{.Name}}.Get(context.Background(), c.UID)
+	if err != nil {
+		return err
+	}
+	return printJSON(result)
+}
+
+type {{.Name}}ListCmd struct {
+	First  int `help:"Maximum results to return." default:"10"`
+	Offset int `help:"Number of results to skip." default:"0"`
+}
+
+func (c *{{.Name}}ListCmd) Run(client *{{$.Name}}.Client) error {
+	results, err := client.{{.Name}}.List(context.Background(),
+		{{$.Name}}.First(c.First), {{$.Name}}.Offset(c.Offset))
+	if err != nil {
+		return err
+	}
+	return printJSON(results)
+}
+
+type {{.Name}}AddCmd struct {
+{{- range scalarFields .Fields}}{{if and (not .IsUID) (not .IsDType)}}
+	{{.Name}} string `help:"Set {{.Name}}." name:"{{toLower .Name}}"`
+{{- end}}{{end}}
+}
+
+func (c *{{.Name}}AddCmd) Run(client *{{$.Name}}.Client) error {
+	v := &{{$.Name}}.{{.Name}}{
+{{- range scalarFields .Fields}}{{if and (not .IsUID) (not .IsDType) (eq .GoType "string")}}
+		{{.Name}}: c.{{.Name}},
+{{- end}}{{end}}
+	}
+	if err := client.{{.Name}}.Add(context.Background(), v); err != nil {
+		return err
+	}
+	return printJSON(v)
+}
+
+type {{.Name}}DeleteCmd struct {
+	UID string `arg:"" required:"" help:"The UID to delete."`
+}
+
+func (c *{{.Name}}DeleteCmd) Run(client *{{$.Name}}.Client) error {
+	return client.{{.Name}}.Delete(context.Background(), c.UID)
+}
+{{if .Searchable}}
+type {{.Name}}SearchCmd struct {
+	Term   string `arg:"" required:"" help:"The search term."`
+	First  int    `help:"Maximum results to return." default:"10"`
+	Offset int    `help:"Number of results to skip." default:"0"`
+}
+
+func (c *{{.Name}}SearchCmd) Run(client *{{$.Name}}.Client) error {
+	results, err := client.{{.Name}}.Search(context.Background(), c.Term,
+		{{$.Name}}.First(c.First), {{$.Name}}.Offset(c.Offset))
+	if err != nil {
+		return err
+	}
+	return printJSON(results)
+}
+{{end}}
+{{end}}
+
+func printJSON(v any) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
+}
+
+func connectString() (string, error) {
+	if CLI.Dir != "" {
+		if CLI.Addr != "dgraph://localhost:9080" {
+			return "", fmt.Errorf("--addr and --dir are mutually exclusive")
+		}
+		return fmt.Sprintf("file://%s", filepath.Clean(CLI.Dir)), nil
+	}
+	return CLI.Addr, nil
+}
+
+func main() {
+	ctx := kong.Parse(&CLI,
+		kong.Name("{{.CLIName}}"),
+		kong.Description("CLI for the {{.CLIName}} data model."),
+	)
+
+	connStr, err := connectString()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
+	client, err := {{.Name}}.New(connStr,
+		modusgraph.WithAutoSchema(true),
+{{- if .WithValidator}}
+		modusgraph.WithValidator(modusgraph.NewValidator()),
+{{- end}}
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "connect: %v\n", err)
+		os.Exit(1)
+	}
+	defer client.Close()
+
+	err = ctx.Run(client)
+	ctx.FatalIfErrorf(err)
+}
