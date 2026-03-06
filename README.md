@@ -565,7 +565,7 @@ type Product struct {
 
 When `AutoSchema` is enabled, `UpdateSchema` automatically registers the shadow predicate:
 
-```
+```go
 description__vec: float32vector @index(hnsw(exponent: "4", metric: "cosine")) .
 ```
 
