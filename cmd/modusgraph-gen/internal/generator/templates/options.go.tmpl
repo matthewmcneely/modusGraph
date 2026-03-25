@@ -19,12 +19,21 @@ import (
 type {{$name}}Option func(*{{$name}})
 
 {{range $fields}}
+{{- if .IsPrivate}}
+// With{{$name}}{{.Name | toCamelCase}} sets the {{.Name}} field on a {{$name}}.
+func With{{$name}}{{.Name | toCamelCase}}(v {{.GoType}}) {{$name}}Option {
+	return func(e *{{$name}}) {
+		e.Set{{.Name | toCamelCase}}(v)
+	}
+}
+{{- else}}
 // With{{$name}}{{.Name}} sets the {{.Name}} field on a {{$name}}.
 func With{{$name}}{{.Name}}(v {{.GoType}}) {{$name}}Option {
 	return func(e *{{$name}}) {
 		e.{{.Name}} = v
 	}
 }
+{{- end}}
 {{end}}
 // Apply{{$name}}Options applies the given options to a {{$name}}.
 func Apply{{$name}}Options(e *{{$name}}, opts ...{{$name}}Option) {

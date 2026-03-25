@@ -118,16 +118,23 @@ func (c *{{.Name}}ListCmd) Run(client *{{$.Name}}.Client) error {
 
 type {{.Name}}AddCmd struct {
 {{- range scalarFields .Fields}}{{if and (not .IsUID) (not .IsDType)}}
+	{{- if .IsPrivate}}
+	{{.Name | toCamelCase}} string `help:"Set {{.Name}}." name:"{{toLower .Name}}"`
+	{{- else}}
 	{{.Name}} string `help:"Set {{.Name}}." name:"{{toLower .Name}}"`
+	{{- end}}
 {{- end}}{{end}}
 }
 
 func (c *{{.Name}}AddCmd) Run(client *{{$.Name}}.Client) error {
 	v := &{{$.Name}}.{{.Name}}{
-{{- range scalarFields .Fields}}{{if and (not .IsUID) (not .IsDType) (eq .GoType "string")}}
+{{- range scalarFields .Fields}}{{if and (not .IsUID) (not .IsDType) (eq .GoType "string") (not .IsPrivate)}}
 		{{.Name}}: c.{{.Name}},
 {{- end}}{{end}}
 	}
+{{- range scalarFields .Fields}}{{if and (not .IsUID) (not .IsDType) (eq .GoType "string") .IsPrivate}}
+	v.Set{{.Name | toCamelCase}}(c.{{.Name | toCamelCase}})
+{{- end}}{{end}}
 	if err := client.{{.Name}}.Add(context.Background(), v); err != nil {
 		return err
 	}
