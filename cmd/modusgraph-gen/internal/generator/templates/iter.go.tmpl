@@ -1,9 +1,11 @@
 package {{.Name}}
+{{- if gt (len .Entities) 0}}
 
 import (
 	"context"
 	"iter"
 )
+{{- end}}
 {{range .Entities}}{{if .Searchable}}
 // SearchIter returns an iterator over {{.Name}} entities matching term.
 // It automatically pages through results using Go 1.23+ range-over-func.
