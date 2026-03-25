@@ -33,6 +33,6 @@ cpu_profile.prof
 load_test/*.json
 
 # Built binaries
-query
-modusgraphgen
-modusgraph-gen
+/query
+/modusgraphgen
+/modusgraph-gen

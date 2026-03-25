@@ -16,18 +16,18 @@ type Package struct {
 // Entity represents a single Dgraph type derived from a Go struct.
 type Entity struct {
 	Name        string  // Go struct name, e.g. "Film"
-	Fields      []Field // All exported fields from the struct
+	Fields      []Field // All mapped fields from the struct (exported and private, excluding skipped)
 	Searchable  bool    // True if the entity has a string field with index=fulltext
 	SearchField string  // Name of the field with fulltext index (empty if not searchable)
 }
 
-// Field represents a single exported field within an entity struct.
+// Field represents a single mapped field within an entity struct.
 type Field struct {
-	Name       string   // Go field name, e.g. "InitialReleaseDate"
-	GoType     string   // Go type as string, e.g. "time.Time", "string", "[]Genre"
+	Name       string   // Go field name, e.g. "InitialReleaseDate" or "name"
+	GoType     string   // Go type as string, e.g. "time.Time", "string", "[]Genre", "*Director"
 	JSONTag    string   // Value from the json struct tag, e.g. "initialReleaseDate"
 	Predicate  string   // Resolved Dgraph predicate name
-	IsEdge     bool     // True if the field type is a slice of another entity
+	IsEdge     bool     // True if the field type is a slice of another entity or *Entity
 	EdgeEntity string   // Target entity name for edge fields, e.g. "Genre"
 	IsReverse  bool     // True if dgraph tag contains "reverse" or predicate starts with "~"
 	HasCount   bool     // True if dgraph tag contains "count"
@@ -37,4 +37,8 @@ type Field struct {
 	IsDType    bool     // True if the field represents the DType (dgraph.type)
 	OmitEmpty  bool     // True if json tag contains ",omitempty"
 	Upsert     bool     // True if dgraph tag contains "upsert"
+
+	IsPrivate      bool // True if the Go field name is lowercase (unexported)
+	IsSingularEdge bool // True if edge field has validate:"max=1" or validate:"len=1", or is *Entity type
+	IsSkipped      bool // True if field has no json tag or dgraph:"-"
 }
