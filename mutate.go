@@ -241,3 +241,81 @@ func getPredicatesByTag(obj any, tagName string, firstOnly bool) map[string]any 
 	}
 	return result
 }
+
+// toDgraphMap checks if obj (or its elements, if a slice) implements DgraphMapper
+// and returns the mapped representation. Returns (mapped, true) if the object
+// should use the map-based mutation path, or (nil, false) for the standard path.
+func toDgraphMap(obj any) (any, bool) {
+	v := reflect.ValueOf(obj)
+
+	// Handle pointer to slice: []*Film
+	if v.Kind() == reflect.Ptr && v.Elem().Kind() == reflect.Slice {
+		v = v.Elem()
+	}
+
+	// Handle slice of DgraphMapper objects.
+	if v.Kind() == reflect.Slice && v.Len() > 0 {
+		first := v.Index(0)
+		if first.Kind() == reflect.Ptr {
+			first = first.Elem()
+		}
+		if first.Kind() == reflect.Interface {
+			first = first.Elem()
+		}
+		if _, ok := first.Interface().(DgraphMapper); ok {
+			maps := make([]map[string]interface{}, v.Len())
+			for i := 0; i < v.Len(); i++ {
+				elem := v.Index(i)
+				if elem.Kind() == reflect.Ptr {
+					elem = elem.Elem()
+				}
+				if m, ok := elem.Interface().(DgraphMapper); ok {
+					maps[i] = m.DgraphMap()
+				}
+			}
+			return maps, true
+		}
+	}
+
+	// Handle single struct pointer.
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if m, ok := v.Interface().(DgraphMapper); ok {
+		return m.DgraphMap(), true
+	}
+
+	return nil, false
+}
+
+// mutateWithMap performs a Dgraph mutation using a map representation and writes
+// the generated UID back to the original struct's exported UID field.
+func mutateWithMap(tx *dg.TxnContext, original any, mapped any) ([]string, error) {
+	uids, err := tx.MutateBasic(mapped)
+	if err != nil {
+		return nil, err
+	}
+	if len(uids) > 0 {
+		writeUIDBack(original, uids)
+	}
+	return uids, nil
+}
+
+// writeUIDBack sets the UID field on the original struct after a map-based mutation.
+// Since UID is always exported, reflect can set it directly.
+func writeUIDBack(obj any, uids []string) {
+	if len(uids) == 0 {
+		return
+	}
+	v := reflect.ValueOf(obj)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return
+	}
+	uidField := v.FieldByName("UID")
+	if uidField.IsValid() && uidField.CanSet() {
+		uidField.SetString(uids[0])
+	}
+}

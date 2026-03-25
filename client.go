@@ -21,6 +21,14 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+// DgraphMapper is implemented by generated entities with private fields.
+// It provides a map-based serialization path for Dgraph mutations, allowing
+// private fields to be persisted without requiring unsafe reflection or
+// modifications to the dgman library.
+type DgraphMapper interface {
+	DgraphMap() map[string]interface{}
+}
+
 // Client provides an interface for ModusGraph operations
 type Client interface {
 	// Insert adds a new object or slice of objects to the database.
@@ -363,6 +371,9 @@ func (c client) Insert(ctx context.Context, obj any) error {
 	}
 
 	return c.process(ctx, obj, "Insert", func(tx *dg.TxnContext, obj any) ([]string, error) {
+		if mapped, ok := toDgraphMap(obj); ok {
+			return mutateWithMap(tx, obj, mapped)
+		}
 		return tx.MutateBasic(obj)
 	})
 }
@@ -380,6 +391,9 @@ func (c client) InsertRaw(ctx context.Context, obj any) error {
 	}
 
 	return c.process(ctx, obj, "Insert", func(tx *dg.TxnContext, obj any) ([]string, error) {
+		if mapped, ok := toDgraphMap(obj); ok {
+			return mutateWithMap(tx, obj, mapped)
+		}
 		return tx.MutateBasic(obj)
 	})
 }
@@ -408,6 +422,9 @@ func (c client) Update(ctx context.Context, obj any) error {
 	}
 
 	return c.process(ctx, obj, "Update", func(tx *dg.TxnContext, obj any) ([]string, error) {
+		if mapped, ok := toDgraphMap(obj); ok {
+			return mutateWithMap(tx, obj, mapped)
+		}
 		return tx.MutateBasic(obj)
 	})
 }
