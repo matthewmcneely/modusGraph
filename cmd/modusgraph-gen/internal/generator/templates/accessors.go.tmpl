@@ -7,7 +7,7 @@ package {{.PackageName}}
 {{- $sliceFields := privateSliceFields .Entity.Fields}}
 {{- $needsSlices := or (gt (len $multiEdges) 0) (gt (len $sliceFields) 0)}}
 {{- $needsTime := false}}
-{{- range $privateScalars}}{{if hasPrefix .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
+{{- range $privateScalars}}{{if contains .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
 {{- $extImports := externalImports $privateScalars .Imports}}
 {{if or $needsSlices $needsTime (gt (len $extImports) 0)}}
 import (

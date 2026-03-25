@@ -3,7 +3,7 @@ package {{.PackageName}}
 {{$name := .Entity.Name}}
 {{$fields := scalarFields .Entity.Fields}}
 {{- $needsTime := false}}
-{{- range $fields}}{{if hasPrefix .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
+{{- range $fields}}{{if contains .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
 {{- $extImports := externalImports $fields .Imports}}
 {{if or $needsTime (gt (len $extImports) 0)}}
 import (

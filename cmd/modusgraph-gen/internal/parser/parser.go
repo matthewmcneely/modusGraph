@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"sort"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -48,8 +49,16 @@ func Parse(pkgDir string) (*model.Package, error) {
 	structNames := collectStructNames(pkgAST)
 
 	// Second pass: parse each struct into an Entity.
+	// Sort file names for deterministic entity ordering across runs.
+	fileNames := make([]string, 0, len(pkgAST.Files))
+	for name := range pkgAST.Files {
+		fileNames = append(fileNames, name)
+	}
+	sort.Strings(fileNames)
+
 	var entities []model.Entity
-	for _, file := range pkgAST.Files {
+	for _, fname := range fileNames {
+		file := pkgAST.Files[fname]
 		for _, decl := range file.Decls {
 			genDecl, ok := decl.(*ast.GenDecl)
 			if !ok || genDecl.Tok != token.TYPE {
