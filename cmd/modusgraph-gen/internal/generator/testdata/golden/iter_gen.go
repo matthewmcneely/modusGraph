@@ -482,3 +482,31 @@ func (c *RatingClient) ListIter(ctx context.Context) iter.Seq2[Rating, error] {
 		}
 	}
 }
+
+// ListIter returns an iterator over all Studio entities.
+// It automatically pages through results using Go 1.23+ range-over-func.
+func (c *StudioClient) ListIter(ctx context.Context) iter.Seq2[Studio, error] {
+	return func(yield func(Studio, error) bool) {
+		offset := 0
+		for {
+			results, err := c.List(ctx, First(defaultPageSize), Offset(offset))
+			if err != nil {
+				var zero Studio
+				yield(zero, err)
+				return
+			}
+			if len(results) == 0 {
+				return
+			}
+			for _, r := range results {
+				if !yield(r, nil) {
+					return
+				}
+			}
+			if len(results) < defaultPageSize {
+				return
+			}
+			offset += len(results)
+		}
+	}
+}
