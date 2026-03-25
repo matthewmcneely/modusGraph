@@ -128,14 +128,12 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 			continue // embedded field, skip
 		}
 		fieldName := f.Names[0].Name
-		if !ast.IsExported(fieldName) {
-			continue
-		}
 
 		goType := typeString(f.Type)
 		field := model.Field{
-			Name:   fieldName,
-			GoType: goType,
+			Name:      fieldName,
+			GoType:    goType,
+			IsPrivate: !ast.IsExported(fieldName),
 		}
 
 		// Parse struct tags.
@@ -158,6 +156,12 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 			if dgraphTag != "" {
 				parseDgraphTag(dgraphTag, &field)
 			}
+
+			// Parse validate tag for cardinality hints.
+			validateTag := tag.Get("validate")
+			if validateTag != "" {
+				parseValidateTag(validateTag, &field)
+			}
 		}
 
 		// Detect UID and DType fields.
@@ -168,6 +172,13 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 		if fieldName == "DType" && goType == "[]string" {
 			field.IsDType = true
 			hasDType = true
+		}
+
+		// Skip fields that are opted out or have no json tag (unless UID or DType).
+		if !field.IsUID && !field.IsDType {
+			if field.IsSkipped || field.JSONTag == "" {
+				continue
+			}
 		}
 
 		// Resolve predicate: use explicit predicate if set, else fall back to json tag.
@@ -181,6 +192,16 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 			if structNames[elemType] {
 				field.IsEdge = true
 				field.EdgeEntity = elemType
+			}
+		}
+
+		// Detect singular edges: field type is *SomeEntity where SomeEntity is a known struct.
+		if strings.HasPrefix(goType, "*") {
+			elemType := goType[1:]
+			if structNames[elemType] {
+				field.IsEdge = true
+				field.EdgeEntity = elemType
+				field.IsSingularEdge = true
 			}
 		}
 
@@ -303,6 +324,12 @@ func readModulePath(pkgDir string) string {
 //     list, "type=" sets the type hint, "reverse"/"count"/"upsert" are boolean flags.
 //  5. Bare tokens after "index=" that don't contain "=" are additional index values.
 func parseDgraphTag(tag string, field *model.Field) {
+	// Handle explicit opt-out.
+	if tag == "-" {
+		field.IsSkipped = true
+		return
+	}
+
 	// Split on spaces for independent directives.
 	directives := strings.Fields(tag)
 
@@ -349,6 +376,17 @@ func parseDgraphTag(tag string, field *model.Field) {
 					field.Indexes = append(field.Indexes, tok)
 				}
 			}
+		}
+	}
+}
+
+// parseValidateTag extracts cardinality hints from a validate struct tag.
+// It detects "max=1" and "len=1" rules to mark edge fields as singular.
+func parseValidateTag(tag string, field *model.Field) {
+	for _, rule := range strings.Split(tag, ",") {
+		rule = strings.TrimSpace(rule)
+		if rule == "max=1" || rule == "len=1" {
+			field.IsSingularEdge = true
 		}
 	}
 }
