@@ -70,10 +70,20 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"add":          func(a, b int) int { return a + b },
 
 		// Field helpers for templates.
-		"scalarFields":    scalarFields,
-		"edgeFields":      edgeFields,
-		"searchPredicate": searchPredicate,
-		"externalImports": externalImports,
+		"scalarFields":             scalarFields,
+		"edgeFields":               edgeFields,
+		"searchPredicate":          searchPredicate,
+		"externalImports":          externalImports,
+		"nonSliceScalarFields":      nonSliceScalarFields,
+		"hasPrivateFields":          hasPrivateFields,
+		"privateScalarFields":       privateScalarFields,
+		"privateSingularEdgeFields": privateSingularEdgeFields,
+		"privateMultiEdgeFields":    privateMultiEdgeFields,
+		"privateSliceFields":        privateSliceFields,
+		"allSingularEdgeFields":     allSingularEdgeFields,
+		"allMultiEdgeFields":        allMultiEdgeFields,
+		"allSliceFields":            allSliceFields,
+		"elemType":                  elemType,
 	}
 
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.tmpl")
@@ -126,6 +136,20 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		// 6. query.go.tmpl → <snake>_query_gen.go
 		if err := executeAndWrite(tmpl, "query.go.tmpl", data, filepath.Join(outputDir, snake+"_query_gen.go")); err != nil {
 			return err
+		}
+
+		// 7. accessors.go.tmpl → <snake>_accessors_gen.go (only if entity has private fields)
+		if hasPrivateFields(entity.Fields) {
+			if err := executeAndWrite(tmpl, "accessors.go.tmpl", data, filepath.Join(outputDir, snake+"_accessors_gen.go")); err != nil {
+				return err
+			}
+		}
+
+		// 8. marshal.go.tmpl → <snake>_marshal_gen.go (only if entity has private fields)
+		if hasPrivateFields(entity.Fields) {
+			if err := executeAndWrite(tmpl, "marshal.go.tmpl", data, filepath.Join(outputDir, snake+"_marshal_gen.go")); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -221,6 +245,19 @@ func scalarFields(fields []model.Field) []model.Field {
 	return result
 }
 
+// nonSliceScalarFields returns scalar fields that are not slices.
+// Used in marshal templates to avoid double-emitting slice fields.
+func nonSliceScalarFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsUID || f.IsDType || f.IsEdge || strings.HasPrefix(f.GoType, "[]") {
+			continue
+		}
+		result = append(result, f)
+	}
+	return result
+}
+
 // edgeFields returns only edge fields.
 func edgeFields(fields []model.Field) []model.Field {
 	var result []model.Field
@@ -230,6 +267,99 @@ func edgeFields(fields []model.Field) []model.Field {
 		}
 	}
 	return result
+}
+
+// hasPrivateFields returns true if any field is private and not skipped.
+func hasPrivateFields(fields []model.Field) bool {
+	for _, f := range fields {
+		if f.IsPrivate && !f.IsSkipped && !f.IsUID && !f.IsDType {
+			return true
+		}
+	}
+	return false
+}
+
+// privateScalarFields returns private non-edge, non-UID, non-DType fields
+// that are not slices (simple scalars like string, int, time.Time).
+func privateScalarFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsPrivate && !f.IsUID && !f.IsDType && !f.IsEdge && !strings.HasPrefix(f.GoType, "[]") {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// privateSingularEdgeFields returns private edge fields where IsSingularEdge is true.
+func privateSingularEdgeFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsPrivate && f.IsEdge && f.IsSingularEdge {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// privateMultiEdgeFields returns private edge fields where IsSingularEdge is false.
+func privateMultiEdgeFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsPrivate && f.IsEdge && !f.IsSingularEdge {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// privateSliceFields returns private non-edge slice fields (e.g., []string, []float64).
+func privateSliceFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsPrivate && !f.IsEdge && strings.HasPrefix(f.GoType, "[]") && !f.IsUID && !f.IsDType {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// allSingularEdgeFields returns all edge fields (public and private) where IsSingularEdge is true.
+func allSingularEdgeFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsEdge && f.IsSingularEdge {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// allMultiEdgeFields returns all edge fields (public and private) where IsSingularEdge is false.
+func allMultiEdgeFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsEdge && !f.IsSingularEdge {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// allSliceFields returns all non-edge slice fields (public and private).
+func allSliceFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if !f.IsEdge && strings.HasPrefix(f.GoType, "[]") && !f.IsUID && !f.IsDType {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// elemType strips the leading "[]" from a Go type string, returning the element type.
+func elemType(goType string) string {
+	return strings.TrimPrefix(goType, "[]")
 }
 
 // externalImports returns a sorted list of import paths needed by the given
