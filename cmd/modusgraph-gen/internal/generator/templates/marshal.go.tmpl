@@ -1,0 +1,118 @@
+package {{.PackageName}}
+{{$entity := .Entity}}
+{{$name := .Entity.Name}}
+{{- $scalars := nonSliceScalarFields .Entity.Fields}}
+{{- $singularEdges := allSingularEdgeFields .Entity.Fields}}
+{{- $multiEdges := allMultiEdgeFields .Entity.Fields}}
+{{- $sliceFields := allSliceFields .Entity.Fields}}
+
+import (
+	"encoding/json"
+)
+
+// DgraphMap converts the {{$name}} to a map for Dgraph mutation.
+// This enables persistence of private fields without requiring unsafe reflection.
+func (e *{{$name}}) DgraphMap() map[string]interface{} {
+	m := make(map[string]interface{})
+	if e.UID != "" {
+		m["uid"] = e.UID
+	}
+	if len(e.DType) > 0 {
+		m["dgraph.type"] = e.DType
+	}
+{{- range $scalars}}{{if not .IsUID}}{{if not .IsDType}}
+	{{- if eq .GoType "string"}}
+	if e.{{.Name}} != "" {
+		m["{{.JSONTag}}"] = e.{{.Name}}
+	}
+	{{- else if eq .GoType "int"}}
+	if e.{{.Name}} != 0 {
+		m["{{.JSONTag}}"] = e.{{.Name}}
+	}
+	{{- else if eq .GoType "float64"}}
+	if e.{{.Name}} != 0 {
+		m["{{.JSONTag}}"] = e.{{.Name}}
+	}
+	{{- else if eq .GoType "bool"}}
+	if e.{{.Name}} {
+		m["{{.JSONTag}}"] = e.{{.Name}}
+	}
+	{{- else if hasPrefix .GoType "time."}}
+	if !e.{{.Name}}.IsZero() {
+		m["{{.JSONTag}}"] = e.{{.Name}}
+	}
+	{{- else}}
+	m["{{.JSONTag}}"] = e.{{.Name}}
+	{{- end}}
+{{- end}}{{end}}{{end}}
+{{- range $singularEdges}}
+	{{- if hasPrefix .GoType "*"}}
+	if e.{{.Name}} != nil {
+		m["{{.JSONTag}}"] = e.{{.Name}}.DgraphMap()
+	}
+	{{- else}}
+	if len(e.{{.Name}}) > 0 {
+		m["{{.JSONTag}}"] = e.{{.Name}}[0].DgraphMap()
+	}
+	{{- end}}
+{{- end}}
+{{- range $multiEdges}}
+	if len(e.{{.Name}}) > 0 {
+		s := make([]map[string]interface{}, len(e.{{.Name}}))
+		for i := range e.{{.Name}} {
+			s[i] = e.{{.Name}}[i].DgraphMap()
+		}
+		m["{{.JSONTag}}"] = s
+	}
+{{- end}}
+{{- range $sliceFields}}
+	if len(e.{{.Name}}) > 0 {
+		m["{{.JSONTag}}"] = e.{{.Name}}
+	}
+{{- end}}
+	return m
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for {{$name}},
+// allowing private fields to be populated from Dgraph query responses.
+func (e *{{$name}}) UnmarshalJSON(data []byte) error {
+	type alias struct {
+		UID   string   `json:"uid,omitempty"`
+		DType []string `json:"dgraph.type,omitempty"`
+{{- range $scalars}}{{if not .IsUID}}{{if not .IsDType}}
+		{{.Name | toCamelCase}} {{.GoType}} `json:"{{.JSONTag}},omitempty"`
+{{- end}}{{end}}{{end}}
+{{- range $singularEdges}}
+	{{- if hasPrefix .GoType "*"}}
+		{{.Name | toCamelCase}} *{{.EdgeEntity}} `json:"{{.JSONTag}},omitempty"`
+	{{- else}}
+		{{.Name | toCamelCase}} []{{.EdgeEntity}} `json:"{{.JSONTag}},omitempty"`
+	{{- end}}
+{{- end}}
+{{- range $multiEdges}}
+		{{.Name | toCamelCase}} []{{.EdgeEntity}} `json:"{{.JSONTag}},omitempty"`
+{{- end}}
+{{- range $sliceFields}}
+		{{.Name | toCamelCase}} {{.GoType}} `json:"{{.JSONTag}},omitempty"`
+{{- end}}
+	}
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	e.UID = a.UID
+	e.DType = a.DType
+{{- range $scalars}}{{if not .IsUID}}{{if not .IsDType}}
+	e.{{.Name}} = a.{{.Name | toCamelCase}}
+{{- end}}{{end}}{{end}}
+{{- range $singularEdges}}
+	e.{{.Name}} = a.{{.Name | toCamelCase}}
+{{- end}}
+{{- range $multiEdges}}
+	e.{{.Name}} = a.{{.Name | toCamelCase}}
+{{- end}}
+{{- range $sliceFields}}
+	e.{{.Name}} = a.{{.Name | toCamelCase}}
+{{- end}}
+	return nil
+}

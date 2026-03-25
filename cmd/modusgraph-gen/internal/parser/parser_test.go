@@ -39,6 +39,7 @@ func TestParseMoviesPackage(t *testing.T) {
 		expected := []string{
 			"Film", "Director", "Actor", "Performance",
 			"Genre", "Country", "Rating", "ContentRating", "Location",
+			"Studio",
 		}
 		for _, name := range expected {
 			if _, ok := entityMap[name]; !ok {
@@ -243,6 +244,103 @@ func TestParseMoviesPackage(t *testing.T) {
 		}
 	})
 
+	t.Run("StudioPrivateFields", func(t *testing.T) {
+		studio := entityMap["Studio"]
+		if studio == nil {
+			t.Fatal("Studio entity not found")
+		}
+
+		// Private scalar: name
+		name := findField(studio.Fields, "name")
+		if name == nil {
+			t.Fatal("Studio.name field not found")
+		}
+		if !name.IsPrivate {
+			t.Error("Studio.name should be private")
+		}
+		if name.GoType != "string" {
+			t.Errorf("Studio.name GoType = %q, want %q", name.GoType, "string")
+		}
+
+		// Private singular edge: founder (*Director)
+		founder := findField(studio.Fields, "founder")
+		if founder == nil {
+			t.Fatal("Studio.founder field not found")
+		}
+		if !founder.IsPrivate {
+			t.Error("Studio.founder should be private")
+		}
+		if !founder.IsEdge {
+			t.Error("Studio.founder should be an edge")
+		}
+		if founder.EdgeEntity != "Director" {
+			t.Errorf("Studio.founder EdgeEntity = %q, want %q", founder.EdgeEntity, "Director")
+		}
+		if !founder.IsSingularEdge {
+			t.Error("Studio.founder should be a singular edge (*Director)")
+		}
+
+		// Private singular edge via validate:"max=1": currentHead
+		currentHead := findField(studio.Fields, "currentHead")
+		if currentHead == nil {
+			t.Fatal("Studio.currentHead field not found")
+		}
+		if !currentHead.IsSingularEdge {
+			t.Error("Studio.currentHead should be a singular edge (validate:\"max=1\")")
+		}
+		if !currentHead.IsEdge {
+			t.Error("Studio.currentHead should be an edge")
+		}
+
+		// Private multi-edge: films
+		films := findField(studio.Fields, "films")
+		if films == nil {
+			t.Fatal("Studio.films field not found")
+		}
+		if !films.IsPrivate {
+			t.Error("Studio.films should be private")
+		}
+		if !films.IsEdge {
+			t.Error("Studio.films should be an edge")
+		}
+		if films.IsSingularEdge {
+			t.Error("Studio.films should NOT be a singular edge")
+		}
+
+		// Private primitive slice: tags
+		tags := findField(studio.Fields, "tags")
+		if tags == nil {
+			t.Fatal("Studio.tags field not found")
+		}
+		if !tags.IsPrivate {
+			t.Error("Studio.tags should be private")
+		}
+		if tags.IsEdge {
+			t.Error("Studio.tags should NOT be an edge (primitive slice)")
+		}
+
+		// Exported field: Founded
+		founded := findField(studio.Fields, "Founded")
+		if founded == nil {
+			t.Fatal("Studio.Founded field not found")
+		}
+		if founded.IsPrivate {
+			t.Error("Studio.Founded should NOT be private")
+		}
+
+		// Opted-out field: Internal (dgraph:"-") — should NOT be in fields
+		internal := findField(studio.Fields, "Internal")
+		if internal != nil {
+			t.Error("Studio.Internal should be skipped (dgraph:\"-\")")
+		}
+
+		// No json tag field: tempCache — should NOT be in fields
+		tempCache := findField(studio.Fields, "tempCache")
+		if tempCache != nil {
+			t.Error("Studio.tempCache should be skipped (no json tag)")
+		}
+	})
+
 	t.Run("AllEntitiesSearchable", func(t *testing.T) {
 		// These entities should be searchable (have Name with fulltext index):
 		// Film, Director, Actor, Genre, Country, Rating, ContentRating, Location
@@ -360,6 +458,46 @@ func TestParseDgraphTag(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseValidateTag(t *testing.T) {
+	tests := []struct {
+		name           string
+		tag            string
+		wantSingular   bool
+	}{
+		{"max=1", "max=1", true},
+		{"len=1", "len=1", true},
+		{"required,max=1", "required,max=1", true},
+		{"min=0,max=1", "min=0,max=1", true},
+		{"required,len=1", "required,len=1", true},
+		{"max=10", "max=10", false},
+		{"required", "required", false},
+		{"min=2,max=100", "min=2,max=100", false},
+		{"empty", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var f model.Field
+			parseValidateTag(tt.tag, &f)
+			if f.IsSingularEdge != tt.wantSingular {
+				t.Errorf("parseValidateTag(%q): IsSingularEdge = %v, want %v", tt.tag, f.IsSingularEdge, tt.wantSingular)
+			}
+		})
+	}
+}
+
+func TestParseDgraphTagSkip(t *testing.T) {
+	var f model.Field
+	parseDgraphTag("-", &f)
+	if !f.IsSkipped {
+		t.Error("parseDgraphTag(\"-\"): IsSkipped should be true")
+	}
+	// Ensure no other fields were set.
+	if f.Predicate != "" {
+		t.Errorf("Predicate should be empty, got %q", f.Predicate)
 	}
 }
 

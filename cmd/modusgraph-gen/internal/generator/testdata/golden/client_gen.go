@@ -20,6 +20,7 @@ type Client struct {
 	Location      *LocationClient
 	Performance   *PerformanceClient
 	Rating        *RatingClient
+	Studio        *StudioClient
 }
 
 // New creates a new Client connected to the graph database at connStr.
@@ -44,6 +45,7 @@ func NewFromClient(conn modusgraph.Client) *Client {
 		Location:      &LocationClient{conn: conn},
 		Performance:   &PerformanceClient{conn: conn},
 		Rating:        &RatingClient{conn: conn},
+		Studio:        &StudioClient{conn: conn},
 	}
 }
 
