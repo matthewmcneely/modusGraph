@@ -22,6 +22,12 @@ type Studio struct {
 	// Private primitive slice — generates slice getter/setter + helpers.
 	tags []string `json:"tags,omitempty"`
 
+	// Private int field — tests non-string CLI flag support.
+	yearFounded int `json:"yearFounded,omitempty"`
+
+	// Private float field — tests float CLI flag support.
+	revenue float64 `json:"revenue,omitempty"`
+
 	// Exported field — no accessors generated, direct access.
 	Founded string `json:"founded,omitempty"`
 

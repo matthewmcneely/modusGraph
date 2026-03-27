@@ -19,6 +19,20 @@ func WithStudioTags(v []string) StudioOption {
 	}
 }
 
+// WithStudioYearFounded sets the yearFounded field on a Studio.
+func WithStudioYearFounded(v int) StudioOption {
+	return func(e *Studio) {
+		e.SetYearFounded(v)
+	}
+}
+
+// WithStudioRevenue sets the revenue field on a Studio.
+func WithStudioRevenue(v float64) StudioOption {
+	return func(e *Studio) {
+		e.SetRevenue(v)
+	}
+}
+
 // WithStudioFounded sets the Founded field on a Studio.
 func WithStudioFounded(v string) StudioOption {
 	return func(e *Studio) {

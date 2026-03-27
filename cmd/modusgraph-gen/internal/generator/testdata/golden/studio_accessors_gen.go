@@ -16,6 +16,26 @@ func (e *Studio) SetName(v string) {
 	e.name = v
 }
 
+// YearFounded returns the yearFounded field.
+func (e *Studio) YearFounded() int {
+	return e.yearFounded
+}
+
+// SetYearFounded sets the yearFounded field.
+func (e *Studio) SetYearFounded(v int) {
+	e.yearFounded = v
+}
+
+// Revenue returns the revenue field.
+func (e *Studio) Revenue() float64 {
+	return e.revenue
+}
+
+// SetRevenue sets the revenue field.
+func (e *Studio) SetRevenue(v float64) {
+	e.revenue = v
+}
+
 // Founder returns the founder singular edge, or nil if unset.
 func (e *Studio) Founder() *Director {
 	return e.founder

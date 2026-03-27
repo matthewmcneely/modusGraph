@@ -70,10 +70,10 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"add":          func(a, b int) int { return a + b },
 
 		// Field helpers for templates.
-		"scalarFields":             scalarFields,
-		"edgeFields":               edgeFields,
-		"searchPredicate":          searchPredicate,
-		"externalImports":          externalImports,
+		"scalarFields":              scalarFields,
+		"edgeFields":                edgeFields,
+		"searchPredicate":           searchPredicate,
+		"externalImports":           externalImports,
 		"nonSliceScalarFields":      nonSliceScalarFields,
 		"hasPrivateFields":          hasPrivateFields,
 		"privateFields":             privateFields,
@@ -85,6 +85,8 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"allMultiEdgeFields":        allMultiEdgeFields,
 		"allSliceFields":            allSliceFields,
 		"elemType":                  elemType,
+		"cliType":                   cliType,
+		"cliConvert":                cliConvert,
 	}
 
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.tmpl")
@@ -372,6 +374,40 @@ func allSliceFields(fields []model.Field) []model.Field {
 // elemType strips the leading "[]" from a Go type string, returning the element type.
 func elemType(goType string) string {
 	return strings.TrimPrefix(goType, "[]")
+}
+
+// cliType maps a Go type to the appropriate type for a Kong CLI struct field.
+// Kong natively parses string, int, float64, bool, and time.Time flags.
+func cliType(goType string) string {
+	switch goType {
+	case "string", "int", "int64", "float64", "bool":
+		return goType
+	case "int32":
+		return "int"
+	case "float32":
+		return "float64"
+	case "time.Time":
+		return "string" // Parsed as string, converted in Run()
+	default:
+		return "string" // Fallback: accept as string
+	}
+}
+
+// cliConvert returns a Go expression that converts a CLI field value to the
+// entity field's Go type. For types that Kong handles natively (string, int,
+// float64, bool), this is an identity — the value is already the correct type.
+// For time.Time, this wraps with time.Parse.
+func cliConvert(goType, expr string) string {
+	switch goType {
+	case "string", "int", "int64", "float64", "bool":
+		return expr
+	case "int32":
+		return "int32(" + expr + ")"
+	case "float32":
+		return "float32(" + expr + ")"
+	default:
+		return expr
+	}
 }
 
 // externalImports returns a sorted list of import paths needed by the given

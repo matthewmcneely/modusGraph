@@ -19,6 +19,12 @@ func (e *Studio) DgraphMap() map[string]interface{} {
 	if e.name != "" {
 		m["name"] = e.name
 	}
+	if e.yearFounded != 0 {
+		m["yearFounded"] = e.yearFounded
+	}
+	if e.revenue != 0 {
+		m["revenue"] = e.revenue
+	}
 	if e.Founded != "" {
 		m["founded"] = e.Founded
 	}
@@ -48,6 +54,8 @@ func (e *Studio) UnmarshalJSON(data []byte) error {
 		UID         string     `json:"uid,omitempty"`
 		DType       []string   `json:"dgraph.type,omitempty"`
 		Name        string     `json:"name,omitempty"`
+		YearFounded int        `json:"yearFounded,omitempty"`
+		Revenue     float64    `json:"revenue,omitempty"`
 		Founded     string     `json:"founded,omitempty"`
 		Founder     *Director  `json:"founder,omitempty"`
 		CurrentHead []Director `json:"currentHead,omitempty"`
@@ -61,6 +69,8 @@ func (e *Studio) UnmarshalJSON(data []byte) error {
 	e.UID = a.UID
 	e.DType = a.DType
 	e.name = a.Name
+	e.yearFounded = a.YearFounded
+	e.revenue = a.Revenue
 	e.Founded = a.Founded
 	e.founder = a.Founder
 	e.currentHead = a.CurrentHead
