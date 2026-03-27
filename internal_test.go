@@ -6,10 +6,14 @@
 package modusgraph
 
 import (
+	"context"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/go-playground/validator/v10"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -209,6 +213,192 @@ func TestGenerateFilterQuery(t *testing.T) {
 	require.Equal(t, "multi_tag", vars["$multi_tag"])
 
 	//fmt.Println(query)
+}
+
+// privateFieldEntity simulates a generated entity with private fields
+// and a ValidateWith mirror struct. This tests the engine's SelfValidator
+// dispatch without requiring actual code generation.
+type privateFieldEntity struct {
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
+	name  string
+	year  int
+	score float64
+	ok    bool
+}
+
+func (e *privateFieldEntity) ValidateWith(ctx context.Context, v StructValidator) error {
+	type mirror struct {
+		Name  string  `validate:"required,min=2"`
+		Year  int     `validate:"gte=1900,lte=2100"`
+		Score float64 `validate:"gte=0,lte=100"`
+		Ok    bool
+	}
+	return v.StructCtx(ctx, mirror{
+		Name:  e.name,
+		Year:  e.year,
+		Score: e.score,
+		Ok:    e.ok,
+	})
+}
+
+// customTagEntity tests that custom validator tags work through ValidateWith
+type customTagEntity struct {
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
+	code  string
+}
+
+func (e *customTagEntity) ValidateWith(ctx context.Context, v StructValidator) error {
+	type mirror struct {
+		Code string `validate:"required,studio_code"`
+	}
+	return v.StructCtx(ctx, mirror{Code: e.code})
+}
+
+func TestSelfValidatorDispatch(t *testing.T) {
+	validate := validator.New()
+	ctx := context.Background()
+
+	t.Run("ValidPrivateFields", func(t *testing.T) {
+		e := &privateFieldEntity{name: "Test Studio", year: 2000, score: 85.5, ok: true}
+		err := e.ValidateWith(ctx, validate)
+		require.NoError(t, err)
+	})
+
+	t.Run("InvalidName_TooShort", func(t *testing.T) {
+		e := &privateFieldEntity{name: "X", year: 2000, score: 50}
+		err := e.ValidateWith(ctx, validate)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Name")
+	})
+
+	t.Run("InvalidName_Empty", func(t *testing.T) {
+		e := &privateFieldEntity{name: "", year: 2000, score: 50}
+		err := e.ValidateWith(ctx, validate)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Name")
+	})
+
+	t.Run("InvalidYear_TooLow", func(t *testing.T) {
+		e := &privateFieldEntity{name: "Test", year: 1800, score: 50}
+		err := e.ValidateWith(ctx, validate)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Year")
+	})
+
+	t.Run("InvalidYear_TooHigh", func(t *testing.T) {
+		e := &privateFieldEntity{name: "Test", year: 2200, score: 50}
+		err := e.ValidateWith(ctx, validate)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Year")
+	})
+
+	t.Run("InvalidScore_Negative", func(t *testing.T) {
+		e := &privateFieldEntity{name: "Test", year: 2000, score: -1}
+		err := e.ValidateWith(ctx, validate)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Score")
+	})
+
+	t.Run("InvalidScore_TooHigh", func(t *testing.T) {
+		e := &privateFieldEntity{name: "Test", year: 2000, score: 101}
+		err := e.ValidateWith(ctx, validate)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Score")
+	})
+
+	t.Run("BoundaryValues", func(t *testing.T) {
+		// Exact boundary: year=1900, score=0, name=2 chars
+		e := &privateFieldEntity{name: "AB", year: 1900, score: 0}
+		err := e.ValidateWith(ctx, validate)
+		require.NoError(t, err)
+
+		// Upper boundary: year=2100, score=100
+		e2 := &privateFieldEntity{name: "AB", year: 2100, score: 100}
+		err = e2.ValidateWith(ctx, validate)
+		require.NoError(t, err)
+	})
+}
+
+func TestSelfValidatorWithCustomValidator(t *testing.T) {
+	validate := validator.New()
+
+	// Register custom validator: studio_code must be 3 uppercase letters + 3 digits
+	err := validate.RegisterValidation("studio_code", func(fl validator.FieldLevel) bool {
+		code := fl.Field().String()
+		if len(code) != 6 {
+			return false
+		}
+		for i := 0; i < 3; i++ {
+			if code[i] < 'A' || code[i] > 'Z' {
+				return false
+			}
+		}
+		for i := 3; i < 6; i++ {
+			if code[i] < '0' || code[i] > '9' {
+				return false
+			}
+		}
+		return true
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	t.Run("ValidCustomCode", func(t *testing.T) {
+		e := &customTagEntity{code: "ABC123"}
+		err := e.ValidateWith(ctx, validate)
+		require.NoError(t, err)
+	})
+
+	t.Run("InvalidCustomCode_WrongFormat", func(t *testing.T) {
+		e := &customTagEntity{code: "abc123"}
+		err := e.ValidateWith(ctx, validate)
+		require.Error(t, err)
+	})
+
+	t.Run("InvalidCustomCode_TooShort", func(t *testing.T) {
+		e := &customTagEntity{code: "AB12"}
+		err := e.ValidateWith(ctx, validate)
+		require.Error(t, err)
+	})
+
+	t.Run("InvalidCustomCode_Empty", func(t *testing.T) {
+		e := &customTagEntity{code: ""}
+		err := e.ValidateWith(ctx, validate)
+		require.Error(t, err) // required tag + custom
+	})
+}
+
+func TestValidateOneDispatchesSelfValidator(t *testing.T) {
+	validate := validator.New()
+	c := client{options: clientOptions{validator: validate}}
+	ctx := context.Background()
+
+	t.Run("SelfValidatorEntity_Valid", func(t *testing.T) {
+		e := &privateFieldEntity{name: "Test Studio", year: 2000, score: 50}
+		val := reflect.ValueOf(e)
+		err := c.validateOne(ctx, val)
+		require.NoError(t, err)
+	})
+
+	t.Run("SelfValidatorEntity_Invalid", func(t *testing.T) {
+		e := &privateFieldEntity{name: "", year: 3000, score: -1}
+		val := reflect.ValueOf(e)
+		err := c.validateOne(ctx, val)
+		require.Error(t, err)
+	})
+
+	t.Run("RegularEntity_FallsBackToStructCtx", func(t *testing.T) {
+		// AllTags does NOT implement SelfValidator — should use StructCtx
+		e := &AllTags{Email: "valid@example.com"}
+		val := reflect.ValueOf(e)
+		err := c.validateOne(ctx, val)
+		// Should not panic (AllTags has only exported fields)
+		// May fail validation but should not panic
+		_ = err
+	})
 }
 
 func TestToDgraphMapNilSafety(t *testing.T) {

@@ -7,14 +7,10 @@ package {{.PackageName}}
 {{- $sliceFields := allSliceFields .Entity.Fields}}
 
 import (
-{{- if hasValidateTags .Entity.Fields}}
 	"context"
-{{- end}}
 	"encoding/json"
-{{- if hasValidateTags .Entity.Fields}}
 
 	"github.com/matthewmcneely/modusgraph"
-{{- end}}
 )
 
 // DgraphMap converts the {{$name}} to a map for Dgraph mutation.
@@ -131,23 +127,54 @@ func (e *{{$name}}) UnmarshalJSON(data []byte) error {
 {{- end}}
 	return nil
 }
-{{- if hasValidateTags .Entity.Fields}}
-{{- $validatedFields := fieldsWithValidation .Entity.Fields}}
 
 // ValidateWith validates the {{$name}} using a mirror struct with exported fields,
-// allowing the validator to access private field values safely. Custom validators
-// registered on the StructValidator instance are automatically supported since
-// the mirror struct preserves the raw validate tags.
+// allowing the validator to access private field values safely. All fields are
+// included so that custom validators (registered by field name or type) work
+// correctly. Fields with validate tags have their tags preserved on the mirror.
 func (e *{{$name}}) ValidateWith(ctx context.Context, v modusgraph.StructValidator) error {
 	type mirror struct {
-{{- range $validatedFields}}
+{{- range $scalars}}{{if not .IsUID}}{{if not .IsDType}}
+	{{- if .ValidateTag}}
 		{{.Name | toCamelCase}} {{.GoType}} `validate:"{{.ValidateTag}}"`
+	{{- else}}
+		{{.Name | toCamelCase}} {{.GoType}}
+	{{- end}}
+{{- end}}{{end}}{{end}}
+{{- range $singularEdges}}
+	{{- if .ValidateTag}}
+		{{.Name | toCamelCase}} {{.GoType}} `validate:"{{.ValidateTag}}"`
+	{{- else}}
+		{{.Name | toCamelCase}} {{.GoType}}
+	{{- end}}
+{{- end}}
+{{- range $multiEdges}}
+	{{- if .ValidateTag}}
+		{{.Name | toCamelCase}} {{.GoType}} `validate:"{{.ValidateTag}}"`
+	{{- else}}
+		{{.Name | toCamelCase}} {{.GoType}}
+	{{- end}}
+{{- end}}
+{{- range $sliceFields}}
+	{{- if .ValidateTag}}
+		{{.Name | toCamelCase}} {{.GoType}} `validate:"{{.ValidateTag}}"`
+	{{- else}}
+		{{.Name | toCamelCase}} {{.GoType}}
+	{{- end}}
 {{- end}}
 	}
 	return v.StructCtx(ctx, mirror{
-{{- range $validatedFields}}
+{{- range $scalars}}{{if not .IsUID}}{{if not .IsDType}}
+		{{.Name | toCamelCase}}: e.{{.Name}},
+{{- end}}{{end}}{{end}}
+{{- range $singularEdges}}
+		{{.Name | toCamelCase}}: e.{{.Name}},
+{{- end}}
+{{- range $multiEdges}}
+		{{.Name | toCamelCase}}: e.{{.Name}},
+{{- end}}
+{{- range $sliceFields}}
 		{{.Name | toCamelCase}}: e.{{.Name}},
 {{- end}}
 	})
 }
-{{- end}}

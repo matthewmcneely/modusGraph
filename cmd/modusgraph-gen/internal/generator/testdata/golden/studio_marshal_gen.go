@@ -145,26 +145,52 @@ func (e *Studio) UnmarshalJSON(data []byte) error {
 }
 
 // ValidateWith validates the Studio using a mirror struct with exported fields,
-// allowing the validator to access private field values safely. Custom validators
-// registered on the StructValidator instance are automatically supported since
-// the mirror struct preserves the raw validate tags.
+// allowing the validator to access private field values safely. All fields are
+// included so that custom validators (registered by field name or type) work
+// correctly. Fields with validate tags have their tags preserved on the mirror.
 func (e *Studio) ValidateWith(ctx context.Context, v modusgraph.StructValidator) error {
 	type mirror struct {
-		Name          string      `validate:"required,min=2,max=200"`
+		Name          string  `validate:"required,min=2,max=200"`
+		YearFounded   int     `validate:"gte=1800,lte=2100"`
+		Revenue       float64 `validate:"gte=0"`
+		Active        bool
+		CreatedAt     time.Time
+		Embedding     *dg.VectorFloat32
+		Founded       string
+		Founder       *Director
+		Headquarters  Country
 		CurrentHead   []Director  `validate:"max=1"`
 		Ceo           []*Director `validate:"max=1"`
 		HomeBase      []Country   `validate:"len=1"`
 		ParentCompany []*Country  `validate:"len=1"`
-		YearFounded   int         `validate:"gte=1800,lte=2100"`
-		Revenue       float64     `validate:"gte=0"`
+		Films         []Film
+		Advisors      []*Director
+		Tags          []string
+		Scores        []int
+		Weights       []float64
+		Flags         []bool
+		Milestones    []time.Time
 	}
 	return v.StructCtx(ctx, mirror{
 		Name:          e.name,
+		YearFounded:   e.yearFounded,
+		Revenue:       e.revenue,
+		Active:        e.active,
+		CreatedAt:     e.createdAt,
+		Embedding:     e.embedding,
+		Founded:       e.Founded,
+		Founder:       e.founder,
+		Headquarters:  e.headquarters,
 		CurrentHead:   e.currentHead,
 		Ceo:           e.ceo,
 		HomeBase:      e.homeBase,
 		ParentCompany: e.parentCompany,
-		YearFounded:   e.yearFounded,
-		Revenue:       e.revenue,
+		Films:         e.films,
+		Advisors:      e.advisors,
+		Tags:          e.tags,
+		Scores:        e.scores,
+		Weights:       e.weights,
+		Flags:         e.flags,
+		Milestones:    e.milestones,
 	})
 }
