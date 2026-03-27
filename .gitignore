@@ -40,3 +40,4 @@ load_test/*.json
 # Internal planning docs (kept locally)
 docs/plans/
 docs/brainstorms/
+tree/
