@@ -36,3 +36,7 @@ load_test/*.json
 /query
 /modusgraphgen
 /modusgraph-gen
+
+# Internal planning docs (kept locally)
+docs/plans/
+docs/brainstorms/
