@@ -45,11 +45,13 @@ func (e *{{$name}}) {{.Name | toCamelCase}}() *{{.EdgeEntity}} {
 		return nil
 	}
 	return e.{{.Name}}[0]
-{{- else}}
+{{- else if hasPrefix .GoType "[]"}}
 	if len(e.{{.Name}}) == 0 {
 		return nil
 	}
 	return &e.{{.Name}}[0]
+{{- else}}
+	return &e.{{.Name}}
 {{- end}}
 }
 
@@ -63,11 +65,15 @@ func (e *{{$name}}) Set{{.Name | toCamelCase}}(v *{{.EdgeEntity}}) {
 	} else {
 		e.{{.Name}} = []*{{.EdgeEntity}}{v}
 	}
-{{- else}}
+{{- else if hasPrefix .GoType "[]"}}
 	if v == nil {
 		e.{{.Name}} = nil
 	} else {
 		e.{{.Name}} = []{{.EdgeEntity}}{*v}
+	}
+{{- else}}
+	if v != nil {
+		e.{{.Name}} = *v
 	}
 {{- end}}
 }

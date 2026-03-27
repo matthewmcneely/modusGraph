@@ -13,6 +13,9 @@ type Studio struct {
 	// Private singular edge (*Entity) — generates *Director getter/setter.
 	founder *Director `json:"founder,omitempty"`
 
+	// Private singular edge (bare Entity value type).
+	headquarters Country `json:"headquarters,omitempty"`
+
 	// Private singular edge ([]Entity with validate max=1).
 	currentHead []Director `json:"currentHead,omitempty" validate:"max=1"`
 

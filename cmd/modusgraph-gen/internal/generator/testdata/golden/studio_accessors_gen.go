@@ -46,6 +46,18 @@ func (e *Studio) SetFounder(v *Director) {
 	e.founder = v
 }
 
+// Headquarters returns the headquarters singular edge, or nil if unset.
+func (e *Studio) Headquarters() *Country {
+	return &e.headquarters
+}
+
+// SetHeadquarters sets the headquarters singular edge. Pass nil to clear.
+func (e *Studio) SetHeadquarters(v *Country) {
+	if v != nil {
+		e.headquarters = *v
+	}
+}
+
 // CurrentHead returns the currentHead singular edge, or nil if unset.
 func (e *Studio) CurrentHead() *Director {
 	if len(e.currentHead) == 0 {

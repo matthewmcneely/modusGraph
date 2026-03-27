@@ -750,6 +750,27 @@ func TestGeneratedAccessorsForEdgeVariants(t *testing.T) {
 		}
 	})
 
+	// --- Private bare Entity singular edge (headquarters Country) ---
+	t.Run("PrivateSingularBareEntity", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Headquarters() *Country",
+			"func (e *Studio) SetHeadquarters(v *Country)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+		// Getter should return &e.headquarters (address of value field)
+		if !strings.Contains(content, "return &e.headquarters") {
+			t.Error("bare entity getter should return &e.headquarters")
+		}
+		// Should NOT have Append/Remove for singular edges
+		if strings.Contains(content, "AppendHeadquarters") {
+			t.Error("singular edge should not have Append")
+		}
+	})
+
 	// --- Private *Entity singular edge (founder *Director) ---
 	t.Run("PrivateSingularPointerEntity", func(t *testing.T) {
 		checks := []string{

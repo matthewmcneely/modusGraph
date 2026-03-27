@@ -54,10 +54,12 @@ func (e *{{$name}}) DgraphMap() map[string]interface{} {
 	if len(e.{{.Name}}) > 0 && e.{{.Name}}[0] != nil {
 		m["{{.JSONTag}}"] = e.{{.Name}}[0].DgraphMap()
 	}
-	{{- else}}
+	{{- else if hasPrefix .GoType "[]"}}
 	if len(e.{{.Name}}) > 0 {
 		m["{{.JSONTag}}"] = e.{{.Name}}[0].DgraphMap()
 	}
+	{{- else}}
+	m["{{.JSONTag}}"] = e.{{.Name}}.DgraphMap()
 	{{- end}}
 {{- end}}
 {{- range $multiEdges}}

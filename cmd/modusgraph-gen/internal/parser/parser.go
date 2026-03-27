@@ -207,7 +207,8 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 			}
 		}
 
-		// Detect singular edges: field type is *SomeEntity where SomeEntity is a known struct.
+		// Detect singular edges: field type is *SomeEntity or bare SomeEntity
+		// where SomeEntity is a known struct.
 		if strings.HasPrefix(goType, "*") {
 			elemType := goType[1:]
 			if structNames[elemType] {
@@ -215,6 +216,11 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 				field.EdgeEntity = elemType
 				field.IsSingularEdge = true
 			}
+		} else if !strings.HasPrefix(goType, "[]") && structNames[goType] {
+			// Bare entity type (not pointer, not slice): e.g., "director Director"
+			field.IsEdge = true
+			field.EdgeEntity = goType
+			field.IsSingularEdge = true
 		}
 
 		// Detect reverse edges from predicate.

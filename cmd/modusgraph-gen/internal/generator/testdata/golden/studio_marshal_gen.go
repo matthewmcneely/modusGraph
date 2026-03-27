@@ -31,6 +31,7 @@ func (e *Studio) DgraphMap() map[string]interface{} {
 	if e.founder != nil {
 		m["founder"] = e.founder.DgraphMap()
 	}
+	m["headquarters"] = e.headquarters.DgraphMap()
 	if len(e.currentHead) > 0 {
 		m["currentHead"] = e.currentHead[0].DgraphMap()
 	}
@@ -76,6 +77,7 @@ func (e *Studio) UnmarshalJSON(data []byte) error {
 		Revenue       float64     `json:"revenue,omitempty"`
 		Founded       string      `json:"founded,omitempty"`
 		Founder       *Director   `json:"founder,omitempty"`
+		Headquarters  Country     `json:"headquarters,omitempty"`
 		CurrentHead   []Director  `json:"currentHead,omitempty"`
 		Ceo           []*Director `json:"ceo,omitempty"`
 		HomeBase      []Country   `json:"homeBase,omitempty"`
@@ -95,6 +97,7 @@ func (e *Studio) UnmarshalJSON(data []byte) error {
 	e.revenue = a.Revenue
 	e.Founded = a.Founded
 	e.founder = a.Founder
+	e.headquarters = a.Headquarters
 	e.currentHead = a.CurrentHead
 	e.ceo = a.Ceo
 	e.homeBase = a.HomeBase

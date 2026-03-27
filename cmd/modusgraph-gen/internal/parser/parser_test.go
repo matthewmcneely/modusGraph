@@ -411,6 +411,19 @@ func TestParseMoviesPackage(t *testing.T) {
 				advisors.IsEdge, advisors.EdgeEntity, advisors.IsPrivate, advisors.IsSingularEdge)
 		}
 
+		// Studio: headquarters Country (private, bare Entity singular)
+		hq := findField(studio.Fields, "headquarters")
+		if hq == nil {
+			t.Fatal("Studio.headquarters not found")
+		}
+		if !hq.IsEdge || hq.EdgeEntity != "Country" || !hq.IsPrivate || !hq.IsSingularEdge {
+			t.Errorf("Studio.headquarters: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Country, private, singular",
+				hq.IsEdge, hq.EdgeEntity, hq.IsPrivate, hq.IsSingularEdge)
+		}
+		if hq.GoType != "Country" {
+			t.Errorf("Studio.headquarters GoType = %q, want %q", hq.GoType, "Country")
+		}
+
 		// Studio: founder *Director (private, *Entity singular)
 		founder := findField(studio.Fields, "founder")
 		if founder == nil {
