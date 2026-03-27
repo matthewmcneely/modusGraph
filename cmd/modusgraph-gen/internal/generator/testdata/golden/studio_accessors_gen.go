@@ -240,3 +240,123 @@ func (e *Studio) RemoveTags(v string) {
 func (e *Studio) RemoveTagsFunc(fn func(string) bool) {
 	e.tags = slices.DeleteFunc(e.tags, fn)
 }
+
+// Scores returns the scores slice.
+func (e *Studio) Scores() []int {
+	return e.scores
+}
+
+// SetScores replaces the scores slice.
+func (e *Studio) SetScores(v []int) {
+	e.scores = v
+}
+
+// AppendScores appends one or more values to scores.
+func (e *Studio) AppendScores(v ...int) {
+	e.scores = append(e.scores, v...)
+}
+
+// RemoveScores removes the first occurrence of v from scores.
+func (e *Studio) RemoveScores(v int) {
+	for i, item := range e.scores {
+		if item == v {
+			e.scores = slices.Delete(e.scores, i, i+1)
+			return
+		}
+	}
+}
+
+// RemoveScoresFunc removes values matching the predicate.
+func (e *Studio) RemoveScoresFunc(fn func(int) bool) {
+	e.scores = slices.DeleteFunc(e.scores, fn)
+}
+
+// Weights returns the weights slice.
+func (e *Studio) Weights() []float64 {
+	return e.weights
+}
+
+// SetWeights replaces the weights slice.
+func (e *Studio) SetWeights(v []float64) {
+	e.weights = v
+}
+
+// AppendWeights appends one or more values to weights.
+func (e *Studio) AppendWeights(v ...float64) {
+	e.weights = append(e.weights, v...)
+}
+
+// RemoveWeights removes the first occurrence of v from weights.
+func (e *Studio) RemoveWeights(v float64) {
+	for i, item := range e.weights {
+		if item == v {
+			e.weights = slices.Delete(e.weights, i, i+1)
+			return
+		}
+	}
+}
+
+// RemoveWeightsFunc removes values matching the predicate.
+func (e *Studio) RemoveWeightsFunc(fn func(float64) bool) {
+	e.weights = slices.DeleteFunc(e.weights, fn)
+}
+
+// Flags returns the flags slice.
+func (e *Studio) Flags() []bool {
+	return e.flags
+}
+
+// SetFlags replaces the flags slice.
+func (e *Studio) SetFlags(v []bool) {
+	e.flags = v
+}
+
+// AppendFlags appends one or more values to flags.
+func (e *Studio) AppendFlags(v ...bool) {
+	e.flags = append(e.flags, v...)
+}
+
+// RemoveFlags removes the first occurrence of v from flags.
+func (e *Studio) RemoveFlags(v bool) {
+	for i, item := range e.flags {
+		if item == v {
+			e.flags = slices.Delete(e.flags, i, i+1)
+			return
+		}
+	}
+}
+
+// RemoveFlagsFunc removes values matching the predicate.
+func (e *Studio) RemoveFlagsFunc(fn func(bool) bool) {
+	e.flags = slices.DeleteFunc(e.flags, fn)
+}
+
+// Milestones returns the milestones slice.
+func (e *Studio) Milestones() []time.Time {
+	return e.milestones
+}
+
+// SetMilestones replaces the milestones slice.
+func (e *Studio) SetMilestones(v []time.Time) {
+	e.milestones = v
+}
+
+// AppendMilestones appends one or more values to milestones.
+func (e *Studio) AppendMilestones(v ...time.Time) {
+	e.milestones = append(e.milestones, v...)
+}
+
+// RemoveMilestones removes the first occurrence of v from milestones.
+func (e *Studio) RemoveMilestones(v time.Time) {
+	for i, item := range e.milestones {
+		if item == v {
+			e.milestones = slices.Delete(e.milestones, i, i+1)
+			return
+		}
+	}
+}
+
+// RemoveMilestonesFunc removes values matching the predicate.
+func (e *Studio) RemoveMilestonesFunc(fn func(time.Time) bool) {
+	e.milestones = slices.DeleteFunc(e.milestones, fn)
+}

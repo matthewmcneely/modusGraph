@@ -40,8 +40,12 @@ type Studio struct {
 	// Pointer-slice edge ([]*Entity) — tests parser accepts both []Entity and []*Entity.
 	advisors []*Director `json:"advisors,omitempty"`
 
-	// Private primitive slice — generates slice getter/setter + helpers.
-	tags []string `json:"tags,omitempty"`
+	// Private primitive slices — generates slice getter/setter + helpers.
+	tags       []string    `json:"tags,omitempty"`
+	scores     []int       `json:"scores,omitempty"`
+	weights    []float64   `json:"weights,omitempty"`
+	flags      []bool      `json:"flags,omitempty"`
+	milestones []time.Time `json:"milestones,omitempty"`
 
 	// Private int field — tests non-string CLI flag support.
 	yearFounded int `json:"yearFounded,omitempty"`

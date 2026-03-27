@@ -70,6 +70,18 @@ func (e *Studio) DgraphMap() map[string]interface{} {
 	if len(e.tags) > 0 {
 		m["tags"] = e.tags
 	}
+	if len(e.scores) > 0 {
+		m["scores"] = e.scores
+	}
+	if len(e.weights) > 0 {
+		m["weights"] = e.weights
+	}
+	if len(e.flags) > 0 {
+		m["flags"] = e.flags
+	}
+	if len(e.milestones) > 0 {
+		m["milestones"] = e.milestones
+	}
 	return m
 }
 
@@ -95,6 +107,10 @@ func (e *Studio) UnmarshalJSON(data []byte) error {
 		Films         []Film            `json:"films,omitempty"`
 		Advisors      []*Director       `json:"advisors,omitempty"`
 		Tags          []string          `json:"tags,omitempty"`
+		Scores        []int             `json:"scores,omitempty"`
+		Weights       []float64         `json:"weights,omitempty"`
+		Flags         []bool            `json:"flags,omitempty"`
+		Milestones    []time.Time       `json:"milestones,omitempty"`
 	}
 	var a alias
 	if err := json.Unmarshal(data, &a); err != nil {
@@ -118,5 +134,9 @@ func (e *Studio) UnmarshalJSON(data []byte) error {
 	e.films = a.Films
 	e.advisors = a.Advisors
 	e.tags = a.Tags
+	e.scores = a.Scores
+	e.weights = a.Weights
+	e.flags = a.Flags
+	e.milestones = a.Milestones
 	return nil
 }

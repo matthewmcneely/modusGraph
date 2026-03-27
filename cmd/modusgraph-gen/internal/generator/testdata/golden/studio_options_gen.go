@@ -23,6 +23,34 @@ func WithStudioTags(v []string) StudioOption {
 	}
 }
 
+// WithStudioScores sets the scores field on a Studio.
+func WithStudioScores(v []int) StudioOption {
+	return func(e *Studio) {
+		e.SetScores(v)
+	}
+}
+
+// WithStudioWeights sets the weights field on a Studio.
+func WithStudioWeights(v []float64) StudioOption {
+	return func(e *Studio) {
+		e.SetWeights(v)
+	}
+}
+
+// WithStudioFlags sets the flags field on a Studio.
+func WithStudioFlags(v []bool) StudioOption {
+	return func(e *Studio) {
+		e.SetFlags(v)
+	}
+}
+
+// WithStudioMilestones sets the milestones field on a Studio.
+func WithStudioMilestones(v []time.Time) StudioOption {
+	return func(e *Studio) {
+		e.SetMilestones(v)
+	}
+}
+
 // WithStudioYearFounded sets the yearFounded field on a Studio.
 func WithStudioYearFounded(v int) StudioOption {
 	return func(e *Studio) {

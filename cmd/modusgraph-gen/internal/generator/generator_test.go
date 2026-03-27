@@ -921,13 +921,73 @@ func TestGeneratedAccessorsForEdgeVariants(t *testing.T) {
 	})
 
 	// --- Private primitive slice ---
-	t.Run("PrivatePrimitiveSlice", func(t *testing.T) {
+	t.Run("PrivateSliceString", func(t *testing.T) {
 		checks := []string{
 			"func (e *Studio) Tags() []string",
 			"func (e *Studio) SetTags(v []string)",
 			"func (e *Studio) AppendTags(v ...string)",
 			"func (e *Studio) RemoveTags(v string)",
 			"func (e *Studio) RemoveTagsFunc(fn func(string) bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateSliceInt", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Scores() []int",
+			"func (e *Studio) SetScores(v []int)",
+			"func (e *Studio) AppendScores(v ...int)",
+			"func (e *Studio) RemoveScores(v int)",
+			"func (e *Studio) RemoveScoresFunc(fn func(int) bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateSliceFloat64", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Weights() []float64",
+			"func (e *Studio) SetWeights(v []float64)",
+			"func (e *Studio) AppendWeights(v ...float64)",
+			"func (e *Studio) RemoveWeights(v float64)",
+			"func (e *Studio) RemoveWeightsFunc(fn func(float64) bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateSliceBool", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Flags() []bool",
+			"func (e *Studio) SetFlags(v []bool)",
+			"func (e *Studio) AppendFlags(v ...bool)",
+			"func (e *Studio) RemoveFlags(v bool)",
+			"func (e *Studio) RemoveFlagsFunc(fn func(bool) bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateSliceTime", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Milestones() []time.Time",
+			"func (e *Studio) SetMilestones(v []time.Time)",
+			"func (e *Studio) AppendMilestones(v ...time.Time)",
+			"func (e *Studio) RemoveMilestones(v time.Time)",
+			"func (e *Studio) RemoveMilestonesFunc(fn func(time.Time) bool)",
 		}
 		for _, c := range checks {
 			if !strings.Contains(content, c) {
