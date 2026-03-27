@@ -63,6 +63,57 @@ func (e *Studio) SetCurrentHead(v *Director) {
 	}
 }
 
+// Ceo returns the ceo singular edge, or nil if unset.
+func (e *Studio) Ceo() *Director {
+	if len(e.ceo) == 0 {
+		return nil
+	}
+	return e.ceo[0]
+}
+
+// SetCeo sets the ceo singular edge. Pass nil to clear.
+func (e *Studio) SetCeo(v *Director) {
+	if v == nil {
+		e.ceo = nil
+	} else {
+		e.ceo = []*Director{v}
+	}
+}
+
+// HomeBase returns the homeBase singular edge, or nil if unset.
+func (e *Studio) HomeBase() *Country {
+	if len(e.homeBase) == 0 {
+		return nil
+	}
+	return &e.homeBase[0]
+}
+
+// SetHomeBase sets the homeBase singular edge. Pass nil to clear.
+func (e *Studio) SetHomeBase(v *Country) {
+	if v == nil {
+		e.homeBase = nil
+	} else {
+		e.homeBase = []Country{*v}
+	}
+}
+
+// ParentCompany returns the parentCompany singular edge, or nil if unset.
+func (e *Studio) ParentCompany() *Country {
+	if len(e.parentCompany) == 0 {
+		return nil
+	}
+	return e.parentCompany[0]
+}
+
+// SetParentCompany sets the parentCompany singular edge. Pass nil to clear.
+func (e *Studio) SetParentCompany(v *Country) {
+	if v == nil {
+		e.parentCompany = nil
+	} else {
+		e.parentCompany = []*Country{v}
+	}
+}
+
 // Films returns the films edges.
 func (e *Studio) Films() []Film {
 	return e.films

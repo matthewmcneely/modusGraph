@@ -16,6 +16,15 @@ type Studio struct {
 	// Private singular edge ([]Entity with validate max=1).
 	currentHead []Director `json:"currentHead,omitempty" validate:"max=1"`
 
+	// Private singular edge ([]*Entity with validate max=1).
+	ceo []*Director `json:"ceo,omitempty" validate:"max=1"`
+
+	// Private singular edge ([]Entity with validate len=1).
+	homeBase []Country `json:"homeBase,omitempty" validate:"len=1"`
+
+	// Private singular edge ([]*Entity with validate len=1).
+	parentCompany []*Country `json:"parentCompany,omitempty" validate:"len=1"`
+
 	// Private multi-edge — generates slice getter/setter + append/remove helpers.
 	films []Film `json:"films,omitempty"`
 

@@ -430,6 +430,36 @@ func TestParseMoviesPackage(t *testing.T) {
 			t.Errorf("Studio.currentHead: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Director, private, singular",
 				currentHead.IsEdge, currentHead.EdgeEntity, currentHead.IsPrivate, currentHead.IsSingularEdge)
 		}
+
+		// Studio: ceo []*Director+validate:"max=1" (private, []*Entity singular via validate)
+		ceo := findField(studio.Fields, "ceo")
+		if ceo == nil {
+			t.Fatal("Studio.ceo not found")
+		}
+		if !ceo.IsEdge || ceo.EdgeEntity != "Director" || !ceo.IsPrivate || !ceo.IsSingularEdge {
+			t.Errorf("Studio.ceo: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Director, private, singular",
+				ceo.IsEdge, ceo.EdgeEntity, ceo.IsPrivate, ceo.IsSingularEdge)
+		}
+
+		// Studio: homeBase []Country+validate:"len=1" (private, []Entity singular via len=1)
+		homeBase := findField(studio.Fields, "homeBase")
+		if homeBase == nil {
+			t.Fatal("Studio.homeBase not found")
+		}
+		if !homeBase.IsEdge || homeBase.EdgeEntity != "Country" || !homeBase.IsPrivate || !homeBase.IsSingularEdge {
+			t.Errorf("Studio.homeBase: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Country, private, singular",
+				homeBase.IsEdge, homeBase.EdgeEntity, homeBase.IsPrivate, homeBase.IsSingularEdge)
+		}
+
+		// Studio: parentCompany []*Country+validate:"len=1" (private, []*Entity singular via len=1)
+		parentCompany := findField(studio.Fields, "parentCompany")
+		if parentCompany == nil {
+			t.Fatal("Studio.parentCompany not found")
+		}
+		if !parentCompany.IsEdge || parentCompany.EdgeEntity != "Country" || !parentCompany.IsPrivate || !parentCompany.IsSingularEdge {
+			t.Errorf("Studio.parentCompany: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Country, private, singular",
+				parentCompany.IsEdge, parentCompany.EdgeEntity, parentCompany.IsPrivate, parentCompany.IsSingularEdge)
+		}
 	})
 
 	t.Run("AllEntitiesSearchable", func(t *testing.T) {
