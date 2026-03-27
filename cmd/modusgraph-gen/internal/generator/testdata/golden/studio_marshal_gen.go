@@ -3,7 +3,10 @@
 package movies
 
 import (
+	"context"
 	"encoding/json"
+
+	"github.com/matthewmcneely/modusgraph"
 )
 
 // DgraphMap converts the Studio to a map for Dgraph mutation.
@@ -139,4 +142,29 @@ func (e *Studio) UnmarshalJSON(data []byte) error {
 	e.flags = a.Flags
 	e.milestones = a.Milestones
 	return nil
+}
+
+// ValidateWith validates the Studio using a mirror struct with exported fields,
+// allowing the validator to access private field values safely. Custom validators
+// registered on the StructValidator instance are automatically supported since
+// the mirror struct preserves the raw validate tags.
+func (e *Studio) ValidateWith(ctx context.Context, v modusgraph.StructValidator) error {
+	type mirror struct {
+		Name          string      `validate:"required,min=2,max=200"`
+		CurrentHead   []Director  `validate:"max=1"`
+		Ceo           []*Director `validate:"max=1"`
+		HomeBase      []Country   `validate:"len=1"`
+		ParentCompany []*Country  `validate:"len=1"`
+		YearFounded   int         `validate:"gte=1800,lte=2100"`
+		Revenue       float64     `validate:"gte=0"`
+	}
+	return v.StructCtx(ctx, mirror{
+		Name:          e.name,
+		CurrentHead:   e.currentHead,
+		Ceo:           e.ceo,
+		HomeBase:      e.homeBase,
+		ParentCompany: e.parentCompany,
+		YearFounded:   e.yearFounded,
+		Revenue:       e.revenue,
+	})
 }

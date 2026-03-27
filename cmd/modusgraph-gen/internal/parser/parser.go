@@ -168,9 +168,10 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 				parseDgraphTag(dgraphTag, &field)
 			}
 
-			// Parse validate tag for cardinality hints.
+			// Parse validate tag for cardinality hints and store raw tag.
 			validateTag := tag.Get("validate")
 			if validateTag != "" {
+				field.ValidateTag = validateTag
 				parseValidateTag(validateTag, &field)
 			}
 		}

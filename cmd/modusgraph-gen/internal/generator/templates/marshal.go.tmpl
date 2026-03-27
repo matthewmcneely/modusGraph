@@ -7,7 +7,14 @@ package {{.PackageName}}
 {{- $sliceFields := allSliceFields .Entity.Fields}}
 
 import (
+{{- if hasValidateTags .Entity.Fields}}
+	"context"
+{{- end}}
 	"encoding/json"
+{{- if hasValidateTags .Entity.Fields}}
+
+	"github.com/matthewmcneely/modusgraph"
+{{- end}}
 )
 
 // DgraphMap converts the {{$name}} to a map for Dgraph mutation.
@@ -124,3 +131,23 @@ func (e *{{$name}}) UnmarshalJSON(data []byte) error {
 {{- end}}
 	return nil
 }
+{{- if hasValidateTags .Entity.Fields}}
+{{- $validatedFields := fieldsWithValidation .Entity.Fields}}
+
+// ValidateWith validates the {{$name}} using a mirror struct with exported fields,
+// allowing the validator to access private field values safely. Custom validators
+// registered on the StructValidator instance are automatically supported since
+// the mirror struct preserves the raw validate tags.
+func (e *{{$name}}) ValidateWith(ctx context.Context, v modusgraph.StructValidator) error {
+	type mirror struct {
+{{- range $validatedFields}}
+		{{.Name | toCamelCase}} {{.GoType}} `validate:"{{.ValidateTag}}"`
+{{- end}}
+	}
+	return v.StructCtx(ctx, mirror{
+{{- range $validatedFields}}
+		{{.Name | toCamelCase}}: e.{{.Name}},
+{{- end}}
+	})
+}
+{{- end}}

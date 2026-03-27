@@ -14,7 +14,7 @@ type Studio struct {
 	DType []string `json:"dgraph.type,omitempty"`
 
 	// Private scalar field — generates getter/setter.
-	name string `json:"name,omitempty" dgraph:"index=exact"`
+	name string `json:"name,omitempty" dgraph:"index=exact" validate:"required,min=2,max=200"`
 
 	// Private singular edge (*Entity) — generates *Director getter/setter.
 	founder *Director `json:"founder,omitempty"`
@@ -48,10 +48,10 @@ type Studio struct {
 	milestones []time.Time `json:"milestones,omitempty"`
 
 	// Private int field — tests non-string CLI flag support.
-	yearFounded int `json:"yearFounded,omitempty"`
+	yearFounded int `json:"yearFounded,omitempty" validate:"gte=1800,lte=2100"`
 
 	// Private float field — tests float CLI flag support.
-	revenue float64 `json:"revenue,omitempty"`
+	revenue float64 `json:"revenue,omitempty" validate:"gte=0"`
 
 	// Private bool field.
 	active bool `json:"active,omitempty"`

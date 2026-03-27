@@ -1052,6 +1052,81 @@ func TestGeneratedMarshalForEdgeVariants(t *testing.T) {
 	})
 }
 
+func TestGeneratedValidateWithMethod(t *testing.T) {
+	dir := moviesDir(t)
+	pkg, err := parser.Parse(dir)
+	if err != nil {
+		t.Fatalf("Parse(%s) failed: %v", dir, err)
+	}
+
+	tmpDir := t.TempDir()
+	if err := Generate(pkg, tmpDir); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, "studio_marshal_gen.go"))
+	if err != nil {
+		t.Fatalf("reading studio_marshal_gen.go: %v", err)
+	}
+	content := string(data)
+
+	t.Run("HasValidateWithMethod", func(t *testing.T) {
+		if !strings.Contains(content, "func (e *Studio) ValidateWith(ctx context.Context, v modusgraph.StructValidator) error") {
+			t.Error("missing ValidateWith method")
+		}
+	})
+
+	t.Run("MirrorStructHasValidateTags", func(t *testing.T) {
+		checks := []string{
+			`Name          string      ` + "`" + `validate:"required,min=2,max=200"` + "`",
+			`YearFounded   int         ` + "`" + `validate:"gte=1800,lte=2100"` + "`",
+			`Revenue       float64     ` + "`" + `validate:"gte=0"` + "`",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing mirror field: %s", c)
+			}
+		}
+	})
+
+	t.Run("MirrorAssignsPrivateFields", func(t *testing.T) {
+		checks := []string{
+			"Name:          e.name,",
+			"YearFounded:   e.yearFounded,",
+			"Revenue:       e.revenue,",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing mirror assignment: %s", c)
+			}
+		}
+	})
+
+	t.Run("ImportsModusgraph", func(t *testing.T) {
+		if !strings.Contains(content, `"github.com/matthewmcneely/modusgraph"`) {
+			t.Error("marshal file should import modusgraph for StructValidator")
+		}
+	})
+
+	t.Run("ImportsContext", func(t *testing.T) {
+		if !strings.Contains(content, `"context"`) {
+			t.Error("marshal file should import context for ValidateWith")
+		}
+	})
+
+	// Entities without validate tags should NOT get ValidateWith
+	t.Run("NoValidateWithForExportedOnlyEntities", func(t *testing.T) {
+		// Film has no validate tags on any fields
+		filmData, err := os.ReadFile(filepath.Join(tmpDir, "film_gen.go"))
+		if err != nil {
+			t.Skipf("film_gen.go not found: %v", err)
+		}
+		if strings.Contains(string(filmData), "ValidateWith") {
+			t.Error("Film should NOT have ValidateWith (no validate tags)")
+		}
+	})
+}
+
 func TestGeneratedAccessorsNotForExportedOnlyEntities(t *testing.T) {
 	dir := moviesDir(t)
 	pkg, err := parser.Parse(dir)

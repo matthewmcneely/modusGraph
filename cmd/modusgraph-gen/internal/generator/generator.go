@@ -87,6 +87,8 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"elemType":                  elemType,
 		"cliType":                   cliType,
 		"cliConvert":                cliConvert,
+		"hasValidateTags":           hasValidateTags,
+		"fieldsWithValidation":      fieldsWithValidation,
 	}
 
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.tmpl")
@@ -408,6 +410,27 @@ func cliConvert(goType, expr string) string {
 	default:
 		return expr
 	}
+}
+
+// hasValidateTags returns true if any field has a non-empty ValidateTag.
+func hasValidateTags(fields []model.Field) bool {
+	for _, f := range fields {
+		if f.ValidateTag != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// fieldsWithValidation returns fields that have a non-empty ValidateTag.
+func fieldsWithValidation(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.ValidateTag != "" {
+			result = append(result, f)
+		}
+	}
+	return result
 }
 
 // externalImports returns a sorted list of import paths needed by the given
