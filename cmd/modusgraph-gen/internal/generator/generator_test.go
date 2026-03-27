@@ -847,15 +847,71 @@ func TestGeneratedAccessorsForEdgeVariants(t *testing.T) {
 		}
 	})
 
-	// --- Private scalar ---
-	t.Run("PrivateScalar", func(t *testing.T) {
+	// --- Private scalars (all supported types) ---
+	t.Run("PrivateScalarString", func(t *testing.T) {
 		checks := []string{
 			"func (e *Studio) Name() string",
 			"func (e *Studio) SetName(v string)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateScalarInt", func(t *testing.T) {
+		checks := []string{
 			"func (e *Studio) YearFounded() int",
 			"func (e *Studio) SetYearFounded(v int)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateScalarFloat64", func(t *testing.T) {
+		checks := []string{
 			"func (e *Studio) Revenue() float64",
 			"func (e *Studio) SetRevenue(v float64)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateScalarBool", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Active() bool",
+			"func (e *Studio) SetActive(v bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateScalarTime", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) CreatedAt() time.Time",
+			"func (e *Studio) SetCreatedAt(v time.Time)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateScalarVector", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Embedding() *dg.VectorFloat32",
+			"func (e *Studio) SetEmbedding(v *dg.VectorFloat32)",
 		}
 		for _, c := range checks {
 			if !strings.Contains(content, c) {

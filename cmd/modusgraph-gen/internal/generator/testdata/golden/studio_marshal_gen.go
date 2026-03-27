@@ -25,6 +25,13 @@ func (e *Studio) DgraphMap() map[string]interface{} {
 	if e.revenue != 0 {
 		m["revenue"] = e.revenue
 	}
+	if e.active {
+		m["active"] = e.active
+	}
+	if !e.createdAt.IsZero() {
+		m["createdAt"] = e.createdAt
+	}
+	m["embedding"] = e.embedding
 	if e.Founded != "" {
 		m["founded"] = e.Founded
 	}
@@ -70,21 +77,24 @@ func (e *Studio) DgraphMap() map[string]interface{} {
 // allowing private fields to be populated from Dgraph query responses.
 func (e *Studio) UnmarshalJSON(data []byte) error {
 	type alias struct {
-		UID           string      `json:"uid,omitempty"`
-		DType         []string    `json:"dgraph.type,omitempty"`
-		Name          string      `json:"name,omitempty"`
-		YearFounded   int         `json:"yearFounded,omitempty"`
-		Revenue       float64     `json:"revenue,omitempty"`
-		Founded       string      `json:"founded,omitempty"`
-		Founder       *Director   `json:"founder,omitempty"`
-		Headquarters  Country     `json:"headquarters,omitempty"`
-		CurrentHead   []Director  `json:"currentHead,omitempty"`
-		Ceo           []*Director `json:"ceo,omitempty"`
-		HomeBase      []Country   `json:"homeBase,omitempty"`
-		ParentCompany []*Country  `json:"parentCompany,omitempty"`
-		Films         []Film      `json:"films,omitempty"`
-		Advisors      []*Director `json:"advisors,omitempty"`
-		Tags          []string    `json:"tags,omitempty"`
+		UID           string            `json:"uid,omitempty"`
+		DType         []string          `json:"dgraph.type,omitempty"`
+		Name          string            `json:"name,omitempty"`
+		YearFounded   int               `json:"yearFounded,omitempty"`
+		Revenue       float64           `json:"revenue,omitempty"`
+		Active        bool              `json:"active,omitempty"`
+		CreatedAt     time.Time         `json:"createdAt,omitempty"`
+		Embedding     *dg.VectorFloat32 `json:"embedding,omitempty"`
+		Founded       string            `json:"founded,omitempty"`
+		Founder       *Director         `json:"founder,omitempty"`
+		Headquarters  Country           `json:"headquarters,omitempty"`
+		CurrentHead   []Director        `json:"currentHead,omitempty"`
+		Ceo           []*Director       `json:"ceo,omitempty"`
+		HomeBase      []Country         `json:"homeBase,omitempty"`
+		ParentCompany []*Country        `json:"parentCompany,omitempty"`
+		Films         []Film            `json:"films,omitempty"`
+		Advisors      []*Director       `json:"advisors,omitempty"`
+		Tags          []string          `json:"tags,omitempty"`
 	}
 	var a alias
 	if err := json.Unmarshal(data, &a); err != nil {
@@ -95,6 +105,9 @@ func (e *Studio) UnmarshalJSON(data []byte) error {
 	e.name = a.Name
 	e.yearFounded = a.YearFounded
 	e.revenue = a.Revenue
+	e.active = a.Active
+	e.createdAt = a.CreatedAt
+	e.embedding = a.Embedding
 	e.Founded = a.Founded
 	e.founder = a.Founder
 	e.headquarters = a.Headquarters

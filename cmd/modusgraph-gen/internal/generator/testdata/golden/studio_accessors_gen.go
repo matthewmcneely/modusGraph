@@ -4,6 +4,7 @@ package movies
 
 import (
 	"slices"
+	"time"
 )
 
 // Name returns the name field.
@@ -34,6 +35,36 @@ func (e *Studio) Revenue() float64 {
 // SetRevenue sets the revenue field.
 func (e *Studio) SetRevenue(v float64) {
 	e.revenue = v
+}
+
+// Active returns the active field.
+func (e *Studio) Active() bool {
+	return e.active
+}
+
+// SetActive sets the active field.
+func (e *Studio) SetActive(v bool) {
+	e.active = v
+}
+
+// CreatedAt returns the createdAt field.
+func (e *Studio) CreatedAt() time.Time {
+	return e.createdAt
+}
+
+// SetCreatedAt sets the createdAt field.
+func (e *Studio) SetCreatedAt(v time.Time) {
+	e.createdAt = v
+}
+
+// Embedding returns the embedding field.
+func (e *Studio) Embedding() *dg.VectorFloat32 {
+	return e.embedding
+}
+
+// SetEmbedding sets the embedding field.
+func (e *Studio) SetEmbedding(v *dg.VectorFloat32) {
+	e.embedding = v
 }
 
 // Founder returns the founder singular edge, or nil if unset.

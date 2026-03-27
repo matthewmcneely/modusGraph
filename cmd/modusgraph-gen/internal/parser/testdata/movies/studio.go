@@ -1,5 +1,11 @@
 package movies
 
+import (
+	"time"
+
+	dg "github.com/dolan-in/dgman/v2"
+)
+
 // Studio exercises private field parsing: private scalars, singular edges,
 // multi-edges, primitive slices, opt-out via dgraph:"-", and fields without
 // json tags.
@@ -42,6 +48,15 @@ type Studio struct {
 
 	// Private float field — tests float CLI flag support.
 	revenue float64 `json:"revenue,omitempty"`
+
+	// Private bool field.
+	active bool `json:"active,omitempty"`
+
+	// Private time.Time field.
+	createdAt time.Time `json:"createdAt,omitempty"`
+
+	// Private vector field.
+	embedding *dg.VectorFloat32 `json:"embedding,omitempty" dgraph:"index=hnsw(metric:cosine)"`
 
 	// Exported field — no accessors generated, direct access.
 	Founded string `json:"founded,omitempty"`

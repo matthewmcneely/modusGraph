@@ -2,6 +2,10 @@
 
 package movies
 
+import (
+	"time"
+)
+
 // StudioOption is a functional option for configuring Studio mutations.
 type StudioOption func(*Studio)
 
@@ -30,6 +34,27 @@ func WithStudioYearFounded(v int) StudioOption {
 func WithStudioRevenue(v float64) StudioOption {
 	return func(e *Studio) {
 		e.SetRevenue(v)
+	}
+}
+
+// WithStudioActive sets the active field on a Studio.
+func WithStudioActive(v bool) StudioOption {
+	return func(e *Studio) {
+		e.SetActive(v)
+	}
+}
+
+// WithStudioCreatedAt sets the createdAt field on a Studio.
+func WithStudioCreatedAt(v time.Time) StudioOption {
+	return func(e *Studio) {
+		e.SetCreatedAt(v)
+	}
+}
+
+// WithStudioEmbedding sets the embedding field on a Studio.
+func WithStudioEmbedding(v *dg.VectorFloat32) StudioOption {
+	return func(e *Studio) {
+		e.SetEmbedding(v)
 	}
 }
 
