@@ -63,27 +63,29 @@ func (e *{{$name}}) Set{{.Name | toCamelCase}}(v *{{.EdgeEntity}}) {
 {{end}}
 {{- range $multiEdges}}
 // {{.Name | toCamelCase}} returns the {{.Name}} edges.
-func (e *{{$name}}) {{.Name | toCamelCase}}() []{{.EdgeEntity}} {
+func (e *{{$name}}) {{.Name | toCamelCase}}() {{.GoType}} {
 	return e.{{.Name}}
 }
 
 // Set{{.Name | toCamelCase}} replaces the {{.Name}} edges.
-func (e *{{$name}}) Set{{.Name | toCamelCase}}(v []{{.EdgeEntity}}) {
+func (e *{{$name}}) Set{{.Name | toCamelCase}}(v {{.GoType}}) {
 	e.{{.Name}} = v
 }
 
 // Append{{.Name | toCamelCase}} appends one or more {{.EdgeEntity}} edges.
-func (e *{{$name}}) Append{{.Name | toCamelCase}}(v ...{{.EdgeEntity}}) {
+func (e *{{$name}}) Append{{.Name | toCamelCase}}(v ...{{elemType .GoType}}) {
 	e.{{.Name}} = append(e.{{.Name}}, v...)
 }
 
 // Remove{{.Name | toCamelCase}} removes the edge with the given UID.
 func (e *{{$name}}) Remove{{.Name | toCamelCase}}(uid string) {
-	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, func(v {{.EdgeEntity}}) bool { return v.UID == uid })
+	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, func(v {{elemType .GoType}}) bool {
+	{{- if hasPrefix (elemType .GoType) "*"}} return v != nil && v.UID == uid {{- else}} return v.UID == uid {{- end}}
+	})
 }
 
 // Remove{{.Name | toCamelCase}}Func removes edges matching the predicate.
-func (e *{{$name}}) Remove{{.Name | toCamelCase}}Func(fn func({{.EdgeEntity}}) bool) {
+func (e *{{$name}}) Remove{{.Name | toCamelCase}}Func(fn func({{elemType .GoType}}) bool) {
 	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, fn)
 }
 {{end}}

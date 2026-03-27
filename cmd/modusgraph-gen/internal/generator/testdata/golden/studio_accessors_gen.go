@@ -80,12 +80,41 @@ func (e *Studio) AppendFilms(v ...Film) {
 
 // RemoveFilms removes the edge with the given UID.
 func (e *Studio) RemoveFilms(uid string) {
-	e.films = slices.DeleteFunc(e.films, func(v Film) bool { return v.UID == uid })
+	e.films = slices.DeleteFunc(e.films, func(v Film) bool {
+		return v.UID == uid
+	})
 }
 
 // RemoveFilmsFunc removes edges matching the predicate.
 func (e *Studio) RemoveFilmsFunc(fn func(Film) bool) {
 	e.films = slices.DeleteFunc(e.films, fn)
+}
+
+// Advisors returns the advisors edges.
+func (e *Studio) Advisors() []*Director {
+	return e.advisors
+}
+
+// SetAdvisors replaces the advisors edges.
+func (e *Studio) SetAdvisors(v []*Director) {
+	e.advisors = v
+}
+
+// AppendAdvisors appends one or more Director edges.
+func (e *Studio) AppendAdvisors(v ...*Director) {
+	e.advisors = append(e.advisors, v...)
+}
+
+// RemoveAdvisors removes the edge with the given UID.
+func (e *Studio) RemoveAdvisors(uid string) {
+	e.advisors = slices.DeleteFunc(e.advisors, func(v *Director) bool {
+		return v != nil && v.UID == uid
+	})
+}
+
+// RemoveAdvisorsFunc removes edges matching the predicate.
+func (e *Studio) RemoveAdvisorsFunc(fn func(*Director) bool) {
+	e.advisors = slices.DeleteFunc(e.advisors, fn)
 }
 
 // Tags returns the tags slice.

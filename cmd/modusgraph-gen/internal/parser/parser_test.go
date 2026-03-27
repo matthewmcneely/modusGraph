@@ -342,6 +342,94 @@ func TestParseMoviesPackage(t *testing.T) {
 		if tempCache != nil {
 			t.Error("Studio.tempCache should be skipped (no json tag)")
 		}
+
+		// Pointer-slice edge: advisors []*Director — should be detected as edge
+		advisors := findField(studio.Fields, "advisors")
+		if advisors == nil {
+			t.Fatal("Studio.advisors field not found")
+		}
+		if !advisors.IsEdge {
+			t.Error("Studio.advisors should be an edge ([]*Director)")
+		}
+		if advisors.EdgeEntity != "Director" {
+			t.Errorf("Studio.advisors EdgeEntity = %q, want %q", advisors.EdgeEntity, "Director")
+		}
+		if advisors.IsSingularEdge {
+			t.Error("Studio.advisors should NOT be a singular edge")
+		}
+	})
+
+	// Comprehensive edge field detection tests covering all combinations:
+	// []Entity (public), []*Entity (public), []Entity (private), []*Entity (private),
+	// *Entity (private singular), []Entity+validate:"max=1" (private singular)
+	t.Run("EdgeFieldVariants", func(t *testing.T) {
+		// Film: Genres []Genre (public, []Entity)
+		film := entityMap["Film"]
+		if film == nil {
+			t.Fatal("Film entity not found")
+		}
+		genres := findField(film.Fields, "Genres")
+		if genres == nil {
+			t.Fatal("Film.Genres not found")
+		}
+		if !genres.IsEdge || genres.EdgeEntity != "Genre" || genres.IsPrivate || genres.IsSingularEdge {
+			t.Errorf("Film.Genres: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Genre, public, multi",
+				genres.IsEdge, genres.EdgeEntity, genres.IsPrivate, genres.IsSingularEdge)
+		}
+
+		// Film: Directors []*Director (public, []*Entity)
+		directors := findField(film.Fields, "Directors")
+		if directors == nil {
+			t.Fatal("Film.Directors not found")
+		}
+		if !directors.IsEdge || directors.EdgeEntity != "Director" || directors.IsPrivate || directors.IsSingularEdge {
+			t.Errorf("Film.Directors: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Director, public, multi",
+				directors.IsEdge, directors.EdgeEntity, directors.IsPrivate, directors.IsSingularEdge)
+		}
+
+		// Studio: films []Film (private, []Entity)
+		studio := entityMap["Studio"]
+		if studio == nil {
+			t.Fatal("Studio entity not found")
+		}
+		films := findField(studio.Fields, "films")
+		if films == nil {
+			t.Fatal("Studio.films not found")
+		}
+		if !films.IsEdge || films.EdgeEntity != "Film" || !films.IsPrivate || films.IsSingularEdge {
+			t.Errorf("Studio.films: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Film, private, multi",
+				films.IsEdge, films.EdgeEntity, films.IsPrivate, films.IsSingularEdge)
+		}
+
+		// Studio: advisors []*Director (private, []*Entity)
+		advisors := findField(studio.Fields, "advisors")
+		if advisors == nil {
+			t.Fatal("Studio.advisors not found")
+		}
+		if !advisors.IsEdge || advisors.EdgeEntity != "Director" || !advisors.IsPrivate || advisors.IsSingularEdge {
+			t.Errorf("Studio.advisors: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Director, private, multi",
+				advisors.IsEdge, advisors.EdgeEntity, advisors.IsPrivate, advisors.IsSingularEdge)
+		}
+
+		// Studio: founder *Director (private, *Entity singular)
+		founder := findField(studio.Fields, "founder")
+		if founder == nil {
+			t.Fatal("Studio.founder not found")
+		}
+		if !founder.IsEdge || founder.EdgeEntity != "Director" || !founder.IsPrivate || !founder.IsSingularEdge {
+			t.Errorf("Studio.founder: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Director, private, singular",
+				founder.IsEdge, founder.EdgeEntity, founder.IsPrivate, founder.IsSingularEdge)
+		}
+
+		// Studio: currentHead []Director+validate:"max=1" (private, singular via validate)
+		currentHead := findField(studio.Fields, "currentHead")
+		if currentHead == nil {
+			t.Fatal("Studio.currentHead not found")
+		}
+		if !currentHead.IsEdge || currentHead.EdgeEntity != "Director" || !currentHead.IsPrivate || !currentHead.IsSingularEdge {
+			t.Errorf("Studio.currentHead: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Director, private, singular",
+				currentHead.IsEdge, currentHead.EdgeEntity, currentHead.IsPrivate, currentHead.IsSingularEdge)
+		}
 	})
 
 	t.Run("AllEntitiesSearchable", func(t *testing.T) {

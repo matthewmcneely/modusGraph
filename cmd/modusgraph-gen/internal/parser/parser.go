@@ -197,9 +197,10 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 			field.Predicate = field.JSONTag
 		}
 
-		// Detect edges: field type is []SomeEntity where SomeEntity is a known struct.
+		// Detect edges: field type is []SomeEntity or []*SomeEntity where SomeEntity is a known struct.
 		if strings.HasPrefix(goType, "[]") {
 			elemType := goType[2:]
+			elemType = strings.TrimPrefix(elemType, "*") // handle []*Entity
 			if structNames[elemType] {
 				field.IsEdge = true
 				field.EdgeEntity = elemType

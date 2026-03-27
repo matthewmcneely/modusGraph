@@ -58,9 +58,15 @@ func (e *{{$name}}) DgraphMap() map[string]interface{} {
 {{- end}}
 {{- range $multiEdges}}
 	if len(e.{{.Name}}) > 0 {
-		s := make([]map[string]interface{}, len(e.{{.Name}}))
+		s := make([]map[string]interface{}, 0, len(e.{{.Name}}))
 		for i := range e.{{.Name}} {
-			s[i] = e.{{.Name}}[i].DgraphMap()
+		{{- if hasPrefix (elemType .GoType) "*"}}
+			if e.{{.Name}}[i] != nil {
+				s = append(s, e.{{.Name}}[i].DgraphMap())
+			}
+		{{- else}}
+			s = append(s, e.{{.Name}}[i].DgraphMap())
+		{{- end}}
 		}
 		m["{{.JSONTag}}"] = s
 	}
@@ -90,7 +96,7 @@ func (e *{{$name}}) UnmarshalJSON(data []byte) error {
 	{{- end}}
 {{- end}}
 {{- range $multiEdges}}
-		{{.Name | toCamelCase}} []{{.EdgeEntity}} `json:"{{.JSONTag}},omitempty"`
+		{{.Name | toCamelCase}} {{.GoType}} `json:"{{.JSONTag}},omitempty"`
 {{- end}}
 {{- range $sliceFields}}
 		{{.Name | toCamelCase}} {{.GoType}} `json:"{{.JSONTag}},omitempty"`

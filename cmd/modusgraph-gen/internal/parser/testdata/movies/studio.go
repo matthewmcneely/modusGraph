@@ -19,6 +19,9 @@ type Studio struct {
 	// Private multi-edge — generates slice getter/setter + append/remove helpers.
 	films []Film `json:"films,omitempty"`
 
+	// Pointer-slice edge ([]*Entity) — tests parser accepts both []Entity and []*Entity.
+	advisors []*Director `json:"advisors,omitempty"`
+
 	// Private primitive slice — generates slice getter/setter + helpers.
 	tags []string `json:"tags,omitempty"`
 
