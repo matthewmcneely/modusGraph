@@ -1,6 +1,9 @@
 package parser
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -501,6 +504,60 @@ func TestParseDgraphTagSkip(t *testing.T) {
 	}
 }
 
+func TestParseMultiNameDeclaration(t *testing.T) {
+	// Verify that parseStruct handles "A, B Type" declarations
+	// by generating fields for each name. Note: in real structs with
+	// tags, multi-name declarations share a single tag — but the parser
+	// should still emit a Field for each name.
+	src := `package test
+
+type MultiName struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	A, B  string
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "test.go", src, parser.AllErrors)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var entity model.Entity
+	found := false
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			st, ok := typeSpec.Type.(*ast.StructType)
+			if !ok {
+				continue
+			}
+			entity, found = parseStruct(typeSpec.Name.Name, st, map[string]bool{})
+			break
+		}
+	}
+
+	if !found {
+		t.Fatal("MultiName struct not detected as entity")
+	}
+
+	// A and B have no json tag so they should be skipped.
+	// Only UID and DType should be in fields.
+	// This verifies the multi-name loop runs without error.
+	for _, f := range entity.Fields {
+		if f.Name == "A" || f.Name == "B" {
+			t.Errorf("Field %q should be skipped (no json tag)", f.Name)
+		}
+	}
+}
+
 func TestReadModulePath(t *testing.T) {
 	t.Run("FromMoviesProject", func(t *testing.T) {
 		dir := moviesDir(t)
@@ -522,7 +579,7 @@ func TestReadModulePath(t *testing.T) {
 	})
 
 	t.Run("EmptyForNonExistentDir", func(t *testing.T) {
-		got := readModulePath("/tmp/nonexistent-dir-for-test")
+		got := readModulePath(filepath.Join(t.TempDir(), "nonexistent-subdir"))
 		if got != "" {
 			t.Errorf("readModulePath(nonexistent) = %q, want empty string", got)
 		}

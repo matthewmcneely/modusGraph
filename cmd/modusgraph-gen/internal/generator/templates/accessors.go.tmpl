@@ -8,7 +8,9 @@ package {{.PackageName}}
 {{- $needsSlices := or (gt (len $multiEdges) 0) (gt (len $sliceFields) 0)}}
 {{- $needsTime := false}}
 {{- range $privateScalars}}{{if contains .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
-{{- $extImports := externalImports $privateScalars .Imports}}
+{{- range $sliceFields}}{{if contains .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
+{{- $allPrivate := privateFields .Entity.Fields}}
+{{- $extImports := externalImports $allPrivate .Imports}}
 {{if or $needsSlices $needsTime (gt (len $extImports) 0)}}
 import (
 {{- if $needsSlices}}

@@ -136,7 +136,9 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 		if len(f.Names) == 0 {
 			continue // embedded field, skip
 		}
-		fieldName := f.Names[0].Name
+		// Process all names in a multi-name declaration (e.g., "A, B string").
+		for _, ident := range f.Names {
+		fieldName := ident.Name
 
 		goType := typeString(f.Type)
 		field := model.Field{
@@ -220,6 +222,7 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 		}
 
 		fields = append(fields, field)
+		} // end for each name in multi-name declaration
 	}
 
 	if !hasUID || !hasDType {

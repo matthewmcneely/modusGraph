@@ -76,6 +76,7 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"externalImports":          externalImports,
 		"nonSliceScalarFields":      nonSliceScalarFields,
 		"hasPrivateFields":          hasPrivateFields,
+		"privateFields":             privateFields,
 		"privateScalarFields":       privateScalarFields,
 		"privateSingularEdgeFields": privateSingularEdgeFields,
 		"privateMultiEdgeFields":    privateMultiEdgeFields,
@@ -263,6 +264,17 @@ func edgeFields(fields []model.Field) []model.Field {
 	var result []model.Field
 	for _, f := range fields {
 		if f.IsEdge {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// privateFields returns all private, non-skipped, non-UID, non-DType fields.
+func privateFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsPrivate && !f.IsSkipped && !f.IsUID && !f.IsDType {
 			result = append(result, f)
 		}
 	}

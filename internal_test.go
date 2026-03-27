@@ -210,3 +210,33 @@ func TestGenerateFilterQuery(t *testing.T) {
 
 	//fmt.Println(query)
 }
+
+func TestToDgraphMapNilSafety(t *testing.T) {
+	t.Run("NilPointer", func(t *testing.T) {
+		var obj *AllTags
+		mapped, ok := toDgraphMap(obj)
+		require.False(t, ok)
+		require.Nil(t, mapped)
+	})
+
+	t.Run("NilInterface", func(t *testing.T) {
+		mapped, ok := toDgraphMap(nil)
+		require.False(t, ok)
+		require.Nil(t, mapped)
+	})
+
+	t.Run("NonMapper", func(t *testing.T) {
+		obj := &AllTags{Email: "test@example.com"}
+		mapped, ok := toDgraphMap(obj)
+		require.False(t, ok)
+		require.Nil(t, mapped)
+	})
+
+	t.Run("SliceWithNilElements", func(t *testing.T) {
+		// Slice of non-mapper pointers — should return false, not panic.
+		objs := []*AllTags{nil, nil}
+		mapped, ok := toDgraphMap(objs)
+		require.False(t, ok)
+		require.Nil(t, mapped)
+	})
+}
