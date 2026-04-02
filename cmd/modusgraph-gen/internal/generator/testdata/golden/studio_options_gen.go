@@ -2,6 +2,10 @@
 
 package movies
 
+import (
+	"time"
+)
+
 // StudioOption is a functional option for configuring Studio mutations.
 type StudioOption func(*Studio)
 
@@ -16,6 +20,69 @@ func WithStudioName(v string) StudioOption {
 func WithStudioTags(v []string) StudioOption {
 	return func(e *Studio) {
 		e.SetTags(v)
+	}
+}
+
+// WithStudioScores sets the scores field on a Studio.
+func WithStudioScores(v []int) StudioOption {
+	return func(e *Studio) {
+		e.SetScores(v)
+	}
+}
+
+// WithStudioWeights sets the weights field on a Studio.
+func WithStudioWeights(v []float64) StudioOption {
+	return func(e *Studio) {
+		e.SetWeights(v)
+	}
+}
+
+// WithStudioFlags sets the flags field on a Studio.
+func WithStudioFlags(v []bool) StudioOption {
+	return func(e *Studio) {
+		e.SetFlags(v)
+	}
+}
+
+// WithStudioMilestones sets the milestones field on a Studio.
+func WithStudioMilestones(v []time.Time) StudioOption {
+	return func(e *Studio) {
+		e.SetMilestones(v)
+	}
+}
+
+// WithStudioYearFounded sets the yearFounded field on a Studio.
+func WithStudioYearFounded(v int) StudioOption {
+	return func(e *Studio) {
+		e.SetYearFounded(v)
+	}
+}
+
+// WithStudioRevenue sets the revenue field on a Studio.
+func WithStudioRevenue(v float64) StudioOption {
+	return func(e *Studio) {
+		e.SetRevenue(v)
+	}
+}
+
+// WithStudioActive sets the active field on a Studio.
+func WithStudioActive(v bool) StudioOption {
+	return func(e *Studio) {
+		e.SetActive(v)
+	}
+}
+
+// WithStudioCreatedAt sets the createdAt field on a Studio.
+func WithStudioCreatedAt(v time.Time) StudioOption {
+	return func(e *Studio) {
+		e.SetCreatedAt(v)
+	}
+}
+
+// WithStudioEmbedding sets the embedding field on a Studio.
+func WithStudioEmbedding(v *dg.VectorFloat32) StudioOption {
+	return func(e *Studio) {
+		e.SetEmbedding(v)
 	}
 }
 

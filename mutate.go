@@ -247,30 +247,47 @@ func getPredicatesByTag(obj any, tagName string, firstOnly bool) map[string]any 
 // should use the map-based mutation path, or (nil, false) for the standard path.
 func toDgraphMap(obj any) (any, bool) {
 	v := reflect.ValueOf(obj)
+	if !v.IsValid() {
+		return nil, false
+	}
 
 	// Handle pointer to slice: []*Film
-	if v.Kind() == reflect.Ptr && v.Elem().Kind() == reflect.Slice {
-		v = v.Elem()
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil, false
+		}
+		if v.Elem().Kind() == reflect.Slice {
+			v = v.Elem()
+		}
 	}
 
 	// Handle slice of DgraphMapper objects.
 	if v.Kind() == reflect.Slice && v.Len() > 0 {
 		first := v.Index(0)
 		if first.Kind() == reflect.Ptr {
+			if first.IsNil() {
+				return nil, false
+			}
 			first = first.Elem()
 		}
 		if first.Kind() == reflect.Interface {
+			if first.IsNil() {
+				return nil, false
+			}
 			first = first.Elem()
 		}
 		if _, ok := first.Interface().(DgraphMapper); ok {
-			maps := make([]map[string]interface{}, v.Len())
+			maps := make([]map[string]interface{}, 0, v.Len())
 			for i := 0; i < v.Len(); i++ {
 				elem := v.Index(i)
 				if elem.Kind() == reflect.Ptr {
+					if elem.IsNil() {
+						continue
+					}
 					elem = elem.Elem()
 				}
 				if m, ok := elem.Interface().(DgraphMapper); ok {
-					maps[i] = m.DgraphMap()
+					maps = append(maps, m.DgraphMap())
 				}
 			}
 			return maps, true
@@ -279,10 +296,15 @@ func toDgraphMap(obj any) (any, bool) {
 
 	// Handle single struct pointer.
 	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil, false
+		}
 		v = v.Elem()
 	}
-	if m, ok := v.Interface().(DgraphMapper); ok {
-		return m.DgraphMap(), true
+	if v.CanInterface() {
+		if m, ok := v.Interface().(DgraphMapper); ok {
+			return m.DgraphMap(), true
+		}
 	}
 
 	return nil, false

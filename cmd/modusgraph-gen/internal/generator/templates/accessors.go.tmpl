@@ -8,7 +8,9 @@ package {{.PackageName}}
 {{- $needsSlices := or (gt (len $multiEdges) 0) (gt (len $sliceFields) 0)}}
 {{- $needsTime := false}}
 {{- range $privateScalars}}{{if contains .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
-{{- $extImports := externalImports $privateScalars .Imports}}
+{{- range $sliceFields}}{{if contains .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
+{{- $allPrivate := privateFields .Entity.Fields}}
+{{- $extImports := externalImports $allPrivate .Imports}}
 {{if or $needsSlices $needsTime (gt (len $extImports) 0)}}
 import (
 {{- if $needsSlices}}
@@ -38,11 +40,18 @@ func (e *{{$name}}) Set{{.Name | toCamelCase}}(v {{.GoType}}) {
 func (e *{{$name}}) {{.Name | toCamelCase}}() *{{.EdgeEntity}} {
 {{- if hasPrefix .GoType "*"}}
 	return e.{{.Name}}
-{{- else}}
+{{- else if hasPrefix .GoType "[]*"}}
+	if len(e.{{.Name}}) == 0 {
+		return nil
+	}
+	return e.{{.Name}}[0]
+{{- else if hasPrefix .GoType "[]"}}
 	if len(e.{{.Name}}) == 0 {
 		return nil
 	}
 	return &e.{{.Name}}[0]
+{{- else}}
+	return &e.{{.Name}}
 {{- end}}
 }
 
@@ -50,38 +59,50 @@ func (e *{{$name}}) {{.Name | toCamelCase}}() *{{.EdgeEntity}} {
 func (e *{{$name}}) Set{{.Name | toCamelCase}}(v *{{.EdgeEntity}}) {
 {{- if hasPrefix .GoType "*"}}
 	e.{{.Name}} = v
-{{- else}}
+{{- else if hasPrefix .GoType "[]*"}}
+	if v == nil {
+		e.{{.Name}} = nil
+	} else {
+		e.{{.Name}} = []*{{.EdgeEntity}}{v}
+	}
+{{- else if hasPrefix .GoType "[]"}}
 	if v == nil {
 		e.{{.Name}} = nil
 	} else {
 		e.{{.Name}} = []{{.EdgeEntity}}{*v}
+	}
+{{- else}}
+	if v != nil {
+		e.{{.Name}} = *v
 	}
 {{- end}}
 }
 {{end}}
 {{- range $multiEdges}}
 // {{.Name | toCamelCase}} returns the {{.Name}} edges.
-func (e *{{$name}}) {{.Name | toCamelCase}}() []{{.EdgeEntity}} {
+func (e *{{$name}}) {{.Name | toCamelCase}}() {{.GoType}} {
 	return e.{{.Name}}
 }
 
 // Set{{.Name | toCamelCase}} replaces the {{.Name}} edges.
-func (e *{{$name}}) Set{{.Name | toCamelCase}}(v []{{.EdgeEntity}}) {
+func (e *{{$name}}) Set{{.Name | toCamelCase}}(v {{.GoType}}) {
 	e.{{.Name}} = v
 }
 
 // Append{{.Name | toCamelCase}} appends one or more {{.EdgeEntity}} edges.
-func (e *{{$name}}) Append{{.Name | toCamelCase}}(v ...{{.EdgeEntity}}) {
+func (e *{{$name}}) Append{{.Name | toCamelCase}}(v ...{{elemType .GoType}}) {
 	e.{{.Name}} = append(e.{{.Name}}, v...)
 }
 
 // Remove{{.Name | toCamelCase}} removes the edge with the given UID.
 func (e *{{$name}}) Remove{{.Name | toCamelCase}}(uid string) {
-	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, func(v {{.EdgeEntity}}) bool { return v.UID == uid })
+	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, func(v {{elemType .GoType}}) bool {
+	{{- if hasPrefix (elemType .GoType) "*"}} return v != nil && v.UID == uid {{- else}} return v.UID == uid {{- end}}
+	})
 }
 
 // Remove{{.Name | toCamelCase}}Func removes edges matching the predicate.
-func (e *{{$name}}) Remove{{.Name | toCamelCase}}Func(fn func({{.EdgeEntity}}) bool) {
+func (e *{{$name}}) Remove{{.Name | toCamelCase}}Func(fn func({{elemType .GoType}}) bool) {
 	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, fn)
 }
 {{end}}

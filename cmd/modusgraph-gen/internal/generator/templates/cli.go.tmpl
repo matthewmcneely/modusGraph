@@ -117,23 +117,35 @@ func (c *{{.Name}}ListCmd) Run(client *{{$.Name}}.Client) error {
 }
 
 type {{.Name}}AddCmd struct {
-{{- range scalarFields .Fields}}{{if and (not .IsUID) (not .IsDType)}}
+{{- range nonSliceScalarFields .Fields}}{{if and (not .IsUID) (not .IsDType)}}
 	{{- if .IsPrivate}}
-	{{.Name | toCamelCase}} string `help:"Set {{.Name}}." name:"{{toLower .Name}}"`
+	{{.Name | toCamelCase}} {{cliType .GoType}} `help:"Set {{.Name}}." name:"{{toLower .Name}}"`
 	{{- else}}
-	{{.Name}} string `help:"Set {{.Name}}." name:"{{toLower .Name}}"`
+	{{.Name}} {{cliType .GoType}} `help:"Set {{.Name}}." name:"{{toLower .Name}}"`
 	{{- end}}
 {{- end}}{{end}}
 }
 
 func (c *{{.Name}}AddCmd) Run(client *{{$.Name}}.Client) error {
-	v := &{{$.Name}}.{{.Name}}{
-{{- range scalarFields .Fields}}{{if and (not .IsUID) (not .IsDType) (eq .GoType "string") (not .IsPrivate)}}
-		{{.Name}}: c.{{.Name}},
-{{- end}}{{end}}
+	v := &{{$.Name}}.{{.Name}}{}
+{{- range nonSliceScalarFields .Fields}}{{if and (not .IsUID) (not .IsDType)}}
+	{{- if contains .GoType "time."}}
+	if c.{{if .IsPrivate}}{{.Name | toCamelCase}}{{else}}{{.Name}}{{end}} != "" {
+		parsed, err := time.Parse(time.RFC3339, c.{{if .IsPrivate}}{{.Name | toCamelCase}}{{else}}{{.Name}}{{end}})
+		if err != nil {
+			return fmt.Errorf("invalid time for {{.Name}}: %w", err)
+		}
+		{{- if .IsPrivate}}
+		v.Set{{.Name | toCamelCase}}(parsed)
+		{{- else}}
+		v.{{.Name}} = parsed
+		{{- end}}
 	}
-{{- range scalarFields .Fields}}{{if and (not .IsUID) (not .IsDType) (eq .GoType "string") .IsPrivate}}
-	v.Set{{.Name | toCamelCase}}(c.{{.Name | toCamelCase}})
+	{{- else if .IsPrivate}}
+	v.Set{{.Name | toCamelCase}}({{cliConvert .GoType (print "c." (.Name | toCamelCase))}})
+	{{- else}}
+	v.{{.Name}} = {{cliConvert .GoType (print "c." .Name)}}
+	{{- end}}
 {{- end}}{{end}}
 	if err := client.{{.Name}}.Add(context.Background(), v); err != nil {
 		return err

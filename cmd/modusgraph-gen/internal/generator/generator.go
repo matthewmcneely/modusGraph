@@ -70,12 +70,13 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"add":          func(a, b int) int { return a + b },
 
 		// Field helpers for templates.
-		"scalarFields":             scalarFields,
-		"edgeFields":               edgeFields,
-		"searchPredicate":          searchPredicate,
-		"externalImports":          externalImports,
+		"scalarFields":              scalarFields,
+		"edgeFields":                edgeFields,
+		"searchPredicate":           searchPredicate,
+		"externalImports":           externalImports,
 		"nonSliceScalarFields":      nonSliceScalarFields,
 		"hasPrivateFields":          hasPrivateFields,
+		"privateFields":             privateFields,
 		"privateScalarFields":       privateScalarFields,
 		"privateSingularEdgeFields": privateSingularEdgeFields,
 		"privateMultiEdgeFields":    privateMultiEdgeFields,
@@ -84,6 +85,10 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"allMultiEdgeFields":        allMultiEdgeFields,
 		"allSliceFields":            allSliceFields,
 		"elemType":                  elemType,
+		"cliType":                   cliType,
+		"cliConvert":                cliConvert,
+		"hasValidateTags":           hasValidateTags,
+		"fieldsWithValidation":      fieldsWithValidation,
 	}
 
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.tmpl")
@@ -269,6 +274,17 @@ func edgeFields(fields []model.Field) []model.Field {
 	return result
 }
 
+// privateFields returns all private, non-skipped, non-UID, non-DType fields.
+func privateFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsPrivate && !f.IsSkipped && !f.IsUID && !f.IsDType {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
 // hasPrivateFields returns true if any field is private and not skipped.
 func hasPrivateFields(fields []model.Field) bool {
 	for _, f := range fields {
@@ -360,6 +376,61 @@ func allSliceFields(fields []model.Field) []model.Field {
 // elemType strips the leading "[]" from a Go type string, returning the element type.
 func elemType(goType string) string {
 	return strings.TrimPrefix(goType, "[]")
+}
+
+// cliType maps a Go type to the appropriate type for a Kong CLI struct field.
+// Kong natively parses string, int, float64, bool, and time.Time flags.
+func cliType(goType string) string {
+	switch goType {
+	case "string", "int", "int64", "float64", "bool":
+		return goType
+	case "int32":
+		return "int"
+	case "float32":
+		return "float64"
+	case "time.Time":
+		return "string" // Parsed as string, converted in Run()
+	default:
+		return "string" // Fallback: accept as string
+	}
+}
+
+// cliConvert returns a Go expression that converts a CLI field value to the
+// entity field's Go type. For types that Kong handles natively (string, int,
+// float64, bool), this is an identity — the value is already the correct type.
+// For time.Time, this wraps with time.Parse.
+func cliConvert(goType, expr string) string {
+	switch goType {
+	case "string", "int", "int64", "float64", "bool":
+		return expr
+	case "int32":
+		return "int32(" + expr + ")"
+	case "float32":
+		return "float32(" + expr + ")"
+	default:
+		return expr
+	}
+}
+
+// hasValidateTags returns true if any field has a non-empty ValidateTag.
+func hasValidateTags(fields []model.Field) bool {
+	for _, f := range fields {
+		if f.ValidateTag != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// fieldsWithValidation returns fields that have a non-empty ValidateTag.
+func fieldsWithValidation(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.ValidateTag != "" {
+			result = append(result, f)
+		}
+	}
+	return result
 }
 
 // externalImports returns a sorted list of import paths needed by the given

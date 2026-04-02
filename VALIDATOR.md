@@ -172,7 +172,8 @@ type Film struct {
 // func (f *Film) SetDirector(v *Director) { ... }
 ```
 
-This provides a cleaner API when a relationship is conceptually one-to-one (or zero-to-one). The
-validation tag enforces the cardinality at runtime, while the generated accessors express it in the
-API surface. See the [Code Generation](README.md#code-generation) section in the README for full
+This provides a cleaner API when a relationship is conceptually one-to-one (or zero-to-one). When
+validation is enabled (via `WithValidator()`), the `validate` tag enforces cardinality at runtime.
+The generated accessors express the cardinality constraint in the API surface regardless of whether
+validation is enabled. See the [Code Generation](README.md#code-generation) section in the README for full
 details on private field support.

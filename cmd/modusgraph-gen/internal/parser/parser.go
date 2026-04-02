@@ -136,7 +136,9 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 		if len(f.Names) == 0 {
 			continue // embedded field, skip
 		}
-		fieldName := f.Names[0].Name
+		// Process all names in a multi-name declaration (e.g., "A, B string").
+		for _, ident := range f.Names {
+		fieldName := ident.Name
 
 		goType := typeString(f.Type)
 		field := model.Field{
@@ -166,9 +168,10 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 				parseDgraphTag(dgraphTag, &field)
 			}
 
-			// Parse validate tag for cardinality hints.
+			// Parse validate tag for cardinality hints and store raw tag.
 			validateTag := tag.Get("validate")
 			if validateTag != "" {
+				field.ValidateTag = validateTag
 				parseValidateTag(validateTag, &field)
 			}
 		}
@@ -195,16 +198,18 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 			field.Predicate = field.JSONTag
 		}
 
-		// Detect edges: field type is []SomeEntity where SomeEntity is a known struct.
+		// Detect edges: field type is []SomeEntity or []*SomeEntity where SomeEntity is a known struct.
 		if strings.HasPrefix(goType, "[]") {
 			elemType := goType[2:]
+			elemType = strings.TrimPrefix(elemType, "*") // handle []*Entity
 			if structNames[elemType] {
 				field.IsEdge = true
 				field.EdgeEntity = elemType
 			}
 		}
 
-		// Detect singular edges: field type is *SomeEntity where SomeEntity is a known struct.
+		// Detect singular edges: field type is *SomeEntity or bare SomeEntity
+		// where SomeEntity is a known struct.
 		if strings.HasPrefix(goType, "*") {
 			elemType := goType[1:]
 			if structNames[elemType] {
@@ -212,6 +217,11 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 				field.EdgeEntity = elemType
 				field.IsSingularEdge = true
 			}
+		} else if !strings.HasPrefix(goType, "[]") && structNames[goType] {
+			// Bare entity type (not pointer, not slice): e.g., "director Director"
+			field.IsEdge = true
+			field.EdgeEntity = goType
+			field.IsSingularEdge = true
 		}
 
 		// Detect reverse edges from predicate.
@@ -220,6 +230,7 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 		}
 
 		fields = append(fields, field)
+		} // end for each name in multi-name declaration
 	}
 
 	if !hasUID || !hasDType {

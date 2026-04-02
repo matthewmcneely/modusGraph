@@ -38,7 +38,8 @@ type Field struct {
 	OmitEmpty  bool     // True if json tag contains ",omitempty"
 	Upsert     bool     // True if dgraph tag contains "upsert"
 
-	IsPrivate      bool // True if the Go field name is lowercase (unexported)
-	IsSingularEdge bool // True if edge field has validate:"max=1" or validate:"len=1", or is *Entity type
-	IsSkipped      bool // True if field has no json tag or dgraph:"-"
+	IsPrivate      bool   // True if the Go field name is lowercase (unexported)
+	IsSingularEdge bool   // True if edge field has validate:"max=1" or validate:"len=1", or is *Entity type
+	IsSkipped      bool   // True if field has no json tag or dgraph:"-"
+	ValidateTag    string // Raw validate tag value, e.g. "required,min=2,max=100"
 }

@@ -13,4 +13,5 @@ type Film struct {
 	Ratings            []Rating        `json:"ratings,omitempty" dgraph:"predicate=rating reverse"`
 	ContentRatings     []ContentRating `json:"contentRatings,omitempty" dgraph:"predicate=rated reverse"`
 	Starring           []Performance   `json:"starring,omitempty" dgraph:"count"`
+	Directors          []*Director     `json:"directors,omitempty"` // Tests []*Entity edge detection (exported)
 }

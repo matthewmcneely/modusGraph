@@ -691,3 +691,475 @@ func TestGeneratedCLIDirAndAddrMutuallyExclusive(t *testing.T) {
 		t.Error("CLI should contain mutual exclusion error message")
 	}
 }
+
+func TestGeneratedAccessorsForEdgeVariants(t *testing.T) {
+	dir := moviesDir(t)
+	pkg, err := parser.Parse(dir)
+	if err != nil {
+		t.Fatalf("Parse(%s) failed: %v", dir, err)
+	}
+
+	tmpDir := t.TempDir()
+	if err := Generate(pkg, tmpDir); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, "studio_accessors_gen.go"))
+	if err != nil {
+		t.Fatalf("reading studio_accessors_gen.go: %v", err)
+	}
+	content := string(data)
+
+	// --- Private []Entity (films []Film) ---
+	t.Run("PrivateSliceEntity", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Films() []Film",
+			"func (e *Studio) SetFilms(v []Film)",
+			"func (e *Studio) AppendFilms(v ...Film)",
+			"func (e *Studio) RemoveFilms(uid string)",
+			"func (e *Studio) RemoveFilmsFunc(fn func(Film) bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+		// Should use value type in RemoveFilms predicate (not pointer)
+		if strings.Contains(content, "func(v *Film)") {
+			t.Error("RemoveFilms for []Film should use value type Film, not *Film")
+		}
+	})
+
+	// --- Private []*Entity (advisors []*Director) ---
+	t.Run("PrivateSlicePointerEntity", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Advisors() []*Director",
+			"func (e *Studio) SetAdvisors(v []*Director)",
+			"func (e *Studio) AppendAdvisors(v ...*Director)",
+			"func (e *Studio) RemoveAdvisors(uid string)",
+			"func (e *Studio) RemoveAdvisorsFunc(fn func(*Director) bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+		// Should have nil check in RemoveAdvisors (pointer elements)
+		if !strings.Contains(content, "v != nil && v.UID == uid") {
+			t.Error("RemoveAdvisors for []*Director should have nil check")
+		}
+	})
+
+	// --- Private bare Entity singular edge (headquarters Country) ---
+	t.Run("PrivateSingularBareEntity", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Headquarters() *Country",
+			"func (e *Studio) SetHeadquarters(v *Country)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+		// Getter should return &e.headquarters (address of value field)
+		if !strings.Contains(content, "return &e.headquarters") {
+			t.Error("bare entity getter should return &e.headquarters")
+		}
+		// Should NOT have Append/Remove for singular edges
+		if strings.Contains(content, "AppendHeadquarters") {
+			t.Error("singular edge should not have Append")
+		}
+	})
+
+	// --- Private *Entity singular edge (founder *Director) ---
+	t.Run("PrivateSingularPointerEntity", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Founder() *Director",
+			"func (e *Studio) SetFounder(v *Director)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+		// Should NOT have Append/Remove for singular edges
+		if strings.Contains(content, "AppendFounder") {
+			t.Error("singular edge should not have Append")
+		}
+	})
+
+	// --- Private []Entity+validate:"max=1" singular edge (currentHead []Director) ---
+	t.Run("PrivateSingularValidateMax1_SliceEntity", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) CurrentHead() *Director",
+			"func (e *Studio) SetCurrentHead(v *Director)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+		// Should NOT have Append/Remove
+		if strings.Contains(content, "AppendCurrentHead") {
+			t.Error("singular edge should not have Append")
+		}
+	})
+
+	// --- Private []*Entity+validate:"max=1" singular edge (ceo []*Director) ---
+	t.Run("PrivateSingularValidateMax1_SlicePointerEntity", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Ceo() *Director",
+			"func (e *Studio) SetCeo(v *Director)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+		if strings.Contains(content, "AppendCeo") {
+			t.Error("singular edge should not have Append")
+		}
+	})
+
+	// --- Private []Entity+validate:"len=1" singular edge (homeBase []Country) ---
+	t.Run("PrivateSingularValidateLen1_SliceEntity", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) HomeBase() *Country",
+			"func (e *Studio) SetHomeBase(v *Country)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	// --- Private []*Entity+validate:"len=1" singular edge (parentCompany []*Country) ---
+	t.Run("PrivateSingularValidateLen1_SlicePointerEntity", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) ParentCompany() *Country",
+			"func (e *Studio) SetParentCompany(v *Country)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	// --- Private scalars (all supported types) ---
+	t.Run("PrivateScalarString", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Name() string",
+			"func (e *Studio) SetName(v string)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateScalarInt", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) YearFounded() int",
+			"func (e *Studio) SetYearFounded(v int)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateScalarFloat64", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Revenue() float64",
+			"func (e *Studio) SetRevenue(v float64)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateScalarBool", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Active() bool",
+			"func (e *Studio) SetActive(v bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateScalarTime", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) CreatedAt() time.Time",
+			"func (e *Studio) SetCreatedAt(v time.Time)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateScalarVector", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Embedding() *dg.VectorFloat32",
+			"func (e *Studio) SetEmbedding(v *dg.VectorFloat32)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	// --- Private primitive slice ---
+	t.Run("PrivateSliceString", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Tags() []string",
+			"func (e *Studio) SetTags(v []string)",
+			"func (e *Studio) AppendTags(v ...string)",
+			"func (e *Studio) RemoveTags(v string)",
+			"func (e *Studio) RemoveTagsFunc(fn func(string) bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateSliceInt", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Scores() []int",
+			"func (e *Studio) SetScores(v []int)",
+			"func (e *Studio) AppendScores(v ...int)",
+			"func (e *Studio) RemoveScores(v int)",
+			"func (e *Studio) RemoveScoresFunc(fn func(int) bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateSliceFloat64", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Weights() []float64",
+			"func (e *Studio) SetWeights(v []float64)",
+			"func (e *Studio) AppendWeights(v ...float64)",
+			"func (e *Studio) RemoveWeights(v float64)",
+			"func (e *Studio) RemoveWeightsFunc(fn func(float64) bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateSliceBool", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Flags() []bool",
+			"func (e *Studio) SetFlags(v []bool)",
+			"func (e *Studio) AppendFlags(v ...bool)",
+			"func (e *Studio) RemoveFlags(v bool)",
+			"func (e *Studio) RemoveFlagsFunc(fn func(bool) bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+
+	t.Run("PrivateSliceTime", func(t *testing.T) {
+		checks := []string{
+			"func (e *Studio) Milestones() []time.Time",
+			"func (e *Studio) SetMilestones(v []time.Time)",
+			"func (e *Studio) AppendMilestones(v ...time.Time)",
+			"func (e *Studio) RemoveMilestones(v time.Time)",
+			"func (e *Studio) RemoveMilestonesFunc(fn func(time.Time) bool)",
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c) {
+				t.Errorf("missing: %s", c)
+			}
+		}
+	})
+}
+
+func TestGeneratedMarshalForEdgeVariants(t *testing.T) {
+	dir := moviesDir(t)
+	pkg, err := parser.Parse(dir)
+	if err != nil {
+		t.Fatalf("Parse(%s) failed: %v", dir, err)
+	}
+
+	tmpDir := t.TempDir()
+	if err := Generate(pkg, tmpDir); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, "studio_marshal_gen.go"))
+	if err != nil {
+		t.Fatalf("reading studio_marshal_gen.go: %v", err)
+	}
+	content := string(data)
+
+	t.Run("DgraphMapMethod", func(t *testing.T) {
+		if !strings.Contains(content, "func (e *Studio) DgraphMap() map[string]interface{}") {
+			t.Error("missing DgraphMap method")
+		}
+	})
+
+	t.Run("UnmarshalJSONMethod", func(t *testing.T) {
+		if !strings.Contains(content, "func (e *Studio) UnmarshalJSON(data []byte) error") {
+			t.Error("missing UnmarshalJSON method")
+		}
+	})
+
+	t.Run("PointerSliceNilCheck", func(t *testing.T) {
+		// []*Director should have nil check in DgraphMap
+		if !strings.Contains(content, "if e.advisors[i] != nil") {
+			t.Error("DgraphMap for []*Director should have nil check on elements")
+		}
+	})
+
+	t.Run("ValueSliceNoNilCheck", func(t *testing.T) {
+		// []Film should NOT have nil check in DgraphMap
+		if strings.Contains(content, "if e.films[i] != nil") {
+			t.Error("DgraphMap for []Film should not have nil check on value elements")
+		}
+	})
+
+	t.Run("UnmarshalAliasTypes", func(t *testing.T) {
+		// Alias struct should use correct types (check field name and type, ignoring whitespace)
+		if !strings.Contains(content, "[]*Director") || !strings.Contains(content, "Advisors") {
+			t.Error("UnmarshalJSON alias should have Advisors with []*Director type")
+		}
+		if !strings.Contains(content, "[]Film") || !strings.Contains(content, "Films") {
+			t.Error("UnmarshalJSON alias should have Films with []Film type")
+		}
+	})
+}
+
+func TestGeneratedValidateWithMethod(t *testing.T) {
+	dir := moviesDir(t)
+	pkg, err := parser.Parse(dir)
+	if err != nil {
+		t.Fatalf("Parse(%s) failed: %v", dir, err)
+	}
+
+	tmpDir := t.TempDir()
+	if err := Generate(pkg, tmpDir); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, "studio_marshal_gen.go"))
+	if err != nil {
+		t.Fatalf("reading studio_marshal_gen.go: %v", err)
+	}
+	content := string(data)
+
+	t.Run("HasValidateWithMethod", func(t *testing.T) {
+		if !strings.Contains(content, "func (e *Studio) ValidateWith(ctx context.Context, v modusgraph.StructValidator) error") {
+			t.Error("missing ValidateWith method")
+		}
+	})
+
+	t.Run("MirrorStructHasValidateTags", func(t *testing.T) {
+		// Check validate tags are present (ignore whitespace alignment)
+		checks := []struct{ field, tag string }{
+			{"Name", `validate:"required,min=2,max=200"`},
+			{"YearFounded", `validate:"gte=1800,lte=2100"`},
+			{"Revenue", `validate:"gte=0"`},
+		}
+		for _, c := range checks {
+			if !strings.Contains(content, c.field) || !strings.Contains(content, c.tag) {
+				t.Errorf("missing mirror field %s with tag %s", c.field, c.tag)
+			}
+		}
+	})
+
+	t.Run("MirrorAssignsAllFields", func(t *testing.T) {
+		// All fields should be in the mirror, not just validated ones
+		checks := []string{
+			"Name:",
+			"YearFounded:",
+			"Revenue:",
+			"Active:",     // no validate tag, still included
+			"Founded:",    // exported field, still included
+			"Films:",      // multi-edge, still included
+			"Tags:",       // primitive slice, still included
+		}
+		for _, c := range checks {
+			// Check the assignment block (e.field)
+			if !strings.Contains(content, c) {
+				t.Errorf("missing mirror field: %s", c)
+			}
+		}
+	})
+
+	t.Run("ImportsModusgraph", func(t *testing.T) {
+		if !strings.Contains(content, `"github.com/matthewmcneely/modusgraph"`) {
+			t.Error("marshal file should import modusgraph for StructValidator")
+		}
+	})
+
+	t.Run("ImportsContext", func(t *testing.T) {
+		if !strings.Contains(content, `"context"`) {
+			t.Error("marshal file should import context for ValidateWith")
+		}
+	})
+
+	// Entities without validate tags should NOT get ValidateWith
+	t.Run("NoValidateWithForExportedOnlyEntities", func(t *testing.T) {
+		// Film has no validate tags on any fields
+		filmData, err := os.ReadFile(filepath.Join(tmpDir, "film_gen.go"))
+		if err != nil {
+			t.Skipf("film_gen.go not found: %v", err)
+		}
+		if strings.Contains(string(filmData), "ValidateWith") {
+			t.Error("Film should NOT have ValidateWith (no validate tags)")
+		}
+	})
+}
+
+func TestGeneratedAccessorsNotForExportedOnlyEntities(t *testing.T) {
+	dir := moviesDir(t)
+	pkg, err := parser.Parse(dir)
+	if err != nil {
+		t.Fatalf("Parse(%s) failed: %v", dir, err)
+	}
+
+	tmpDir := t.TempDir()
+	if err := Generate(pkg, tmpDir); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	// Film has only exported fields (except Directors which is exported too).
+	// It should NOT get an accessors file.
+	_, err = os.Stat(filepath.Join(tmpDir, "film_accessors_gen.go"))
+	if err == nil {
+		t.Error("film_accessors_gen.go should NOT be generated (Film has no private fields)")
+	}
+
+	// Studio has private fields — it SHOULD get accessor and marshal files.
+	for _, f := range []string{"studio_accessors_gen.go", "studio_marshal_gen.go"} {
+		info, err := os.Stat(filepath.Join(tmpDir, f))
+		if err != nil {
+			t.Errorf("%s should exist: %v", f, err)
+		} else if info.Size() == 0 {
+			t.Errorf("%s should not be empty", f)
+		}
+	}
+}

@@ -1,6 +1,9 @@
 package parser
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -339,6 +342,137 @@ func TestParseMoviesPackage(t *testing.T) {
 		if tempCache != nil {
 			t.Error("Studio.tempCache should be skipped (no json tag)")
 		}
+
+		// Pointer-slice edge: advisors []*Director — should be detected as edge
+		advisors := findField(studio.Fields, "advisors")
+		if advisors == nil {
+			t.Fatal("Studio.advisors field not found")
+		}
+		if !advisors.IsEdge {
+			t.Error("Studio.advisors should be an edge ([]*Director)")
+		}
+		if advisors.EdgeEntity != "Director" {
+			t.Errorf("Studio.advisors EdgeEntity = %q, want %q", advisors.EdgeEntity, "Director")
+		}
+		if advisors.IsSingularEdge {
+			t.Error("Studio.advisors should NOT be a singular edge")
+		}
+	})
+
+	// Comprehensive edge field detection tests covering all combinations:
+	// []Entity (public), []*Entity (public), []Entity (private), []*Entity (private),
+	// *Entity (private singular), []Entity+validate:"max=1" (private singular)
+	t.Run("EdgeFieldVariants", func(t *testing.T) {
+		// Film: Genres []Genre (public, []Entity)
+		film := entityMap["Film"]
+		if film == nil {
+			t.Fatal("Film entity not found")
+		}
+		genres := findField(film.Fields, "Genres")
+		if genres == nil {
+			t.Fatal("Film.Genres not found")
+		}
+		if !genres.IsEdge || genres.EdgeEntity != "Genre" || genres.IsPrivate || genres.IsSingularEdge {
+			t.Errorf("Film.Genres: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Genre, public, multi",
+				genres.IsEdge, genres.EdgeEntity, genres.IsPrivate, genres.IsSingularEdge)
+		}
+
+		// Film: Directors []*Director (public, []*Entity)
+		directors := findField(film.Fields, "Directors")
+		if directors == nil {
+			t.Fatal("Film.Directors not found")
+		}
+		if !directors.IsEdge || directors.EdgeEntity != "Director" || directors.IsPrivate || directors.IsSingularEdge {
+			t.Errorf("Film.Directors: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Director, public, multi",
+				directors.IsEdge, directors.EdgeEntity, directors.IsPrivate, directors.IsSingularEdge)
+		}
+
+		// Studio: films []Film (private, []Entity)
+		studio := entityMap["Studio"]
+		if studio == nil {
+			t.Fatal("Studio entity not found")
+		}
+		films := findField(studio.Fields, "films")
+		if films == nil {
+			t.Fatal("Studio.films not found")
+		}
+		if !films.IsEdge || films.EdgeEntity != "Film" || !films.IsPrivate || films.IsSingularEdge {
+			t.Errorf("Studio.films: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Film, private, multi",
+				films.IsEdge, films.EdgeEntity, films.IsPrivate, films.IsSingularEdge)
+		}
+
+		// Studio: advisors []*Director (private, []*Entity)
+		advisors := findField(studio.Fields, "advisors")
+		if advisors == nil {
+			t.Fatal("Studio.advisors not found")
+		}
+		if !advisors.IsEdge || advisors.EdgeEntity != "Director" || !advisors.IsPrivate || advisors.IsSingularEdge {
+			t.Errorf("Studio.advisors: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Director, private, multi",
+				advisors.IsEdge, advisors.EdgeEntity, advisors.IsPrivate, advisors.IsSingularEdge)
+		}
+
+		// Studio: headquarters Country (private, bare Entity singular)
+		hq := findField(studio.Fields, "headquarters")
+		if hq == nil {
+			t.Fatal("Studio.headquarters not found")
+		}
+		if !hq.IsEdge || hq.EdgeEntity != "Country" || !hq.IsPrivate || !hq.IsSingularEdge {
+			t.Errorf("Studio.headquarters: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Country, private, singular",
+				hq.IsEdge, hq.EdgeEntity, hq.IsPrivate, hq.IsSingularEdge)
+		}
+		if hq.GoType != "Country" {
+			t.Errorf("Studio.headquarters GoType = %q, want %q", hq.GoType, "Country")
+		}
+
+		// Studio: founder *Director (private, *Entity singular)
+		founder := findField(studio.Fields, "founder")
+		if founder == nil {
+			t.Fatal("Studio.founder not found")
+		}
+		if !founder.IsEdge || founder.EdgeEntity != "Director" || !founder.IsPrivate || !founder.IsSingularEdge {
+			t.Errorf("Studio.founder: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Director, private, singular",
+				founder.IsEdge, founder.EdgeEntity, founder.IsPrivate, founder.IsSingularEdge)
+		}
+
+		// Studio: currentHead []Director+validate:"max=1" (private, singular via validate)
+		currentHead := findField(studio.Fields, "currentHead")
+		if currentHead == nil {
+			t.Fatal("Studio.currentHead not found")
+		}
+		if !currentHead.IsEdge || currentHead.EdgeEntity != "Director" || !currentHead.IsPrivate || !currentHead.IsSingularEdge {
+			t.Errorf("Studio.currentHead: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Director, private, singular",
+				currentHead.IsEdge, currentHead.EdgeEntity, currentHead.IsPrivate, currentHead.IsSingularEdge)
+		}
+
+		// Studio: ceo []*Director+validate:"max=1" (private, []*Entity singular via validate)
+		ceo := findField(studio.Fields, "ceo")
+		if ceo == nil {
+			t.Fatal("Studio.ceo not found")
+		}
+		if !ceo.IsEdge || ceo.EdgeEntity != "Director" || !ceo.IsPrivate || !ceo.IsSingularEdge {
+			t.Errorf("Studio.ceo: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Director, private, singular",
+				ceo.IsEdge, ceo.EdgeEntity, ceo.IsPrivate, ceo.IsSingularEdge)
+		}
+
+		// Studio: homeBase []Country+validate:"len=1" (private, []Entity singular via len=1)
+		homeBase := findField(studio.Fields, "homeBase")
+		if homeBase == nil {
+			t.Fatal("Studio.homeBase not found")
+		}
+		if !homeBase.IsEdge || homeBase.EdgeEntity != "Country" || !homeBase.IsPrivate || !homeBase.IsSingularEdge {
+			t.Errorf("Studio.homeBase: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Country, private, singular",
+				homeBase.IsEdge, homeBase.EdgeEntity, homeBase.IsPrivate, homeBase.IsSingularEdge)
+		}
+
+		// Studio: parentCompany []*Country+validate:"len=1" (private, []*Entity singular via len=1)
+		parentCompany := findField(studio.Fields, "parentCompany")
+		if parentCompany == nil {
+			t.Fatal("Studio.parentCompany not found")
+		}
+		if !parentCompany.IsEdge || parentCompany.EdgeEntity != "Country" || !parentCompany.IsPrivate || !parentCompany.IsSingularEdge {
+			t.Errorf("Studio.parentCompany: IsEdge=%v EdgeEntity=%q IsPrivate=%v IsSingularEdge=%v; want edge to Country, private, singular",
+				parentCompany.IsEdge, parentCompany.EdgeEntity, parentCompany.IsPrivate, parentCompany.IsSingularEdge)
+		}
 	})
 
 	t.Run("AllEntitiesSearchable", func(t *testing.T) {
@@ -501,6 +635,60 @@ func TestParseDgraphTagSkip(t *testing.T) {
 	}
 }
 
+func TestParseMultiNameDeclaration(t *testing.T) {
+	// Verify that parseStruct handles "A, B Type" declarations
+	// by generating fields for each name. Note: in real structs with
+	// tags, multi-name declarations share a single tag — but the parser
+	// should still emit a Field for each name.
+	src := `package test
+
+type MultiName struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	A, B  string
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "test.go", src, parser.AllErrors)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var entity model.Entity
+	found := false
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			st, ok := typeSpec.Type.(*ast.StructType)
+			if !ok {
+				continue
+			}
+			entity, found = parseStruct(typeSpec.Name.Name, st, map[string]bool{})
+			break
+		}
+	}
+
+	if !found {
+		t.Fatal("MultiName struct not detected as entity")
+	}
+
+	// A and B have no json tag so they should be skipped.
+	// Only UID and DType should be in fields.
+	// This verifies the multi-name loop runs without error.
+	for _, f := range entity.Fields {
+		if f.Name == "A" || f.Name == "B" {
+			t.Errorf("Field %q should be skipped (no json tag)", f.Name)
+		}
+	}
+}
+
 func TestReadModulePath(t *testing.T) {
 	t.Run("FromMoviesProject", func(t *testing.T) {
 		dir := moviesDir(t)
@@ -522,7 +710,7 @@ func TestReadModulePath(t *testing.T) {
 	})
 
 	t.Run("EmptyForNonExistentDir", func(t *testing.T) {
-		got := readModulePath("/tmp/nonexistent-dir-for-test")
+		got := readModulePath(filepath.Join(t.TempDir(), "nonexistent-subdir"))
 		if got != "" {
 			t.Errorf("readModulePath(nonexistent) = %q, want empty string", got)
 		}

@@ -4,6 +4,7 @@ package movies
 
 import (
 	"slices"
+	"time"
 )
 
 // Name returns the name field.
@@ -16,6 +17,56 @@ func (e *Studio) SetName(v string) {
 	e.name = v
 }
 
+// YearFounded returns the yearFounded field.
+func (e *Studio) YearFounded() int {
+	return e.yearFounded
+}
+
+// SetYearFounded sets the yearFounded field.
+func (e *Studio) SetYearFounded(v int) {
+	e.yearFounded = v
+}
+
+// Revenue returns the revenue field.
+func (e *Studio) Revenue() float64 {
+	return e.revenue
+}
+
+// SetRevenue sets the revenue field.
+func (e *Studio) SetRevenue(v float64) {
+	e.revenue = v
+}
+
+// Active returns the active field.
+func (e *Studio) Active() bool {
+	return e.active
+}
+
+// SetActive sets the active field.
+func (e *Studio) SetActive(v bool) {
+	e.active = v
+}
+
+// CreatedAt returns the createdAt field.
+func (e *Studio) CreatedAt() time.Time {
+	return e.createdAt
+}
+
+// SetCreatedAt sets the createdAt field.
+func (e *Studio) SetCreatedAt(v time.Time) {
+	e.createdAt = v
+}
+
+// Embedding returns the embedding field.
+func (e *Studio) Embedding() *dg.VectorFloat32 {
+	return e.embedding
+}
+
+// SetEmbedding sets the embedding field.
+func (e *Studio) SetEmbedding(v *dg.VectorFloat32) {
+	e.embedding = v
+}
+
 // Founder returns the founder singular edge, or nil if unset.
 func (e *Studio) Founder() *Director {
 	return e.founder
@@ -24,6 +75,18 @@ func (e *Studio) Founder() *Director {
 // SetFounder sets the founder singular edge. Pass nil to clear.
 func (e *Studio) SetFounder(v *Director) {
 	e.founder = v
+}
+
+// Headquarters returns the headquarters singular edge, or nil if unset.
+func (e *Studio) Headquarters() *Country {
+	return &e.headquarters
+}
+
+// SetHeadquarters sets the headquarters singular edge. Pass nil to clear.
+func (e *Studio) SetHeadquarters(v *Country) {
+	if v != nil {
+		e.headquarters = *v
+	}
 }
 
 // CurrentHead returns the currentHead singular edge, or nil if unset.
@@ -40,6 +103,57 @@ func (e *Studio) SetCurrentHead(v *Director) {
 		e.currentHead = nil
 	} else {
 		e.currentHead = []Director{*v}
+	}
+}
+
+// Ceo returns the ceo singular edge, or nil if unset.
+func (e *Studio) Ceo() *Director {
+	if len(e.ceo) == 0 {
+		return nil
+	}
+	return e.ceo[0]
+}
+
+// SetCeo sets the ceo singular edge. Pass nil to clear.
+func (e *Studio) SetCeo(v *Director) {
+	if v == nil {
+		e.ceo = nil
+	} else {
+		e.ceo = []*Director{v}
+	}
+}
+
+// HomeBase returns the homeBase singular edge, or nil if unset.
+func (e *Studio) HomeBase() *Country {
+	if len(e.homeBase) == 0 {
+		return nil
+	}
+	return &e.homeBase[0]
+}
+
+// SetHomeBase sets the homeBase singular edge. Pass nil to clear.
+func (e *Studio) SetHomeBase(v *Country) {
+	if v == nil {
+		e.homeBase = nil
+	} else {
+		e.homeBase = []Country{*v}
+	}
+}
+
+// ParentCompany returns the parentCompany singular edge, or nil if unset.
+func (e *Studio) ParentCompany() *Country {
+	if len(e.parentCompany) == 0 {
+		return nil
+	}
+	return e.parentCompany[0]
+}
+
+// SetParentCompany sets the parentCompany singular edge. Pass nil to clear.
+func (e *Studio) SetParentCompany(v *Country) {
+	if v == nil {
+		e.parentCompany = nil
+	} else {
+		e.parentCompany = []*Country{v}
 	}
 }
 
@@ -60,12 +174,41 @@ func (e *Studio) AppendFilms(v ...Film) {
 
 // RemoveFilms removes the edge with the given UID.
 func (e *Studio) RemoveFilms(uid string) {
-	e.films = slices.DeleteFunc(e.films, func(v Film) bool { return v.UID == uid })
+	e.films = slices.DeleteFunc(e.films, func(v Film) bool {
+		return v.UID == uid
+	})
 }
 
 // RemoveFilmsFunc removes edges matching the predicate.
 func (e *Studio) RemoveFilmsFunc(fn func(Film) bool) {
 	e.films = slices.DeleteFunc(e.films, fn)
+}
+
+// Advisors returns the advisors edges.
+func (e *Studio) Advisors() []*Director {
+	return e.advisors
+}
+
+// SetAdvisors replaces the advisors edges.
+func (e *Studio) SetAdvisors(v []*Director) {
+	e.advisors = v
+}
+
+// AppendAdvisors appends one or more Director edges.
+func (e *Studio) AppendAdvisors(v ...*Director) {
+	e.advisors = append(e.advisors, v...)
+}
+
+// RemoveAdvisors removes the edge with the given UID.
+func (e *Studio) RemoveAdvisors(uid string) {
+	e.advisors = slices.DeleteFunc(e.advisors, func(v *Director) bool {
+		return v != nil && v.UID == uid
+	})
+}
+
+// RemoveAdvisorsFunc removes edges matching the predicate.
+func (e *Studio) RemoveAdvisorsFunc(fn func(*Director) bool) {
+	e.advisors = slices.DeleteFunc(e.advisors, fn)
 }
 
 // Tags returns the tags slice.
@@ -96,4 +239,124 @@ func (e *Studio) RemoveTags(v string) {
 // RemoveTagsFunc removes values matching the predicate.
 func (e *Studio) RemoveTagsFunc(fn func(string) bool) {
 	e.tags = slices.DeleteFunc(e.tags, fn)
+}
+
+// Scores returns the scores slice.
+func (e *Studio) Scores() []int {
+	return e.scores
+}
+
+// SetScores replaces the scores slice.
+func (e *Studio) SetScores(v []int) {
+	e.scores = v
+}
+
+// AppendScores appends one or more values to scores.
+func (e *Studio) AppendScores(v ...int) {
+	e.scores = append(e.scores, v...)
+}
+
+// RemoveScores removes the first occurrence of v from scores.
+func (e *Studio) RemoveScores(v int) {
+	for i, item := range e.scores {
+		if item == v {
+			e.scores = slices.Delete(e.scores, i, i+1)
+			return
+		}
+	}
+}
+
+// RemoveScoresFunc removes values matching the predicate.
+func (e *Studio) RemoveScoresFunc(fn func(int) bool) {
+	e.scores = slices.DeleteFunc(e.scores, fn)
+}
+
+// Weights returns the weights slice.
+func (e *Studio) Weights() []float64 {
+	return e.weights
+}
+
+// SetWeights replaces the weights slice.
+func (e *Studio) SetWeights(v []float64) {
+	e.weights = v
+}
+
+// AppendWeights appends one or more values to weights.
+func (e *Studio) AppendWeights(v ...float64) {
+	e.weights = append(e.weights, v...)
+}
+
+// RemoveWeights removes the first occurrence of v from weights.
+func (e *Studio) RemoveWeights(v float64) {
+	for i, item := range e.weights {
+		if item == v {
+			e.weights = slices.Delete(e.weights, i, i+1)
+			return
+		}
+	}
+}
+
+// RemoveWeightsFunc removes values matching the predicate.
+func (e *Studio) RemoveWeightsFunc(fn func(float64) bool) {
+	e.weights = slices.DeleteFunc(e.weights, fn)
+}
+
+// Flags returns the flags slice.
+func (e *Studio) Flags() []bool {
+	return e.flags
+}
+
+// SetFlags replaces the flags slice.
+func (e *Studio) SetFlags(v []bool) {
+	e.flags = v
+}
+
+// AppendFlags appends one or more values to flags.
+func (e *Studio) AppendFlags(v ...bool) {
+	e.flags = append(e.flags, v...)
+}
+
+// RemoveFlags removes the first occurrence of v from flags.
+func (e *Studio) RemoveFlags(v bool) {
+	for i, item := range e.flags {
+		if item == v {
+			e.flags = slices.Delete(e.flags, i, i+1)
+			return
+		}
+	}
+}
+
+// RemoveFlagsFunc removes values matching the predicate.
+func (e *Studio) RemoveFlagsFunc(fn func(bool) bool) {
+	e.flags = slices.DeleteFunc(e.flags, fn)
+}
+
+// Milestones returns the milestones slice.
+func (e *Studio) Milestones() []time.Time {
+	return e.milestones
+}
+
+// SetMilestones replaces the milestones slice.
+func (e *Studio) SetMilestones(v []time.Time) {
+	e.milestones = v
+}
+
+// AppendMilestones appends one or more values to milestones.
+func (e *Studio) AppendMilestones(v ...time.Time) {
+	e.milestones = append(e.milestones, v...)
+}
+
+// RemoveMilestones removes the first occurrence of v from milestones.
+func (e *Studio) RemoveMilestones(v time.Time) {
+	for i, item := range e.milestones {
+		if item == v {
+			e.milestones = slices.Delete(e.milestones, i, i+1)
+			return
+		}
+	}
+}
+
+// RemoveMilestonesFunc removes values matching the predicate.
+func (e *Studio) RemoveMilestonesFunc(fn func(time.Time) bool) {
+	e.milestones = slices.DeleteFunc(e.milestones, fn)
 }

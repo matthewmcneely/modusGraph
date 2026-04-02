@@ -3,7 +3,10 @@
 package movies
 
 import (
+	"context"
 	"encoding/json"
+
+	"github.com/matthewmcneely/modusgraph"
 )
 
 // DgraphMap converts the Studio to a map for Dgraph mutation.
@@ -19,24 +22,68 @@ func (e *Studio) DgraphMap() map[string]interface{} {
 	if e.name != "" {
 		m["name"] = e.name
 	}
+	if e.yearFounded != 0 {
+		m["yearFounded"] = e.yearFounded
+	}
+	if e.revenue != 0 {
+		m["revenue"] = e.revenue
+	}
+	if e.active {
+		m["active"] = e.active
+	}
+	if !e.createdAt.IsZero() {
+		m["createdAt"] = e.createdAt
+	}
+	m["embedding"] = e.embedding
 	if e.Founded != "" {
 		m["founded"] = e.Founded
 	}
 	if e.founder != nil {
 		m["founder"] = e.founder.DgraphMap()
 	}
+	m["headquarters"] = e.headquarters.DgraphMap()
 	if len(e.currentHead) > 0 {
 		m["currentHead"] = e.currentHead[0].DgraphMap()
 	}
+	if len(e.ceo) > 0 && e.ceo[0] != nil {
+		m["ceo"] = e.ceo[0].DgraphMap()
+	}
+	if len(e.homeBase) > 0 {
+		m["homeBase"] = e.homeBase[0].DgraphMap()
+	}
+	if len(e.parentCompany) > 0 && e.parentCompany[0] != nil {
+		m["parentCompany"] = e.parentCompany[0].DgraphMap()
+	}
 	if len(e.films) > 0 {
-		s := make([]map[string]interface{}, len(e.films))
+		s := make([]map[string]interface{}, 0, len(e.films))
 		for i := range e.films {
-			s[i] = e.films[i].DgraphMap()
+			s = append(s, e.films[i].DgraphMap())
 		}
 		m["films"] = s
 	}
+	if len(e.advisors) > 0 {
+		s := make([]map[string]interface{}, 0, len(e.advisors))
+		for i := range e.advisors {
+			if e.advisors[i] != nil {
+				s = append(s, e.advisors[i].DgraphMap())
+			}
+		}
+		m["advisors"] = s
+	}
 	if len(e.tags) > 0 {
 		m["tags"] = e.tags
+	}
+	if len(e.scores) > 0 {
+		m["scores"] = e.scores
+	}
+	if len(e.weights) > 0 {
+		m["weights"] = e.weights
+	}
+	if len(e.flags) > 0 {
+		m["flags"] = e.flags
+	}
+	if len(e.milestones) > 0 {
+		m["milestones"] = e.milestones
 	}
 	return m
 }
@@ -45,14 +92,28 @@ func (e *Studio) DgraphMap() map[string]interface{} {
 // allowing private fields to be populated from Dgraph query responses.
 func (e *Studio) UnmarshalJSON(data []byte) error {
 	type alias struct {
-		UID         string     `json:"uid,omitempty"`
-		DType       []string   `json:"dgraph.type,omitempty"`
-		Name        string     `json:"name,omitempty"`
-		Founded     string     `json:"founded,omitempty"`
-		Founder     *Director  `json:"founder,omitempty"`
-		CurrentHead []Director `json:"currentHead,omitempty"`
-		Films       []Film     `json:"films,omitempty"`
-		Tags        []string   `json:"tags,omitempty"`
+		UID           string            `json:"uid,omitempty"`
+		DType         []string          `json:"dgraph.type,omitempty"`
+		Name          string            `json:"name,omitempty"`
+		YearFounded   int               `json:"yearFounded,omitempty"`
+		Revenue       float64           `json:"revenue,omitempty"`
+		Active        bool              `json:"active,omitempty"`
+		CreatedAt     time.Time         `json:"createdAt,omitempty"`
+		Embedding     *dg.VectorFloat32 `json:"embedding,omitempty"`
+		Founded       string            `json:"founded,omitempty"`
+		Founder       *Director         `json:"founder,omitempty"`
+		Headquarters  Country           `json:"headquarters,omitempty"`
+		CurrentHead   []Director        `json:"currentHead,omitempty"`
+		Ceo           []*Director       `json:"ceo,omitempty"`
+		HomeBase      []Country         `json:"homeBase,omitempty"`
+		ParentCompany []*Country        `json:"parentCompany,omitempty"`
+		Films         []Film            `json:"films,omitempty"`
+		Advisors      []*Director       `json:"advisors,omitempty"`
+		Tags          []string          `json:"tags,omitempty"`
+		Scores        []int             `json:"scores,omitempty"`
+		Weights       []float64         `json:"weights,omitempty"`
+		Flags         []bool            `json:"flags,omitempty"`
+		Milestones    []time.Time       `json:"milestones,omitempty"`
 	}
 	var a alias
 	if err := json.Unmarshal(data, &a); err != nil {
@@ -61,10 +122,75 @@ func (e *Studio) UnmarshalJSON(data []byte) error {
 	e.UID = a.UID
 	e.DType = a.DType
 	e.name = a.Name
+	e.yearFounded = a.YearFounded
+	e.revenue = a.Revenue
+	e.active = a.Active
+	e.createdAt = a.CreatedAt
+	e.embedding = a.Embedding
 	e.Founded = a.Founded
 	e.founder = a.Founder
+	e.headquarters = a.Headquarters
 	e.currentHead = a.CurrentHead
+	e.ceo = a.Ceo
+	e.homeBase = a.HomeBase
+	e.parentCompany = a.ParentCompany
 	e.films = a.Films
+	e.advisors = a.Advisors
 	e.tags = a.Tags
+	e.scores = a.Scores
+	e.weights = a.Weights
+	e.flags = a.Flags
+	e.milestones = a.Milestones
 	return nil
+}
+
+// ValidateWith validates the Studio using a mirror struct with exported fields,
+// allowing the validator to access private field values safely. All fields are
+// included so that custom validators (registered by field name or type) work
+// correctly. Fields with validate tags have their tags preserved on the mirror.
+func (e *Studio) ValidateWith(ctx context.Context, v modusgraph.StructValidator) error {
+	type mirror struct {
+		Name          string  `validate:"required,min=2,max=200"`
+		YearFounded   int     `validate:"gte=1800,lte=2100"`
+		Revenue       float64 `validate:"gte=0"`
+		Active        bool
+		CreatedAt     time.Time
+		Embedding     *dg.VectorFloat32
+		Founded       string
+		Founder       *Director
+		Headquarters  Country
+		CurrentHead   []Director  `validate:"max=1"`
+		Ceo           []*Director `validate:"max=1"`
+		HomeBase      []Country   `validate:"len=1"`
+		ParentCompany []*Country  `validate:"len=1"`
+		Films         []Film
+		Advisors      []*Director
+		Tags          []string
+		Scores        []int
+		Weights       []float64
+		Flags         []bool
+		Milestones    []time.Time
+	}
+	return v.StructCtx(ctx, mirror{
+		Name:          e.name,
+		YearFounded:   e.yearFounded,
+		Revenue:       e.revenue,
+		Active:        e.active,
+		CreatedAt:     e.createdAt,
+		Embedding:     e.embedding,
+		Founded:       e.Founded,
+		Founder:       e.founder,
+		Headquarters:  e.headquarters,
+		CurrentHead:   e.currentHead,
+		Ceo:           e.ceo,
+		HomeBase:      e.homeBase,
+		ParentCompany: e.parentCompany,
+		Films:         e.films,
+		Advisors:      e.advisors,
+		Tags:          e.tags,
+		Scores:        e.scores,
+		Weights:       e.weights,
+		Flags:         e.flags,
+		Milestones:    e.milestones,
+	})
 }
