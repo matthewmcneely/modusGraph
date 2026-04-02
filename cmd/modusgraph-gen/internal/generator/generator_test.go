@@ -351,6 +351,98 @@ func TestToSnakeCase(t *testing.T) {
 	}
 }
 
+func TestToCamelCaseInitialisms(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		// Standard initialisms
+		{"id", "ID"},
+		{"url", "URL"},
+		{"http", "HTTP"},
+		{"api", "API"},
+		{"json", "JSON"},
+		{"xml", "XML"},
+		{"sql", "SQL"},
+		{"ssh", "SSH"},
+		{"uid", "UID"},
+		{"uuid", "UUID"},
+		{"uri", "URI"},
+		{"html", "HTML"},
+		{"css", "CSS"},
+		{"ip", "IP"},
+		{"tcp", "TCP"},
+		{"tls", "TLS"},
+		{"ttl", "TTL"},
+		{"cpu", "CPU"},
+		{"ram", "RAM"},
+		{"ui", "UI"},
+
+		// Compound names with initialisms
+		{"http_endpoint", "HTTPEndpoint"},
+		{"api_key", "APIKey"},
+		{"user_id", "UserID"},
+		{"json_data", "JSONData"},
+		{"sql_query", "SQLQuery"},
+		{"tcp_port", "TCPPort"},
+
+		// Non-initialisms unchanged
+		{"name", "Name"},
+		{"yearFounded", "YearFounded"},
+		{"active", "Active"},
+		{"createdAt", "CreatedAt"},
+		{"revenue", "Revenue"},
+
+		// Edge cases
+		{"", ""},
+		{"a", "A"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := toCamelCase(tt.input)
+			if got != tt.want {
+				t.Errorf("toCamelCase(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAccessorName(t *testing.T) {
+	// accessorName should use AccessorName override when set.
+	t.Run("WithOverride", func(t *testing.T) {
+		f := model.Field{Name: "id", AccessorName: "ID"}
+		got := accessorName(f)
+		if got != "ID" {
+			t.Errorf("accessorName(id with override ID) = %q, want %q", got, "ID")
+		}
+	})
+
+	t.Run("OverrideTakesPrecedence", func(t *testing.T) {
+		f := model.Field{Name: "yearFounded", AccessorName: "Founded"}
+		got := accessorName(f)
+		if got != "Founded" {
+			t.Errorf("accessorName(yearFounded with override Founded) = %q, want %q", got, "Founded")
+		}
+	})
+
+	// accessorName should fall back to toCamelCase when no override is set.
+	t.Run("FallbackInitialism", func(t *testing.T) {
+		f := model.Field{Name: "id"}
+		got := accessorName(f)
+		if got != "ID" {
+			t.Errorf("accessorName(id no override) = %q, want %q", got, "ID")
+		}
+	})
+
+	t.Run("FallbackRegular", func(t *testing.T) {
+		f := model.Field{Name: "name"}
+		got := accessorName(f)
+		if got != "Name" {
+			t.Errorf("accessorName(name no override) = %q, want %q", got, "Name")
+		}
+	})
+}
+
 func TestSearchPredicate(t *testing.T) {
 	dir := moviesDir(t)
 	pkg, err := parser.Parse(dir)
@@ -1096,10 +1188,10 @@ func TestGeneratedValidateWithMethod(t *testing.T) {
 			"Name:",
 			"YearFounded:",
 			"Revenue:",
-			"Active:",     // no validate tag, still included
-			"Founded:",    // exported field, still included
-			"Films:",      // multi-edge, still included
-			"Tags:",       // primitive slice, still included
+			"Active:",  // no validate tag, still included
+			"Founded:", // exported field, still included
+			"Films:",   // multi-edge, still included
+			"Tags:",    // primitive slice, still included
 		}
 		for _, c := range checks {
 			// Check the assignment block (e.field)

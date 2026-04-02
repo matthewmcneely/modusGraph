@@ -25,19 +25,19 @@ import (
 )
 {{end}}
 {{- range $privateScalars}}
-// {{.Name | toCamelCase}} returns the {{.Name}} field.
-func (e *{{$name}}) {{.Name | toCamelCase}}() {{.GoType}} {
+// {{. | accessorName}} returns the {{.Name}} field.
+func (e *{{$name}}) {{. | accessorName}}() {{.GoType}} {
 	return e.{{.Name}}
 }
 
-// Set{{.Name | toCamelCase}} sets the {{.Name}} field.
-func (e *{{$name}}) Set{{.Name | toCamelCase}}(v {{.GoType}}) {
+// Set{{. | accessorName}} sets the {{.Name}} field.
+func (e *{{$name}}) Set{{. | accessorName}}(v {{.GoType}}) {
 	e.{{.Name}} = v
 }
 {{end}}
 {{- range $singularEdges}}
-// {{.Name | toCamelCase}} returns the {{.Name}} singular edge, or nil if unset.
-func (e *{{$name}}) {{.Name | toCamelCase}}() *{{.EdgeEntity}} {
+// {{. | accessorName}} returns the {{.Name}} singular edge, or nil if unset.
+func (e *{{$name}}) {{. | accessorName}}() *{{.EdgeEntity}} {
 {{- if hasPrefix .GoType "*"}}
 	return e.{{.Name}}
 {{- else if hasPrefix .GoType "[]*"}}
@@ -55,8 +55,8 @@ func (e *{{$name}}) {{.Name | toCamelCase}}() *{{.EdgeEntity}} {
 {{- end}}
 }
 
-// Set{{.Name | toCamelCase}} sets the {{.Name}} singular edge. Pass nil to clear.
-func (e *{{$name}}) Set{{.Name | toCamelCase}}(v *{{.EdgeEntity}}) {
+// Set{{. | accessorName}} sets the {{.Name}} singular edge. Pass nil to clear.
+func (e *{{$name}}) Set{{. | accessorName}}(v *{{.EdgeEntity}}) {
 {{- if hasPrefix .GoType "*"}}
 	e.{{.Name}} = v
 {{- else if hasPrefix .GoType "[]*"}}
@@ -79,51 +79,51 @@ func (e *{{$name}}) Set{{.Name | toCamelCase}}(v *{{.EdgeEntity}}) {
 }
 {{end}}
 {{- range $multiEdges}}
-// {{.Name | toCamelCase}} returns the {{.Name}} edges.
-func (e *{{$name}}) {{.Name | toCamelCase}}() {{.GoType}} {
+// {{. | accessorName}} returns the {{.Name}} edges.
+func (e *{{$name}}) {{. | accessorName}}() {{.GoType}} {
 	return e.{{.Name}}
 }
 
-// Set{{.Name | toCamelCase}} replaces the {{.Name}} edges.
-func (e *{{$name}}) Set{{.Name | toCamelCase}}(v {{.GoType}}) {
+// Set{{. | accessorName}} replaces the {{.Name}} edges.
+func (e *{{$name}}) Set{{. | accessorName}}(v {{.GoType}}) {
 	e.{{.Name}} = v
 }
 
-// Append{{.Name | toCamelCase}} appends one or more {{.EdgeEntity}} edges.
-func (e *{{$name}}) Append{{.Name | toCamelCase}}(v ...{{elemType .GoType}}) {
+// Append{{. | accessorName}} appends one or more {{.EdgeEntity}} edges.
+func (e *{{$name}}) Append{{. | accessorName}}(v ...{{elemType .GoType}}) {
 	e.{{.Name}} = append(e.{{.Name}}, v...)
 }
 
-// Remove{{.Name | toCamelCase}} removes the edge with the given UID.
-func (e *{{$name}}) Remove{{.Name | toCamelCase}}(uid string) {
+// Remove{{. | accessorName}} removes the edge with the given UID.
+func (e *{{$name}}) Remove{{. | accessorName}}(uid string) {
 	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, func(v {{elemType .GoType}}) bool {
 	{{- if hasPrefix (elemType .GoType) "*"}} return v != nil && v.UID == uid {{- else}} return v.UID == uid {{- end}}
 	})
 }
 
-// Remove{{.Name | toCamelCase}}Func removes edges matching the predicate.
-func (e *{{$name}}) Remove{{.Name | toCamelCase}}Func(fn func({{elemType .GoType}}) bool) {
+// Remove{{. | accessorName}}Func removes edges matching the predicate.
+func (e *{{$name}}) Remove{{. | accessorName}}Func(fn func({{elemType .GoType}}) bool) {
 	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, fn)
 }
 {{end}}
 {{- range $sliceFields}}
-// {{.Name | toCamelCase}} returns the {{.Name}} slice.
-func (e *{{$name}}) {{.Name | toCamelCase}}() {{.GoType}} {
+// {{. | accessorName}} returns the {{.Name}} slice.
+func (e *{{$name}}) {{. | accessorName}}() {{.GoType}} {
 	return e.{{.Name}}
 }
 
-// Set{{.Name | toCamelCase}} replaces the {{.Name}} slice.
-func (e *{{$name}}) Set{{.Name | toCamelCase}}(v {{.GoType}}) {
+// Set{{. | accessorName}} replaces the {{.Name}} slice.
+func (e *{{$name}}) Set{{. | accessorName}}(v {{.GoType}}) {
 	e.{{.Name}} = v
 }
 
-// Append{{.Name | toCamelCase}} appends one or more values to {{.Name}}.
-func (e *{{$name}}) Append{{.Name | toCamelCase}}(v ...{{elemType .GoType}}) {
+// Append{{. | accessorName}} appends one or more values to {{.Name}}.
+func (e *{{$name}}) Append{{. | accessorName}}(v ...{{elemType .GoType}}) {
 	e.{{.Name}} = append(e.{{.Name}}, v...)
 }
 
-// Remove{{.Name | toCamelCase}} removes the first occurrence of v from {{.Name}}.
-func (e *{{$name}}) Remove{{.Name | toCamelCase}}(v {{elemType .GoType}}) {
+// Remove{{. | accessorName}} removes the first occurrence of v from {{.Name}}.
+func (e *{{$name}}) Remove{{. | accessorName}}(v {{elemType .GoType}}) {
 	for i, item := range e.{{.Name}} {
 		if item == v {
 			e.{{.Name}} = slices.Delete(e.{{.Name}}, i, i+1)
@@ -132,8 +132,8 @@ func (e *{{$name}}) Remove{{.Name | toCamelCase}}(v {{elemType .GoType}}) {
 	}
 }
 
-// Remove{{.Name | toCamelCase}}Func removes values matching the predicate.
-func (e *{{$name}}) Remove{{.Name | toCamelCase}}Func(fn func({{elemType .GoType}}) bool) {
+// Remove{{. | accessorName}}Func removes values matching the predicate.
+func (e *{{$name}}) Remove{{. | accessorName}}Func(fn func({{elemType .GoType}}) bool) {
 	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, fn)
 }
 {{end}}

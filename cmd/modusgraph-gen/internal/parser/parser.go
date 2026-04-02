@@ -8,10 +8,10 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"sort"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/model"
@@ -138,98 +138,104 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 		}
 		// Process all names in a multi-name declaration (e.g., "A, B string").
 		for _, ident := range f.Names {
-		fieldName := ident.Name
+			fieldName := ident.Name
 
-		goType := typeString(f.Type)
-		field := model.Field{
-			Name:      fieldName,
-			GoType:    goType,
-			IsPrivate: !ast.IsExported(fieldName),
-		}
+			goType := typeString(f.Type)
+			field := model.Field{
+				Name:      fieldName,
+				GoType:    goType,
+				IsPrivate: !ast.IsExported(fieldName),
+			}
 
-		// Parse struct tags.
-		if f.Tag != nil {
-			tagValue := strings.Trim(f.Tag.Value, "`")
-			tag := reflect.StructTag(tagValue)
+			// Parse struct tags.
+			if f.Tag != nil {
+				tagValue := strings.Trim(f.Tag.Value, "`")
+				tag := reflect.StructTag(tagValue)
 
-			// Parse json tag.
-			jsonTag := tag.Get("json")
-			if jsonTag != "" {
-				parts := strings.SplitN(jsonTag, ",", 2)
-				field.JSONTag = parts[0]
-				if len(parts) > 1 && strings.Contains(parts[1], "omitempty") {
-					field.OmitEmpty = true
+				// Parse json tag.
+				jsonTag := tag.Get("json")
+				if jsonTag != "" {
+					parts := strings.SplitN(jsonTag, ",", 2)
+					field.JSONTag = parts[0]
+					if len(parts) > 1 && strings.Contains(parts[1], "omitempty") {
+						field.OmitEmpty = true
+					}
+				}
+
+				// Parse dgraph tag.
+				dgraphTag := tag.Get("dgraph")
+				if dgraphTag != "" {
+					parseDgraphTag(dgraphTag, &field)
+				}
+
+				// Parse validate tag for cardinality hints and store raw tag.
+				validateTag := tag.Get("validate")
+				if validateTag != "" {
+					field.ValidateTag = validateTag
+					parseValidateTag(validateTag, &field)
+				}
+
+				// Parse accessor tag for explicit accessor name override.
+				accessorTag := tag.Get("accessor")
+				if accessorTag != "" {
+					field.AccessorName = accessorTag
 				}
 			}
 
-			// Parse dgraph tag.
-			dgraphTag := tag.Get("dgraph")
-			if dgraphTag != "" {
-				parseDgraphTag(dgraphTag, &field)
+			// Detect UID and DType fields.
+			if fieldName == "UID" && goType == "string" {
+				field.IsUID = true
+				hasUID = true
+			}
+			if fieldName == "DType" && goType == "[]string" {
+				field.IsDType = true
+				hasDType = true
 			}
 
-			// Parse validate tag for cardinality hints and store raw tag.
-			validateTag := tag.Get("validate")
-			if validateTag != "" {
-				field.ValidateTag = validateTag
-				parseValidateTag(validateTag, &field)
+			// Skip fields that are opted out or have no json tag (unless UID or DType).
+			if !field.IsUID && !field.IsDType {
+				if field.IsSkipped || field.JSONTag == "" {
+					continue
+				}
 			}
-		}
 
-		// Detect UID and DType fields.
-		if fieldName == "UID" && goType == "string" {
-			field.IsUID = true
-			hasUID = true
-		}
-		if fieldName == "DType" && goType == "[]string" {
-			field.IsDType = true
-			hasDType = true
-		}
-
-		// Skip fields that are opted out or have no json tag (unless UID or DType).
-		if !field.IsUID && !field.IsDType {
-			if field.IsSkipped || field.JSONTag == "" {
-				continue
+			// Resolve predicate: use explicit predicate if set, else fall back to json tag.
+			if field.Predicate == "" {
+				field.Predicate = field.JSONTag
 			}
-		}
 
-		// Resolve predicate: use explicit predicate if set, else fall back to json tag.
-		if field.Predicate == "" {
-			field.Predicate = field.JSONTag
-		}
+			// Detect edges: field type is []SomeEntity or []*SomeEntity where SomeEntity is a known struct.
+			if strings.HasPrefix(goType, "[]") {
+				elemType := goType[2:]
+				elemType = strings.TrimPrefix(elemType, "*") // handle []*Entity
+				if structNames[elemType] {
+					field.IsEdge = true
+					field.EdgeEntity = elemType
+				}
+			}
 
-		// Detect edges: field type is []SomeEntity or []*SomeEntity where SomeEntity is a known struct.
-		if strings.HasPrefix(goType, "[]") {
-			elemType := goType[2:]
-			elemType = strings.TrimPrefix(elemType, "*") // handle []*Entity
-			if structNames[elemType] {
+			// Detect singular edges: field type is *SomeEntity or bare SomeEntity
+			// where SomeEntity is a known struct.
+			if strings.HasPrefix(goType, "*") {
+				elemType := goType[1:]
+				if structNames[elemType] {
+					field.IsEdge = true
+					field.EdgeEntity = elemType
+					field.IsSingularEdge = true
+				}
+			} else if !strings.HasPrefix(goType, "[]") && structNames[goType] {
+				// Bare entity type (not pointer, not slice): e.g., "director Director"
 				field.IsEdge = true
-				field.EdgeEntity = elemType
-			}
-		}
-
-		// Detect singular edges: field type is *SomeEntity or bare SomeEntity
-		// where SomeEntity is a known struct.
-		if strings.HasPrefix(goType, "*") {
-			elemType := goType[1:]
-			if structNames[elemType] {
-				field.IsEdge = true
-				field.EdgeEntity = elemType
+				field.EdgeEntity = goType
 				field.IsSingularEdge = true
 			}
-		} else if !strings.HasPrefix(goType, "[]") && structNames[goType] {
-			// Bare entity type (not pointer, not slice): e.g., "director Director"
-			field.IsEdge = true
-			field.EdgeEntity = goType
-			field.IsSingularEdge = true
-		}
 
-		// Detect reverse edges from predicate.
-		if strings.HasPrefix(field.Predicate, "~") {
-			field.IsReverse = true
-		}
+			// Detect reverse edges from predicate.
+			if strings.HasPrefix(field.Predicate, "~") {
+				field.IsReverse = true
+			}
 
-		fields = append(fields, field)
+			fields = append(fields, field)
 		} // end for each name in multi-name declaration
 	}
 

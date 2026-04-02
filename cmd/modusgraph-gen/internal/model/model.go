@@ -42,4 +42,5 @@ type Field struct {
 	IsSingularEdge bool   // True if edge field has validate:"max=1" or validate:"len=1", or is *Entity type
 	IsSkipped      bool   // True if field has no json tag or dgraph:"-"
 	ValidateTag    string // Raw validate tag value, e.g. "required,min=2,max=100"
+	AccessorName   string // Explicit accessor name override from `accessor:"..."` tag; empty = auto
 }

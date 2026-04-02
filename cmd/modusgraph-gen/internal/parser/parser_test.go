@@ -597,9 +597,9 @@ func TestParseDgraphTag(t *testing.T) {
 
 func TestParseValidateTag(t *testing.T) {
 	tests := []struct {
-		name           string
-		tag            string
-		wantSingular   bool
+		name         string
+		tag          string
+		wantSingular bool
 	}{
 		{"max=1", "max=1", true},
 		{"len=1", "len=1", true},
@@ -792,4 +792,67 @@ func entityNames(entities []model.Entity) []string {
 		names[i] = e.Name
 	}
 	return names
+}
+
+func TestAccessorTagParsing(t *testing.T) {
+	// Create a temporary Go file with accessor tags.
+	src := `package testpkg
+
+type Widget struct {
+	UID   string   ` + "`" + `json:"uid,omitempty"` + "`" + `
+	DType []string ` + "`" + `json:"dgraph.type,omitempty"` + "`" + `
+	id    string   ` + "`" + `json:"id,omitempty" accessor:"ID"` + "`" + `
+	url   string   ` + "`" + `json:"url,omitempty" accessor:"URL"` + "`" + `
+	name  string   ` + "`" + `json:"name,omitempty"` + "`" + `
+}
+`
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "widget.go"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Write a minimal go.mod so Parse can find the module path.
+	goMod := "module testpkg\n\ngo 1.22\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goMod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pkg, err := Parse(tmpDir)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if len(pkg.Entities) != 1 {
+		t.Fatalf("expected 1 entity, got %d", len(pkg.Entities))
+	}
+	entity := pkg.Entities[0]
+
+	t.Run("AccessorTagSet", func(t *testing.T) {
+		f := findField(entity.Fields, "id")
+		if f == nil {
+			t.Fatal("field 'id' not found")
+		}
+		if f.AccessorName != "ID" {
+			t.Errorf("id.AccessorName = %q, want %q", f.AccessorName, "ID")
+		}
+	})
+
+	t.Run("AccessorTagURL", func(t *testing.T) {
+		f := findField(entity.Fields, "url")
+		if f == nil {
+			t.Fatal("field 'url' not found")
+		}
+		if f.AccessorName != "URL" {
+			t.Errorf("url.AccessorName = %q, want %q", f.AccessorName, "URL")
+		}
+	})
+
+	t.Run("NoAccessorTag", func(t *testing.T) {
+		f := findField(entity.Fields, "name")
+		if f == nil {
+			t.Fatal("field 'name' not found")
+		}
+		if f.AccessorName != "" {
+			t.Errorf("name.AccessorName = %q, want empty", f.AccessorName)
+		}
+	})
 }

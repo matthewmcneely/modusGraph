@@ -59,6 +59,7 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"toUpper":      strings.ToUpper,
 		"toSnakeCase":  toSnakeCase,
 		"toCamelCase":  toCamelCase,
+		"accessorName": accessorName,
 		"toLowerCamel": toLowerCamel,
 		"title":        strings.Title, //nolint:staticcheck
 		"hasPrefix":    strings.HasPrefix,
@@ -216,17 +217,80 @@ func toSnakeCase(s string) string {
 	return result.String()
 }
 
-// toCamelCase converts a snake_case or lowercase string to CamelCase.
+// commonInitialisms is the canonical set of Go initialisms from golang.org/x/lint.
+// These are uppercased as a whole word in CamelCase identifiers per Go conventions.
+// Source: https://github.com/golang/lint/blob/master/lint.go (BSD-3-Clause)
+var commonInitialisms = map[string]bool{
+	"ACL":   true,
+	"API":   true,
+	"ASCII": true,
+	"CPU":   true,
+	"CSS":   true,
+	"DNS":   true,
+	"EOF":   true,
+	"GUID":  true,
+	"HTML":  true,
+	"HTTP":  true,
+	"HTTPS": true,
+	"ID":    true,
+	"IP":    true,
+	"JSON":  true,
+	"LHS":   true,
+	"QPS":   true,
+	"RAM":   true,
+	"RHS":   true,
+	"RPC":   true,
+	"SLA":   true,
+	"SMTP":  true,
+	"SQL":   true,
+	"SSH":   true,
+	"TCP":   true,
+	"TLS":   true,
+	"TTL":   true,
+	"UDP":   true,
+	"UI":    true,
+	"UID":   true,
+	"UUID":  true,
+	"URI":   true,
+	"URL":   true,
+	"UTF8":  true,
+	"VM":    true,
+	"XML":   true,
+	"XMPP":  true,
+	"XSRF":  true,
+	"XSS":   true,
+}
+
+// toCamelCase converts a snake_case or lowercase string to CamelCase with
+// Go initialism awareness. Known initialisms (ID, URL, HTTP, etc.) are
+// uppercased as a whole word per Go naming conventions.
 func toCamelCase(s string) string {
 	parts := strings.Split(s, "_")
 	var result strings.Builder
 	for _, p := range parts {
-		if len(p) > 0 {
+		if len(p) == 0 {
+			continue
+		}
+		upper := strings.ToUpper(p)
+		if commonInitialisms[upper] {
+			result.WriteString(upper)
+		} else {
 			result.WriteString(strings.ToUpper(p[:1]))
 			result.WriteString(p[1:])
 		}
 	}
 	return result.String()
+}
+
+// accessorName returns the exported name to use for generated accessor methods
+// on the given field. If the field has an explicit AccessorName override (from
+// the `accessor` struct tag), it is returned as-is. Otherwise, the field name
+// is run through toCamelCase with initialism awareness.
+func accessorName(f model.Field) string {
+	if f.AccessorName != "" {
+		return f.AccessorName
+	}
+	return toCamelCase(f.Name)
 }
 
 // toLowerCamel converts an identifier to lowerCamelCase.
