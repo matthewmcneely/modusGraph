@@ -86,6 +86,7 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"allMultiEdgeFields":        allMultiEdgeFields,
 		"allSliceFields":            allSliceFields,
 		"marshalFields":             marshalFields,
+		"packageExternalImports":    packageExternalImports,
 		"elemType":                  elemType,
 		"cliType":                   cliType,
 		"cliConvert":                cliConvert,
@@ -452,6 +453,17 @@ func marshalFields(fields []model.Field) []model.Field {
 	return result
 }
 
+// packageExternalImports returns the union of external imports needed across all
+// entities in the package. This is used by the CLI template which lives in a
+// separate main package and needs to import external types for conversions.
+func packageExternalImports(pkg *model.Package) []ImportSpec {
+	var allFields []model.Field
+	for _, entity := range pkg.Entities {
+		allFields = append(allFields, marshalFields(entity.Fields)...)
+	}
+	return externalImports(allFields, pkg.Imports)
+}
+
 // elemType strips the leading "[]" from a Go type string, returning the element type.
 func elemType(goType string) string {
 	return strings.TrimPrefix(goType, "[]")
@@ -477,7 +489,9 @@ func cliType(goType string) string {
 // cliConvert returns a Go expression that converts a CLI field value to the
 // entity field's Go type. For types that Kong handles natively (string, int,
 // float64, bool), this is an identity — the value is already the correct type.
-// For time.Time, this wraps with time.Parse.
+// For time.Time, this wraps with time.Parse. For external types (e.g.,
+// enums.ArchiveStatus, scalars.UUID) that are represented as strings in the
+// CLI, this wraps with a type conversion.
 func cliConvert(goType, expr string) string {
 	switch goType {
 	case "string", "int", "int64", "float64", "bool":
@@ -487,7 +501,9 @@ func cliConvert(goType, expr string) string {
 	case "float32":
 		return "float32(" + expr + ")"
 	default:
-		return expr
+		// External types (enums, scalars, etc.) are accepted as strings by
+		// the CLI and need an explicit type conversion to the target type.
+		return goType + "(" + expr + ")"
 	}
 }
 

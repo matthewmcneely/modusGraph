@@ -1,4 +1,6 @@
 package main
+{{- $pkg := .}}
+{{- $cliExtImports := packageExternalImports $pkg}}
 
 import (
 	"bufio"
@@ -14,6 +16,13 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/matthewmcneely/modusgraph"
 	"{{.ModulePath}}/{{.Name}}"
+{{range $cliExtImports}}
+	{{- if .Alias}}
+	{{.Alias}} "{{.Path}}"
+	{{- else}}
+	"{{.Path}}"
+	{{- end}}
+{{- end}}
 )
 
 // CLI is the root command parsed by Kong.
