@@ -60,7 +60,12 @@ func (e *{{$name}}) DgraphMap() map[string]interface{} {
 		m["{{.JSONTag}}"] = e.{{.Name}}
 	}
 	{{- else}}
-	m["{{.JSONTag}}"] = e.{{.Name}}
+	{
+		var zero {{.GoType}}
+		if e.{{.Name}} != zero {
+			m["{{.JSONTag}}"] = e.{{.Name}}
+		}
+	}
 	{{- end}}
 {{- end}}{{end}}{{end}}
 {{- range $singularEdges}}

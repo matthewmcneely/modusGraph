@@ -37,7 +37,12 @@ func (e *Studio) DgraphMap() map[string]interface{} {
 	if !e.createdAt.IsZero() {
 		m["createdAt"] = e.createdAt
 	}
-	m["embedding"] = e.embedding
+	{
+		var zero *dg.VectorFloat32
+		if e.embedding != zero {
+			m["embedding"] = e.embedding
+		}
+	}
 	if e.Founded != "" {
 		m["founded"] = e.Founded
 	}
