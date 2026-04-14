@@ -4,6 +4,7 @@ package movies
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/matthewmcneely/modusgraph"
 )
@@ -40,17 +41,14 @@ func (c *ActorClient) Delete(ctx context.Context, uid string) error {
 
 // Search finds Actor entities whose Name matches term using fulltext search.
 func (c *ActorClient) Search(ctx context.Context, term string, opts ...PageOption) ([]Actor, error) {
-	var results []Actor
-	q := c.conn.Query(ctx, Actor{}).
-		Filter(`alloftext(name, "` + term + `")`).
-		First(defaultPageSize)
 	cfg := pageConfig{first: defaultPageSize}
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	if cfg.first > 0 {
-		q = q.First(cfg.first)
-	}
+	var results []Actor
+	q := c.conn.Query(ctx, Actor{}).
+		Filter(`alloftext(name, "` + term + `")`).
+		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}
@@ -63,16 +61,13 @@ func (c *ActorClient) Search(ctx context.Context, term string, opts ...PageOptio
 
 // List retrieves Actor entities with optional pagination.
 func (c *ActorClient) List(ctx context.Context, opts ...PageOption) ([]Actor, error) {
-	var results []Actor
-	q := c.conn.Query(ctx, Actor{}).
-		First(defaultPageSize)
 	cfg := pageConfig{first: defaultPageSize}
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	if cfg.first > 0 {
-		q = q.First(cfg.first)
-	}
+	var results []Actor
+	q := c.conn.Query(ctx, Actor{}).
+		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}

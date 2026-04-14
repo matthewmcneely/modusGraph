@@ -17,7 +17,7 @@ import (
 // tags so the Dgraph schema is identical.
 type studioReflectable struct {
 	UID           string            `json:"uid,omitempty"`
-	DType         []string          `json:"dgraph.type,omitempty"`
+	DType         []string          `json:"dgraph.type,omitempty" dgraph:"Studio"`
 	Name          string            `json:"name,omitempty" dgraph:"index=exact"`
 	YearFounded   int               `json:"yearFounded,omitempty"`
 	Revenue       float64           `json:"revenue,omitempty"`

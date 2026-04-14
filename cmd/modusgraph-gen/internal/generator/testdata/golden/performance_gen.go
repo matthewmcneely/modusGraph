@@ -4,6 +4,7 @@ package movies
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/matthewmcneely/modusgraph"
 )
@@ -40,16 +41,13 @@ func (c *PerformanceClient) Delete(ctx context.Context, uid string) error {
 
 // List retrieves Performance entities with optional pagination.
 func (c *PerformanceClient) List(ctx context.Context, opts ...PageOption) ([]Performance, error) {
-	var results []Performance
-	q := c.conn.Query(ctx, Performance{}).
-		First(defaultPageSize)
 	cfg := pageConfig{first: defaultPageSize}
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	if cfg.first > 0 {
-		q = q.First(cfg.first)
-	}
+	var results []Performance
+	q := c.conn.Query(ctx, Performance{}).
+		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}

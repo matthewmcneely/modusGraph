@@ -33,7 +33,7 @@ import (
 // tags so the Dgraph schema is identical.
 type {{lcFirst $name}}Reflectable struct {
 	UID   string   `json:"uid,omitempty"`
-	DType []string `json:"dgraph.type,omitempty"`
+	DType []string `json:"dgraph.type,omitempty" dgraph:"{{$name}}"`
 {{- range $scalars}}{{if not .IsUID}}{{if not .IsDType}}
 	{{. | accessorName}} {{.GoType}} `json:"{{.Predicate}},omitempty"{{if .RawDgraphTag}} dgraph:"{{.RawDgraphTag}}"{{end}}`
 {{- end}}{{end}}{{end}}

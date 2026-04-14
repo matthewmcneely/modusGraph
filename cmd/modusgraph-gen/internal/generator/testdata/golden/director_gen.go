@@ -4,6 +4,7 @@ package movies
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/matthewmcneely/modusgraph"
 )
@@ -40,17 +41,14 @@ func (c *DirectorClient) Delete(ctx context.Context, uid string) error {
 
 // Search finds Director entities whose Name matches term using fulltext search.
 func (c *DirectorClient) Search(ctx context.Context, term string, opts ...PageOption) ([]Director, error) {
-	var results []Director
-	q := c.conn.Query(ctx, Director{}).
-		Filter(`alloftext(name, "` + term + `")`).
-		First(defaultPageSize)
 	cfg := pageConfig{first: defaultPageSize}
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	if cfg.first > 0 {
-		q = q.First(cfg.first)
-	}
+	var results []Director
+	q := c.conn.Query(ctx, Director{}).
+		Filter(`alloftext(name, "` + term + `")`).
+		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}
@@ -63,16 +61,13 @@ func (c *DirectorClient) Search(ctx context.Context, term string, opts ...PageOp
 
 // List retrieves Director entities with optional pagination.
 func (c *DirectorClient) List(ctx context.Context, opts ...PageOption) ([]Director, error) {
-	var results []Director
-	q := c.conn.Query(ctx, Director{}).
-		First(defaultPageSize)
 	cfg := pageConfig{first: defaultPageSize}
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	if cfg.first > 0 {
-		q = q.First(cfg.first)
-	}
+	var results []Director
+	q := c.conn.Query(ctx, Director{}).
+		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}

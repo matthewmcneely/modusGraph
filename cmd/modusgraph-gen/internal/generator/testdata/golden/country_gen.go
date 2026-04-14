@@ -4,6 +4,7 @@ package movies
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/matthewmcneely/modusgraph"
 )
@@ -40,17 +41,14 @@ func (c *CountryClient) Delete(ctx context.Context, uid string) error {
 
 // Search finds Country entities whose Name matches term using fulltext search.
 func (c *CountryClient) Search(ctx context.Context, term string, opts ...PageOption) ([]Country, error) {
-	var results []Country
-	q := c.conn.Query(ctx, Country{}).
-		Filter(`alloftext(name, "` + term + `")`).
-		First(defaultPageSize)
 	cfg := pageConfig{first: defaultPageSize}
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	if cfg.first > 0 {
-		q = q.First(cfg.first)
-	}
+	var results []Country
+	q := c.conn.Query(ctx, Country{}).
+		Filter(`alloftext(name, "` + term + `")`).
+		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}
@@ -63,16 +61,13 @@ func (c *CountryClient) Search(ctx context.Context, term string, opts ...PageOpt
 
 // List retrieves Country entities with optional pagination.
 func (c *CountryClient) List(ctx context.Context, opts ...PageOption) ([]Country, error) {
-	var results []Country
-	q := c.conn.Query(ctx, Country{}).
-		First(defaultPageSize)
 	cfg := pageConfig{first: defaultPageSize}
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	if cfg.first > 0 {
-		q = q.First(cfg.first)
-	}
+	var results []Country
+	q := c.conn.Query(ctx, Country{}).
+		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}

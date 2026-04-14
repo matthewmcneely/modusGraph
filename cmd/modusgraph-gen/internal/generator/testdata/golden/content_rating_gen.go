@@ -4,6 +4,7 @@ package movies
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/matthewmcneely/modusgraph"
 )
@@ -40,17 +41,14 @@ func (c *ContentRatingClient) Delete(ctx context.Context, uid string) error {
 
 // Search finds ContentRating entities whose Name matches term using fulltext search.
 func (c *ContentRatingClient) Search(ctx context.Context, term string, opts ...PageOption) ([]ContentRating, error) {
-	var results []ContentRating
-	q := c.conn.Query(ctx, ContentRating{}).
-		Filter(`alloftext(name, "` + term + `")`).
-		First(defaultPageSize)
 	cfg := pageConfig{first: defaultPageSize}
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	if cfg.first > 0 {
-		q = q.First(cfg.first)
-	}
+	var results []ContentRating
+	q := c.conn.Query(ctx, ContentRating{}).
+		Filter(`alloftext(name, "` + term + `")`).
+		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}
@@ -63,16 +61,13 @@ func (c *ContentRatingClient) Search(ctx context.Context, term string, opts ...P
 
 // List retrieves ContentRating entities with optional pagination.
 func (c *ContentRatingClient) List(ctx context.Context, opts ...PageOption) ([]ContentRating, error) {
-	var results []ContentRating
-	q := c.conn.Query(ctx, ContentRating{}).
-		First(defaultPageSize)
 	cfg := pageConfig{first: defaultPageSize}
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	if cfg.first > 0 {
-		q = q.First(cfg.first)
-	}
+	var results []ContentRating
+	q := c.conn.Query(ctx, ContentRating{}).
+		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}

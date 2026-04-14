@@ -4,6 +4,7 @@ package movies
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/matthewmcneely/modusgraph"
 )
@@ -15,9 +16,20 @@ type StudioClient struct {
 
 // Get retrieves a single Studio by its UID.
 func (c *StudioClient) Get(ctx context.Context, uid string) (*Studio, error) {
-	var result Studio
-	err := c.conn.Get(ctx, &result, uid)
+	// Query using the reflectable struct so dgman can project all fields.
+	var proxy studioReflectable
+	err := c.conn.Get(ctx, &proxy, uid)
 	if err != nil {
+		return nil, err
+	}
+	// Unmarshal back into the entity via JSON round-trip, which invokes
+	// the entity's UnmarshalJSON and populates private fields.
+	data, err := json.Marshal(&proxy)
+	if err != nil {
+		return nil, err
+	}
+	var result Studio
+	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -40,21 +52,31 @@ func (c *StudioClient) Delete(ctx context.Context, uid string) error {
 
 // List retrieves Studio entities with optional pagination.
 func (c *StudioClient) List(ctx context.Context, opts ...PageOption) ([]Studio, error) {
-	var results []Studio
-	q := c.conn.Query(ctx, Studio{}).
-		First(defaultPageSize)
 	cfg := pageConfig{first: defaultPageSize}
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	if cfg.first > 0 {
-		q = q.First(cfg.first)
-	}
+	var proxies []studioReflectable
+	q := c.conn.Query(ctx, studioReflectable{}).
+		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}
-	err := q.Nodes(&results)
+	err := q.Nodes(&proxies)
 	if err != nil {
+		return nil, err
+	}
+	return unmarshalStudioSlice(proxies)
+}
+
+// unmarshalStudioSlice converts reflectable proxies to entities via JSON round-trip.
+func unmarshalStudioSlice(proxies []studioReflectable) ([]Studio, error) {
+	data, err := json.Marshal(proxies)
+	if err != nil {
+		return nil, err
+	}
+	var results []Studio
+	if err := json.Unmarshal(data, &results); err != nil {
 		return nil, err
 	}
 	return results, nil

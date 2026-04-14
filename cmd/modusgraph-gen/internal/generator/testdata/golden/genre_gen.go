@@ -4,6 +4,7 @@ package movies
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/matthewmcneely/modusgraph"
 )
@@ -40,17 +41,14 @@ func (c *GenreClient) Delete(ctx context.Context, uid string) error {
 
 // Search finds Genre entities whose Name matches term using fulltext search.
 func (c *GenreClient) Search(ctx context.Context, term string, opts ...PageOption) ([]Genre, error) {
-	var results []Genre
-	q := c.conn.Query(ctx, Genre{}).
-		Filter(`alloftext(name, "` + term + `")`).
-		First(defaultPageSize)
 	cfg := pageConfig{first: defaultPageSize}
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	if cfg.first > 0 {
-		q = q.First(cfg.first)
-	}
+	var results []Genre
+	q := c.conn.Query(ctx, Genre{}).
+		Filter(`alloftext(name, "` + term + `")`).
+		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}
@@ -63,16 +61,13 @@ func (c *GenreClient) Search(ctx context.Context, term string, opts ...PageOptio
 
 // List retrieves Genre entities with optional pagination.
 func (c *GenreClient) List(ctx context.Context, opts ...PageOption) ([]Genre, error) {
-	var results []Genre
-	q := c.conn.Query(ctx, Genre{}).
-		First(defaultPageSize)
 	cfg := pageConfig{first: defaultPageSize}
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	if cfg.first > 0 {
-		q = q.First(cfg.first)
-	}
+	var results []Genre
+	q := c.conn.Query(ctx, Genre{}).
+		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}
