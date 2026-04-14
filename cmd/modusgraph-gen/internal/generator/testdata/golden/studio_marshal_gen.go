@@ -12,118 +12,73 @@ import (
 	dg "github.com/dolan-in/dgman/v2"
 )
 
-// DgraphMap converts the Studio to a map for Dgraph mutation.
-// This enables persistence of private fields without requiring unsafe reflection.
-func (e *Studio) DgraphMap() map[string]interface{} {
-	m := make(map[string]interface{})
-	if e.UID != "" {
-		m["uid"] = e.UID
+// studioReflectable is an all-exported copy of Studio that dgman's
+// reflectwalk can traverse for mutations. It carries the same json and dgraph
+// tags so the Dgraph schema is identical.
+type studioReflectable struct {
+	UID           string            `json:"uid,omitempty"`
+	DType         []string          `json:"dgraph.type,omitempty"`
+	Name          string            `json:"name,omitempty" dgraph:"index=exact"`
+	YearFounded   int               `json:"yearFounded,omitempty"`
+	Revenue       float64           `json:"revenue,omitempty"`
+	Active        bool              `json:"active,omitempty"`
+	CreatedAt     time.Time         `json:"createdAt,omitempty"`
+	Embedding     *dg.VectorFloat32 `json:"embedding,omitempty" dgraph:"index=hnsw(metric:cosine)"`
+	Founded       string            `json:"founded,omitempty"`
+	Founder       *Director         `json:"founder,omitempty"`
+	Headquarters  Country           `json:"headquarters,omitempty"`
+	CurrentHead   []Director        `json:"currentHead,omitempty"`
+	Ceo           []*Director       `json:"ceo,omitempty"`
+	HomeBase      []Country         `json:"homeBase,omitempty"`
+	ParentCompany []*Country        `json:"parentCompany,omitempty"`
+	Films         []Film            `json:"films,omitempty"`
+	Advisors      []*Director       `json:"advisors,omitempty"`
+	Tags          []string          `json:"tags,omitempty"`
+	Scores        []int             `json:"scores,omitempty"`
+	Weights       []float64         `json:"weights,omitempty"`
+	Flags         []bool            `json:"flags,omitempty"`
+	Milestones    []time.Time       `json:"milestones,omitempty"`
+}
+
+// ToReflectable returns an all-exported copy of Studio that dgman can mutate.
+func (e *Studio) ToReflectable() any {
+	return &studioReflectable{
+		UID:           e.UID,
+		DType:         e.DType,
+		Name:          e.name,
+		YearFounded:   e.yearFounded,
+		Revenue:       e.revenue,
+		Active:        e.active,
+		CreatedAt:     e.createdAt,
+		Embedding:     e.embedding,
+		Founded:       e.Founded,
+		Founder:       e.founder,
+		Headquarters:  e.headquarters,
+		CurrentHead:   e.currentHead,
+		Ceo:           e.ceo,
+		HomeBase:      e.homeBase,
+		ParentCompany: e.parentCompany,
+		Films:         e.films,
+		Advisors:      e.advisors,
+		Tags:          e.tags,
+		Scores:        e.scores,
+		Weights:       e.weights,
+		Flags:         e.flags,
+		Milestones:    e.milestones,
 	}
-	if len(e.DType) > 0 {
-		m["dgraph.type"] = e.DType
-	}
-	if e.name != "" {
-		m["name"] = e.name
-	}
-	if e.yearFounded != 0 {
-		m["yearFounded"] = e.yearFounded
-	}
-	if e.revenue != 0 {
-		m["revenue"] = e.revenue
-	}
-	if e.active {
-		m["active"] = e.active
-	}
-	if !e.createdAt.IsZero() {
-		m["createdAt"] = e.createdAt
-	}
-	{
-		var zero *dg.VectorFloat32
-		if e.embedding != zero {
-			m["embedding"] = e.embedding
-		}
-	}
-	if e.Founded != "" {
-		m["founded"] = e.Founded
-	}
-	if e.founder != nil {
-		m["founder"] = e.founder.DgraphMap()
-	}
-	m["headquarters"] = e.headquarters.DgraphMap()
-	if len(e.currentHead) > 0 {
-		m["currentHead"] = e.currentHead[0].DgraphMap()
-	}
-	if len(e.ceo) > 0 && e.ceo[0] != nil {
-		m["ceo"] = e.ceo[0].DgraphMap()
-	}
-	if len(e.homeBase) > 0 {
-		m["homeBase"] = e.homeBase[0].DgraphMap()
-	}
-	if len(e.parentCompany) > 0 && e.parentCompany[0] != nil {
-		m["parentCompany"] = e.parentCompany[0].DgraphMap()
-	}
-	if len(e.films) > 0 {
-		s := make([]map[string]interface{}, 0, len(e.films))
-		for i := range e.films {
-			s = append(s, e.films[i].DgraphMap())
-		}
-		m["films"] = s
-	}
-	if len(e.advisors) > 0 {
-		s := make([]map[string]interface{}, 0, len(e.advisors))
-		for i := range e.advisors {
-			if e.advisors[i] != nil {
-				s = append(s, e.advisors[i].DgraphMap())
-			}
-		}
-		m["advisors"] = s
-	}
-	if len(e.tags) > 0 {
-		m["tags"] = e.tags
-	}
-	if len(e.scores) > 0 {
-		m["scores"] = e.scores
-	}
-	if len(e.weights) > 0 {
-		m["weights"] = e.weights
-	}
-	if len(e.flags) > 0 {
-		m["flags"] = e.flags
-	}
-	if len(e.milestones) > 0 {
-		m["milestones"] = e.milestones
-	}
-	return m
+}
+
+// FromReflectable copies UID and DType back from the reflectable copy after mutation.
+func (e *Studio) FromReflectable(r any) {
+	s := r.(*studioReflectable)
+	e.UID = s.UID
+	e.DType = s.DType
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for Studio,
 // allowing private fields to be populated from Dgraph query responses.
 func (e *Studio) UnmarshalJSON(data []byte) error {
-	type alias struct {
-		UID           string            `json:"uid,omitempty"`
-		DType         []string          `json:"dgraph.type,omitempty"`
-		Name          string            `json:"name,omitempty"`
-		YearFounded   int               `json:"yearFounded,omitempty"`
-		Revenue       float64           `json:"revenue,omitempty"`
-		Active        bool              `json:"active,omitempty"`
-		CreatedAt     time.Time         `json:"createdAt,omitempty"`
-		Embedding     *dg.VectorFloat32 `json:"embedding,omitempty"`
-		Founded       string            `json:"founded,omitempty"`
-		Founder       *Director         `json:"founder,omitempty"`
-		Headquarters  Country           `json:"headquarters,omitempty"`
-		CurrentHead   []Director        `json:"currentHead,omitempty"`
-		Ceo           []*Director       `json:"ceo,omitempty"`
-		HomeBase      []Country         `json:"homeBase,omitempty"`
-		ParentCompany []*Country        `json:"parentCompany,omitempty"`
-		Films         []Film            `json:"films,omitempty"`
-		Advisors      []*Director       `json:"advisors,omitempty"`
-		Tags          []string          `json:"tags,omitempty"`
-		Scores        []int             `json:"scores,omitempty"`
-		Weights       []float64         `json:"weights,omitempty"`
-		Flags         []bool            `json:"flags,omitempty"`
-		Milestones    []time.Time       `json:"milestones,omitempty"`
-	}
-	var a alias
+	var a studioReflectable
 	if err := json.Unmarshal(data, &a); err != nil {
 		return err
 	}

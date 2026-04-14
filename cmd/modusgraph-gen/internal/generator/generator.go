@@ -92,6 +92,7 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"cliConvert":                cliConvert,
 		"hasValidateTags":           hasValidateTags,
 		"fieldsWithValidation":      fieldsWithValidation,
+		"lcFirst":                   lcFirst,
 	}
 
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.tmpl")
@@ -462,6 +463,14 @@ func packageExternalImports(pkg *model.Package) []ImportSpec {
 		allFields = append(allFields, marshalFields(entity.Fields)...)
 	}
 	return externalImports(allFields, pkg.Imports)
+}
+
+// lcFirst lowercases the first character of a string.
+func lcFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToLower(s[:1]) + s[1:]
 }
 
 // elemType strips the leading "[]" from a Go type string, returning the element type.

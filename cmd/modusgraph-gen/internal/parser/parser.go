@@ -165,6 +165,7 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 				// Parse dgraph tag.
 				dgraphTag := tag.Get("dgraph")
 				if dgraphTag != "" {
+					field.RawDgraphTag = dgraphTag
 					parseDgraphTag(dgraphTag, &field)
 				}
 

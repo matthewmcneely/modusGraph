@@ -1147,9 +1147,21 @@ func TestGeneratedMarshalForEdgeVariants(t *testing.T) {
 	}
 	content := string(data)
 
-	t.Run("DgraphMapMethod", func(t *testing.T) {
-		if !strings.Contains(content, "func (e *Studio) DgraphMap() map[string]interface{}") {
-			t.Error("missing DgraphMap method")
+	t.Run("ReflectableStruct", func(t *testing.T) {
+		if !strings.Contains(content, "type studioReflectable struct") {
+			t.Error("missing studioReflectable struct")
+		}
+	})
+
+	t.Run("ToReflectableMethod", func(t *testing.T) {
+		if !strings.Contains(content, "func (e *Studio) ToReflectable() any") {
+			t.Error("missing ToReflectable method")
+		}
+	})
+
+	t.Run("FromReflectableMethod", func(t *testing.T) {
+		if !strings.Contains(content, "func (e *Studio) FromReflectable(r any)") {
+			t.Error("missing FromReflectable method")
 		}
 	})
 
@@ -1159,17 +1171,10 @@ func TestGeneratedMarshalForEdgeVariants(t *testing.T) {
 		}
 	})
 
-	t.Run("PointerSliceNilCheck", func(t *testing.T) {
-		// []*Director should have nil check in DgraphMap
-		if !strings.Contains(content, "if e.advisors[i] != nil") {
-			t.Error("DgraphMap for []*Director should have nil check on elements")
-		}
-	})
-
-	t.Run("ValueSliceNoNilCheck", func(t *testing.T) {
-		// []Film should NOT have nil check in DgraphMap
-		if strings.Contains(content, "if e.films[i] != nil") {
-			t.Error("DgraphMap for []Film should not have nil check on value elements")
+	t.Run("ReflectableHasDgraphTags", func(t *testing.T) {
+		// The reflectable struct should carry dgraph tags for dgman.
+		if !strings.Contains(content, `dgraph:"`) {
+			t.Error("reflectable struct should have dgraph tags")
 		}
 	})
 
