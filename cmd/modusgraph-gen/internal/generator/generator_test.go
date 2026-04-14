@@ -258,8 +258,11 @@ func TestExternalImports(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("expected 1 external import, got %v", got)
 		}
-		if got[0] != "github.com/example/project/enums" {
-			t.Errorf("got %q, want %q", got[0], "github.com/example/project/enums")
+		if got[0].Path != "github.com/example/project/enums" {
+			t.Errorf("got path %q, want %q", got[0].Path, "github.com/example/project/enums")
+		}
+		if got[0].Alias != "" {
+			t.Errorf("got alias %q, want empty (package name matches last path segment)", got[0].Alias)
 		}
 	})
 
@@ -276,12 +279,49 @@ func TestExternalImports(t *testing.T) {
 		if len(got) != 2 {
 			t.Fatalf("expected 2 external imports, got %v", got)
 		}
-		// Should be sorted.
-		if got[0] != "github.com/example/project/enums" {
-			t.Errorf("got[0] = %q, want enums path", got[0])
+		// Should be sorted by path.
+		if got[0].Path != "github.com/example/project/enums" {
+			t.Errorf("got[0].Path = %q, want enums path", got[0].Path)
 		}
-		if got[1] != "github.com/example/project/pagination" {
-			t.Errorf("got[1] = %q, want pagination path", got[1])
+		if got[1].Path != "github.com/example/project/pagination" {
+			t.Errorf("got[1].Path = %q, want pagination path", got[1].Path)
+		}
+	})
+
+	t.Run("AliasedImport", func(t *testing.T) {
+		fields := []model.Field{
+			{Name: "Embedding", GoType: "*dg.VectorFloat32"},
+		}
+		imports := map[string]string{
+			"dg": "github.com/dolan-in/dgman/v2",
+		}
+		got := externalImports(fields, imports)
+		if len(got) != 1 {
+			t.Fatalf("expected 1 external import, got %v", got)
+		}
+		if got[0].Path != "github.com/dolan-in/dgman/v2" {
+			t.Errorf("got path %q, want %q", got[0].Path, "github.com/dolan-in/dgman/v2")
+		}
+		if got[0].Alias != "dg" {
+			t.Errorf("got alias %q, want %q", got[0].Alias, "dg")
+		}
+	})
+
+	t.Run("PointerPrefixStripped", func(t *testing.T) {
+		fields := []model.Field{
+			{Name: "ID", GoType: "scalars.UUID"},
+			{Name: "Ptr", GoType: "*scalars.UUID"},
+			{Name: "Slice", GoType: "[]scalars.UUID"},
+		}
+		imports := map[string]string{
+			"scalars": "github.com/example/project/scalars",
+		}
+		got := externalImports(fields, imports)
+		if len(got) != 1 {
+			t.Fatalf("expected 1 external import (deduplicated), got %v", got)
+		}
+		if got[0].Path != "github.com/example/project/scalars" {
+			t.Errorf("got path %q, want scalars path", got[0].Path)
 		}
 	})
 
@@ -1210,6 +1250,20 @@ func TestGeneratedValidateWithMethod(t *testing.T) {
 	t.Run("ImportsContext", func(t *testing.T) {
 		if !strings.Contains(content, `"context"`) {
 			t.Error("marshal file should import context for ValidateWith")
+		}
+	})
+
+	t.Run("ImportsTimeForTimeFields", func(t *testing.T) {
+		if !strings.Contains(content, `"time"`) {
+			t.Error("marshal file should import time for time.Time fields")
+		}
+	})
+
+	t.Run("ImportsAliasedExternalPackages", func(t *testing.T) {
+		// Studio uses *dg.VectorFloat32 from dg "github.com/dolan-in/dgman/v2".
+		// The marshal file must import it with the correct alias.
+		if !strings.Contains(content, `dg "github.com/dolan-in/dgman/v2"`) {
+			t.Error("marshal file should import dg package with alias for *dg.VectorFloat32 fields")
 		}
 	})
 

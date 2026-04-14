@@ -85,6 +85,7 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"allSingularEdgeFields":     allSingularEdgeFields,
 		"allMultiEdgeFields":        allMultiEdgeFields,
 		"allSliceFields":            allSliceFields,
+		"marshalFields":             marshalFields,
 		"elemType":                  elemType,
 		"cliType":                   cliType,
 		"cliConvert":                cliConvert,
@@ -437,6 +438,20 @@ func allSliceFields(fields []model.Field) []model.Field {
 	return result
 }
 
+// marshalFields returns all non-UID, non-DType, non-skipped fields (both public and private).
+// This is the union of fields that appear in the marshal alias and mirror structs,
+// used to compute which external package imports the marshal file needs.
+func marshalFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsSkipped || f.IsUID || f.IsDType {
+			continue
+		}
+		result = append(result, f)
+	}
+	return result
+}
+
 // elemType strips the leading "[]" from a Go type string, returning the element type.
 func elemType(goType string) string {
 	return strings.TrimPrefix(goType, "[]")
@@ -497,21 +512,31 @@ func fieldsWithValidation(fields []model.Field) []model.Field {
 	return result
 }
 
-// externalImports returns a sorted list of import paths needed by the given
+// ImportSpec represents a Go import with an optional alias.
+type ImportSpec struct {
+	Alias string // Non-empty only when the alias differs from the last path segment.
+	Path  string // Full import path.
+}
+
+// externalImports returns a sorted list of import specs needed by the given
 // fields. It scans field GoTypes for package-qualified types (containing a dot
 // that isn't "time."), looks up the full import path in the imports map, and
 // returns the unique set. Standard library packages like "time" are excluded
-// because templates handle them separately.
-func externalImports(fields []model.Field, imports map[string]string) []string {
+// because templates handle them separately. If a package was imported with an
+// alias that differs from the last path segment, the ImportSpec includes the
+// alias so templates can emit `alias "path"` syntax.
+func externalImports(fields []model.Field, imports map[string]string) []ImportSpec {
 	seen := make(map[string]bool)
-	var result []string
+	var result []ImportSpec
 	for _, f := range fields {
-		dot := strings.IndexByte(f.GoType, '.')
+		// Strip pointer/slice prefixes to find the package qualifier.
+		goType := strings.TrimLeft(f.GoType, "[]*")
+		dot := strings.IndexByte(goType, '.')
 		if dot < 0 {
 			continue
 		}
 		// Extract the package alias (e.g., "enums" from "enums.ResourceType").
-		pkgAlias := f.GoType[:dot]
+		pkgAlias := goType[:dot]
 		// Skip standard library packages that are handled directly in templates.
 		if pkgAlias == "time" {
 			continue
@@ -521,9 +546,15 @@ func externalImports(fields []model.Field, imports map[string]string) []string {
 			continue
 		}
 		seen[path] = true
-		result = append(result, path)
+		// Include alias only when it differs from the last path segment.
+		parts := strings.Split(path, "/")
+		alias := ""
+		if pkgAlias != parts[len(parts)-1] {
+			alias = pkgAlias
+		}
+		result = append(result, ImportSpec{Alias: alias, Path: path})
 	}
-	sort.Strings(result)
+	sort.Slice(result, func(i, j int) bool { return result[i].Path < result[j].Path })
 	return result
 }
 

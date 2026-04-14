@@ -5,12 +5,27 @@ package {{.PackageName}}
 {{- $singularEdges := allSingularEdgeFields .Entity.Fields}}
 {{- $multiEdges := allMultiEdgeFields .Entity.Fields}}
 {{- $sliceFields := allSliceFields .Entity.Fields}}
+{{- $needsTime := false}}
+{{- range $scalars}}{{if contains .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
+{{- range $sliceFields}}{{if contains .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
+{{- $allMarshal := marshalFields .Entity.Fields}}
+{{- $extImports := externalImports $allMarshal .Imports}}
 
 import (
 	"context"
 	"encoding/json"
+{{- if $needsTime}}
+	"time"
+{{- end}}
 
 	"github.com/matthewmcneely/modusgraph"
+{{range $extImports}}
+	{{- if .Alias}}
+	{{.Alias}} "{{.Path}}"
+	{{- else}}
+	"{{.Path}}"
+	{{- end}}
+{{- end}}
 )
 
 // DgraphMap converts the {{$name}} to a map for Dgraph mutation.
