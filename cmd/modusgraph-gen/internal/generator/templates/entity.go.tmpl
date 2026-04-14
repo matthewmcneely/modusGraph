@@ -1,0 +1,82 @@
+package {{.PackageName}}
+
+import (
+	"context"
+
+	"github.com/matthewmcneely/modusgraph"
+)
+
+// {{.Entity.Name}}Client provides typed CRUD operations for {{.Entity.Name}} entities.
+type {{.Entity.Name}}Client struct {
+	conn modusgraph.Client
+}
+
+// Get retrieves a single {{.Entity.Name}} by its UID.
+func (c *{{.Entity.Name}}Client) Get(ctx context.Context, uid string) (*{{.Entity.Name}}, error) {
+	var result {{.Entity.Name}}
+	err := c.conn.Get(ctx, &result, uid)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// Add inserts a new {{.Entity.Name}} into the database.
+func (c *{{.Entity.Name}}Client) Add(ctx context.Context, v *{{.Entity.Name}}) error {
+	return c.conn.Insert(ctx, v)
+}
+
+// Update modifies an existing {{.Entity.Name}} in the database. The UID field must be set.
+func (c *{{.Entity.Name}}Client) Update(ctx context.Context, v *{{.Entity.Name}}) error {
+	return c.conn.Update(ctx, v)
+}
+
+// Delete removes the {{.Entity.Name}} with the given UID from the database.
+func (c *{{.Entity.Name}}Client) Delete(ctx context.Context, uid string) error {
+	return c.conn.Delete(ctx, []string{uid})
+}
+{{if .Entity.Searchable}}
+// Search finds {{.Entity.Name}} entities whose {{.Entity.SearchField}} matches term using fulltext search.
+func (c *{{.Entity.Name}}Client) Search(ctx context.Context, term string, opts ...PageOption) ([]{{.Entity.Name}}, error) {
+	var results []{{.Entity.Name}}
+	q := c.conn.Query(ctx, {{.Entity.Name}}{}).
+		Filter(`alloftext({{searchPredicate .Entity}}, "` + term + `")`).
+		First(defaultPageSize)
+	cfg := pageConfig{first: defaultPageSize}
+	for _, opt := range opts {
+		opt.applyPage(&cfg)
+	}
+	if cfg.first > 0 {
+		q = q.First(cfg.first)
+	}
+	if cfg.offset > 0 {
+		q = q.Offset(cfg.offset)
+	}
+	err := q.Nodes(&results)
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+{{end}}
+// List retrieves {{.Entity.Name}} entities with optional pagination.
+func (c *{{.Entity.Name}}Client) List(ctx context.Context, opts ...PageOption) ([]{{.Entity.Name}}, error) {
+	var results []{{.Entity.Name}}
+	q := c.conn.Query(ctx, {{.Entity.Name}}{}).
+		First(defaultPageSize)
+	cfg := pageConfig{first: defaultPageSize}
+	for _, opt := range opts {
+		opt.applyPage(&cfg)
+	}
+	if cfg.first > 0 {
+		q = q.First(cfg.first)
+	}
+	if cfg.offset > 0 {
+		q = q.Offset(cfg.offset)
+	}
+	err := q.Nodes(&results)
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}

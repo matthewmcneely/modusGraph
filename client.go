@@ -21,6 +21,24 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+// DgraphMapper is implemented by generated entities with private fields.
+// It provides a map-based serialization path for Dgraph mutations, allowing
+// private fields to be persisted without requiring unsafe reflection or
+// modifications to the dgman library.
+type DgraphMapper interface {
+	DgraphMap() map[string]interface{}
+}
+
+// SelfValidator is implemented by generated entities with private fields that
+// have validate tags. It provides field-level validation using a mirror struct
+// with exported fields, allowing the go-playground/validator to access values
+// that would otherwise panic via reflect on unexported fields.
+// Custom validators registered on the *validator.Validate instance are
+// automatically supported since the mirror struct preserves the raw validate tags.
+type SelfValidator interface {
+	ValidateWith(ctx context.Context, v StructValidator) error
+}
+
 // Client provides an interface for ModusGraph operations
 type Client interface {
 	// Insert adds a new object or slice of objects to the database.
@@ -342,7 +360,10 @@ func checkPointer(obj any) error {
 	return nil
 }
 
-// validateStruct validates a struct using the configured validator
+// validateStruct validates a struct using the configured validator.
+// For entities implementing SelfValidator (generated entities with private
+// fields), it delegates to the entity's ValidateWith method which uses a
+// mirror struct to safely validate unexported fields.
 func (c client) validateStruct(ctx context.Context, obj any) error {
 	if c.options.validator == nil {
 		return nil // No validator configured, skip validation
@@ -366,15 +387,30 @@ func (c client) validateStruct(ctx context.Context, obj any) error {
 				}
 				elem = elem.Elem()
 			}
-			if err := c.options.validator.StructCtx(ctx, elem.Interface()); err != nil {
+			if err := c.validateOne(ctx, elem); err != nil {
 				return err
 			}
 		}
 	} else {
-		return c.options.validator.StructCtx(ctx, obj)
+		return c.validateOne(ctx, val)
 	}
 
 	return nil
+}
+
+// validateOne validates a single struct value. If the struct implements
+// SelfValidator (generated entities with private fields), it uses the
+// entity's own validation method. Otherwise falls back to standard
+// validator.StructCtx.
+func (c client) validateOne(ctx context.Context, val reflect.Value) error {
+	iface := val.Interface()
+	if val.CanAddr() {
+		iface = val.Addr().Interface()
+	}
+	if sv, ok := iface.(SelfValidator); ok {
+		return sv.ValidateWith(ctx, c.options.validator)
+	}
+	return c.options.validator.StructCtx(ctx, iface)
 }
 
 // Insert implements inserting an object or slice of objects in the database.
@@ -386,6 +422,9 @@ func (c client) Insert(ctx context.Context, obj any) error {
 	}
 
 	return c.process(ctx, obj, "Insert", func(tx *dg.TxnContext, obj any) ([]string, error) {
+		if mapped, ok := toDgraphMap(obj); ok {
+			return mutateWithMap(tx, obj, mapped)
+		}
 		return tx.MutateBasic(obj)
 	})
 }
@@ -403,6 +442,9 @@ func (c client) InsertRaw(ctx context.Context, obj any) error {
 	}
 
 	return c.process(ctx, obj, "Insert", func(tx *dg.TxnContext, obj any) ([]string, error) {
+		if mapped, ok := toDgraphMap(obj); ok {
+			return mutateWithMap(tx, obj, mapped)
+		}
 		return tx.MutateBasic(obj)
 	})
 }
@@ -431,6 +473,9 @@ func (c client) Update(ctx context.Context, obj any) error {
 	}
 
 	return c.process(ctx, obj, "Update", func(tx *dg.TxnContext, obj any) ([]string, error) {
+		if mapped, ok := toDgraphMap(obj); ok {
+			return mutateWithMap(tx, obj, mapped)
+		}
 		return tx.MutateBasic(obj)
 	})
 }

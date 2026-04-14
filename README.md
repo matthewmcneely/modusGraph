@@ -737,6 +737,147 @@ if err != nil {
 
 These operations are useful for testing or when you need to reset your database state.
 
+## Code Generation
+
+modusGraph includes `modusgraph-gen`, a code generation tool that reads your Go structs and produces
+a fully typed client library with CRUD operations, query builders, auto-paging iterators, functional
+options, and an optional CLI. For entities with private (unexported) fields, it also generates
+getters, setters, slice helpers, and serialization methods.
+
+### Installation
+
+```sh
+go install github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen@latest
+```
+
+### Usage
+
+Add a `go:generate` directive to your package:
+
+```go
+//go:generate go run github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen
+```
+
+Then run:
+
+```sh
+go generate ./...
+```
+
+### What Gets Generated
+
+| Template | Output | Scope |
+|----------|--------|-------|
+| client | `client_gen.go` | Once -- typed `Client` with sub-clients per entity and `QueryRaw` |
+| page_options | `page_options_gen.go` | Once -- `First(n)` and `Offset(n)` pagination |
+| iter | `iter_gen.go` | Once -- auto-paging `SearchIter` and `ListIter` iterators (Go 1.23+) |
+| entity | `<entity>_gen.go` | Per entity -- `Get`, `Add`, `Update`, `Delete`, `Search`, `List` |
+| options | `<entity>_options_gen.go` | Per entity -- functional options for each scalar field |
+| query | `<entity>_query_gen.go` | Per entity -- fluent query builder with filter, order, pagination |
+| accessors | `<entity>_accessors_gen.go` | Per entity (private fields only) -- getters, setters, slice helpers |
+| marshal | `<entity>_marshal_gen.go` | Per entity (private fields only) -- `DgraphMap()` and `UnmarshalJSON()` |
+| cli | `cmd/<pkg>/main.go` | Once -- Kong CLI with subcommands per entity and raw DQL query |
+
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-pkg` | `.` | Path to the target Go package directory |
+| `-output` | same as `-pkg` | Output directory for generated files |
+| `-cli-dir` | `{output}/cmd/{package}` | Output directory for CLI main.go |
+| `-cli-name` | package name | Name for CLI binary |
+| `-with-validator` | `false` | Enable struct validation in generated CLI |
+
+### Entity Detection
+
+A struct is recognized as an entity when it has both of these fields:
+
+```go
+UID   string   `json:"uid,omitempty"`
+DType []string `json:"dgraph.type,omitempty"`
+```
+
+All fields (exported and private) with a `json` tag are parsed as entity fields. Fields without a
+`json` tag or with `dgraph:"-"` are skipped. `UID` and `DType` must always be exported.
+
+Edge relationships are detected when a field type is `[]OtherEntity` (multi-edge) or `*OtherEntity`
+(singular edge) where `OtherEntity` is another struct in the same package. Singular edges can also
+be declared with `validate:"max=1"` or `validate:"len=1"` on a `[]OtherEntity` field.
+
+### Private Field Support
+
+Entities can use unexported (lowercase) fields for encapsulation. The generator produces accessor
+methods so that consumers interact through a clean API rather than accessing fields directly:
+
+```go
+type Studio struct {
+    UID   string   `json:"uid,omitempty"`
+    DType []string `json:"dgraph.type,omitempty"`
+
+    name    string     `json:"name,omitempty" dgraph:"index=exact"`
+    founder *Director  `json:"founder,omitempty"`
+    films   []Film     `json:"films,omitempty"`
+    tags    []string   `json:"tags,omitempty"`
+    Founded string     `json:"founded,omitempty"`  // exported — direct access
+}
+```
+
+#### Generated Accessors
+
+| Field type | Generated methods |
+|------------|-------------------|
+| Private scalar (`name string`) | `Name() string`, `SetName(v string)` |
+| Private singular edge (`founder *Director`) | `Founder() *Director`, `SetFounder(v *Director)` |
+| Private multi-edge (`films []Film`) | `Films()`, `SetFilms()`, `AppendFilms()`, `RemoveFilms(uid)`, `RemoveFilmsFunc(fn)` |
+| Private primitive slice (`tags []string`) | `Tags()`, `SetTags()`, `AppendTags()`, `RemoveTags(v)`, `RemoveTagsFunc(fn)` |
+| Exported field (`Founded string`) | No accessors — direct access |
+
+Getter names follow Go convention: `Name()` not `GetName()`. Setters use the `Set` prefix.
+`RemoveFunc` methods accept a predicate function, following the Go 1.21+ `slices.DeleteFunc`
+convention.
+
+#### Serialization
+
+Private fields cannot be serialized by Go's `encoding/json` or dgman's reflect-based mutation path.
+The generator solves this by producing two methods:
+
+- **`DgraphMap() map[string]interface{}`** — converts the struct to a map for the write path. The
+  modusgraph engine detects entities implementing the `DgraphMapper` interface and routes them
+  through a map-based mutation path automatically.
+- **`UnmarshalJSON([]byte) error`** — custom JSON unmarshaling for the read path, called
+  automatically by `encoding/json` when Dgraph query results are decoded.
+
+Entities with only exported fields do not get these methods and use the standard dgman code path.
+
+#### Field Opt-Out
+
+Skip a field from code generation using either method:
+
+```go
+// No json tag — field is internal, not persisted
+tempCache string
+
+// Explicit opt-out — field has json tag but is excluded from generation
+Internal string `json:"internal,omitempty" dgraph:"-"`
+```
+
+#### Functional Options and CLI
+
+Functional options and the generated CLI automatically use setters for private fields:
+
+```go
+// Generated functional option uses setter:
+func WithStudioName(v string) StudioOption {
+    return func(e *Studio) {
+        e.SetName(v)
+    }
+}
+
+// Generated CLI AddCmd uses setter:
+v := &movies.Studio{Founded: c.Founded}
+v.SetName(c.Name)
+```
+
 ## Limitations
 
 modusGraph has a few limitations to be aware of:
@@ -751,12 +892,13 @@ and explore the package. These are organized in the `cmd` and `examples` folders
 
 ### Commands (`cmd` folder)
 
-- **`cmd/query`**: A flexible CLI tool for running arbitrary DQL (Dgraph Query Language) queries
-  against a modusGraph database.
-  - Reads a query from standard input and prints JSON results.
-  - Supports file-based modusGraph storage.
-  - Flags: `--dir`, `--pretty`, `--timeout`, `-v` (verbosity).
-  - See [`cmd/query/README.md`](./cmd/query/README.md) for usage and examples.
+- **`cmd/modusgraph-gen`**: Code generation tool that produces typed clients, query builders,
+  iterators, accessors, and a CLI from your Go struct definitions.
+  - See the [Code Generation](#code-generation) section above for details.
+
+- **`cmd/query`** *(deprecated)*: Standalone DQL query tool. Use the generated CLI's `query`
+  subcommand instead — it provides the same functionality with `--addr`/`--dir` support.
+  - See [`cmd/query/README.md`](./cmd/query/README.md) for legacy usage.
 
 ### Examples (`examples` folder)
 

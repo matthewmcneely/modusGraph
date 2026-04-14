@@ -1,0 +1,143 @@
+package {{.PackageName}}
+{{$entity := .Entity}}
+{{$name := .Entity.Name}}
+{{- $privateScalars := privateScalarFields .Entity.Fields}}
+{{- $singularEdges := privateSingularEdgeFields .Entity.Fields}}
+{{- $multiEdges := privateMultiEdgeFields .Entity.Fields}}
+{{- $sliceFields := privateSliceFields .Entity.Fields}}
+{{- $needsSlices := or (gt (len $multiEdges) 0) (gt (len $sliceFields) 0)}}
+{{- $needsTime := false}}
+{{- range $privateScalars}}{{if contains .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
+{{- range $sliceFields}}{{if contains .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
+{{- $allPrivate := privateFields .Entity.Fields}}
+{{- $extImports := externalImports $allPrivate .Imports}}
+{{if or $needsSlices $needsTime (gt (len $extImports) 0)}}
+import (
+{{- if $needsSlices}}
+	"slices"
+{{- end}}
+{{- if $needsTime}}
+	"time"
+{{- end}}
+{{range $extImports}}
+	{{- if .Alias}}
+	{{.Alias}} "{{.Path}}"
+	{{- else}}
+	"{{.Path}}"
+	{{- end}}
+{{- end}}
+)
+{{end}}
+{{- range $privateScalars}}
+// {{. | accessorName}} returns the {{.Name}} field.
+func (e *{{$name}}) {{. | accessorName}}() {{.GoType}} {
+	return e.{{.Name}}
+}
+
+// Set{{. | accessorName}} sets the {{.Name}} field.
+func (e *{{$name}}) Set{{. | accessorName}}(v {{.GoType}}) {
+	e.{{.Name}} = v
+}
+{{end}}
+{{- range $singularEdges}}
+// {{. | accessorName}} returns the {{.Name}} singular edge, or nil if unset.
+func (e *{{$name}}) {{. | accessorName}}() *{{.EdgeEntity}} {
+{{- if hasPrefix .GoType "*"}}
+	return e.{{.Name}}
+{{- else if hasPrefix .GoType "[]*"}}
+	if len(e.{{.Name}}) == 0 {
+		return nil
+	}
+	return e.{{.Name}}[0]
+{{- else if hasPrefix .GoType "[]"}}
+	if len(e.{{.Name}}) == 0 {
+		return nil
+	}
+	return &e.{{.Name}}[0]
+{{- else}}
+	return &e.{{.Name}}
+{{- end}}
+}
+
+// Set{{. | accessorName}} sets the {{.Name}} singular edge. Pass nil to clear.
+func (e *{{$name}}) Set{{. | accessorName}}(v *{{.EdgeEntity}}) {
+{{- if hasPrefix .GoType "*"}}
+	e.{{.Name}} = v
+{{- else if hasPrefix .GoType "[]*"}}
+	if v == nil {
+		e.{{.Name}} = nil
+	} else {
+		e.{{.Name}} = []*{{.EdgeEntity}}{v}
+	}
+{{- else if hasPrefix .GoType "[]"}}
+	if v == nil {
+		e.{{.Name}} = nil
+	} else {
+		e.{{.Name}} = []{{.EdgeEntity}}{*v}
+	}
+{{- else}}
+	if v != nil {
+		e.{{.Name}} = *v
+	}
+{{- end}}
+}
+{{end}}
+{{- range $multiEdges}}
+// {{. | accessorName}} returns the {{.Name}} edges.
+func (e *{{$name}}) {{. | accessorName}}() {{.GoType}} {
+	return e.{{.Name}}
+}
+
+// Set{{. | accessorName}} replaces the {{.Name}} edges.
+func (e *{{$name}}) Set{{. | accessorName}}(v {{.GoType}}) {
+	e.{{.Name}} = v
+}
+
+// Append{{. | accessorName}} appends one or more {{.EdgeEntity}} edges.
+func (e *{{$name}}) Append{{. | accessorName}}(v ...{{elemType .GoType}}) {
+	e.{{.Name}} = append(e.{{.Name}}, v...)
+}
+
+// Remove{{. | accessorName}} removes the edge with the given UID.
+func (e *{{$name}}) Remove{{. | accessorName}}(uid string) {
+	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, func(v {{elemType .GoType}}) bool {
+	{{- if hasPrefix (elemType .GoType) "*"}} return v != nil && v.UID == uid {{- else}} return v.UID == uid {{- end}}
+	})
+}
+
+// Remove{{. | accessorName}}Func removes edges matching the predicate.
+func (e *{{$name}}) Remove{{. | accessorName}}Func(fn func({{elemType .GoType}}) bool) {
+	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, fn)
+}
+{{end}}
+{{- range $sliceFields}}
+// {{. | accessorName}} returns the {{.Name}} slice.
+func (e *{{$name}}) {{. | accessorName}}() {{.GoType}} {
+	return e.{{.Name}}
+}
+
+// Set{{. | accessorName}} replaces the {{.Name}} slice.
+func (e *{{$name}}) Set{{. | accessorName}}(v {{.GoType}}) {
+	e.{{.Name}} = v
+}
+
+// Append{{. | accessorName}} appends one or more values to {{.Name}}.
+func (e *{{$name}}) Append{{. | accessorName}}(v ...{{elemType .GoType}}) {
+	e.{{.Name}} = append(e.{{.Name}}, v...)
+}
+
+// Remove{{. | accessorName}} removes the first occurrence of v from {{.Name}}.
+func (e *{{$name}}) Remove{{. | accessorName}}(v {{elemType .GoType}}) {
+	for i, item := range e.{{.Name}} {
+		if item == v {
+			e.{{.Name}} = slices.Delete(e.{{.Name}}, i, i+1)
+			return
+		}
+	}
+}
+
+// Remove{{. | accessorName}}Func removes values matching the predicate.
+func (e *{{$name}}) Remove{{. | accessorName}}Func(fn func({{elemType .GoType}}) bool) {
+	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, fn)
+}
+{{end}}

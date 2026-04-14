@@ -264,3 +264,121 @@ func getPredicatesByTag(obj any, tagName string, firstOnly bool) map[string]any 
 	}
 	return result
 }
+
+// asDgraphMapper checks whether v implements DgraphMapper, handling the common
+// case where DgraphMap() is defined with a pointer receiver. After dereferencing
+// a pointer, v holds a struct value whose method set excludes pointer receiver
+// methods. We use v.Addr() to recover the pointer and check the full method set.
+func asDgraphMapper(v reflect.Value) DgraphMapper {
+	// Try the value directly (covers value receiver methods and already-pointer values).
+	if v.CanInterface() {
+		if m, ok := v.Interface().(DgraphMapper); ok {
+			return m
+		}
+	}
+	// Try the pointer (covers pointer receiver methods on addressable struct values).
+	if v.CanAddr() {
+		if m, ok := v.Addr().Interface().(DgraphMapper); ok {
+			return m
+		}
+	}
+	return nil
+}
+
+// toDgraphMap checks if obj (or its elements, if a slice) implements DgraphMapper
+// and returns the mapped representation. Returns (mapped, true) if the object
+// should use the map-based mutation path, or (nil, false) for the standard path.
+func toDgraphMap(obj any) (any, bool) {
+	v := reflect.ValueOf(obj)
+	if !v.IsValid() {
+		return nil, false
+	}
+
+	// Handle pointer to slice: []*Film
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil, false
+		}
+		if v.Elem().Kind() == reflect.Slice {
+			v = v.Elem()
+		}
+	}
+
+	// Handle slice of DgraphMapper objects.
+	if v.Kind() == reflect.Slice && v.Len() > 0 {
+		first := v.Index(0)
+		if first.Kind() == reflect.Ptr {
+			if first.IsNil() {
+				return nil, false
+			}
+			first = first.Elem()
+		}
+		if first.Kind() == reflect.Interface {
+			if first.IsNil() {
+				return nil, false
+			}
+			first = first.Elem()
+		}
+		if asDgraphMapper(first) != nil {
+			maps := make([]map[string]interface{}, 0, v.Len())
+			for i := 0; i < v.Len(); i++ {
+				elem := v.Index(i)
+				if elem.Kind() == reflect.Ptr {
+					if elem.IsNil() {
+						continue
+					}
+					elem = elem.Elem()
+				}
+				if m := asDgraphMapper(elem); m != nil {
+					maps = append(maps, m.DgraphMap())
+				}
+			}
+			return maps, true
+		}
+	}
+
+	// Handle single struct pointer.
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil, false
+		}
+		v = v.Elem()
+	}
+	if m := asDgraphMapper(v); m != nil {
+		return m.DgraphMap(), true
+	}
+
+	return nil, false
+}
+
+// mutateWithMap performs a Dgraph mutation using a map representation and writes
+// the generated UID back to the original struct's exported UID field.
+func mutateWithMap(tx *dg.TxnContext, original any, mapped any) ([]string, error) {
+	uids, err := tx.MutateBasic(mapped)
+	if err != nil {
+		return nil, err
+	}
+	if len(uids) > 0 {
+		writeUIDBack(original, uids)
+	}
+	return uids, nil
+}
+
+// writeUIDBack sets the UID field on the original struct after a map-based mutation.
+// Since UID is always exported, reflect can set it directly.
+func writeUIDBack(obj any, uids []string) {
+	if len(uids) == 0 {
+		return
+	}
+	v := reflect.ValueOf(obj)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return
+	}
+	uidField := v.FieldByName("UID")
+	if uidField.IsValid() && uidField.CanSet() {
+		uidField.SetString(uids[0])
+	}
+}

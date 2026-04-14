@@ -153,3 +153,27 @@ The validator package supports many built-in validation tags:
 
 See the [validator documentation](https://github.com/go-playground/validator#usage) for a complete
 list.
+
+## Code Generation Interaction
+
+The `validate` tag is also used by the `modusgraph-gen` code generator to detect edge cardinality.
+When an edge field has `validate:"max=1"` or `validate:"len=1"`, the generator produces singular
+edge accessors (`*Type` getter/setter) instead of slice accessors:
+
+```go
+type Film struct {
+    UID      string     `json:"uid,omitempty"`
+    DType    []string   `json:"dgraph.type,omitempty"`
+    director []Director `json:"director,omitempty" validate:"max=1"`
+}
+
+// Generated:
+// func (f *Film) Director() *Director { ... }
+// func (f *Film) SetDirector(v *Director) { ... }
+```
+
+This provides a cleaner API when a relationship is conceptually one-to-one (or zero-to-one). When
+validation is enabled (via `WithValidator()`), the `validate` tag enforces cardinality at runtime.
+The generated accessors express the cardinality constraint in the API surface regardless of whether
+validation is enabled. See the [Code Generation](README.md#code-generation) section in the README for full
+details on private field support.
