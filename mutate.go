@@ -242,6 +242,26 @@ func getPredicatesByTag(obj any, tagName string, firstOnly bool) map[string]any 
 	return result
 }
 
+// asDgraphMapper checks whether v implements DgraphMapper, handling the common
+// case where DgraphMap() is defined with a pointer receiver. After dereferencing
+// a pointer, v holds a struct value whose method set excludes pointer receiver
+// methods. We use v.Addr() to recover the pointer and check the full method set.
+func asDgraphMapper(v reflect.Value) DgraphMapper {
+	// Try the value directly (covers value receiver methods and already-pointer values).
+	if v.CanInterface() {
+		if m, ok := v.Interface().(DgraphMapper); ok {
+			return m
+		}
+	}
+	// Try the pointer (covers pointer receiver methods on addressable struct values).
+	if v.CanAddr() {
+		if m, ok := v.Addr().Interface().(DgraphMapper); ok {
+			return m
+		}
+	}
+	return nil
+}
+
 // toDgraphMap checks if obj (or its elements, if a slice) implements DgraphMapper
 // and returns the mapped representation. Returns (mapped, true) if the object
 // should use the map-based mutation path, or (nil, false) for the standard path.
@@ -276,7 +296,7 @@ func toDgraphMap(obj any) (any, bool) {
 			}
 			first = first.Elem()
 		}
-		if _, ok := first.Interface().(DgraphMapper); ok {
+		if asDgraphMapper(first) != nil {
 			maps := make([]map[string]interface{}, 0, v.Len())
 			for i := 0; i < v.Len(); i++ {
 				elem := v.Index(i)
@@ -286,7 +306,7 @@ func toDgraphMap(obj any) (any, bool) {
 					}
 					elem = elem.Elem()
 				}
-				if m, ok := elem.Interface().(DgraphMapper); ok {
+				if m := asDgraphMapper(elem); m != nil {
 					maps = append(maps, m.DgraphMap())
 				}
 			}
@@ -301,10 +321,8 @@ func toDgraphMap(obj any) (any, bool) {
 		}
 		v = v.Elem()
 	}
-	if v.CanInterface() {
-		if m, ok := v.Interface().(DgraphMapper); ok {
-			return m.DgraphMap(), true
-		}
+	if m := asDgraphMapper(v); m != nil {
+		return m.DgraphMap(), true
 	}
 
 	return nil, false

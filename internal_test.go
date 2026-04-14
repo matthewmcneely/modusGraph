@@ -227,6 +227,29 @@ type privateFieldEntity struct {
 	ok    bool
 }
 
+func (e *privateFieldEntity) DgraphMap() map[string]interface{} {
+	m := make(map[string]interface{})
+	if e.UID != "" {
+		m["uid"] = e.UID
+	}
+	if len(e.DType) > 0 {
+		m["dgraph.type"] = e.DType
+	}
+	if e.name != "" {
+		m["name"] = e.name
+	}
+	if e.year != 0 {
+		m["year"] = e.year
+	}
+	if e.score != 0 {
+		m["score"] = e.score
+	}
+	if e.ok {
+		m["ok"] = e.ok
+	}
+	return m
+}
+
 func (e *privateFieldEntity) ValidateWith(ctx context.Context, v StructValidator) error {
 	type mirror struct {
 		Name  string  `validate:"required,min=2"`
@@ -398,6 +421,55 @@ func TestValidateOneDispatchesSelfValidator(t *testing.T) {
 		// Should not panic (AllTags has only exported fields)
 		// May fail validation but should not panic
 		_ = err
+	})
+}
+
+func TestAsDgraphMapper(t *testing.T) {
+	t.Run("PointerReceiverDetected", func(t *testing.T) {
+		// privateFieldEntity has DgraphMap() with a pointer receiver.
+		// After dereferencing a *privateFieldEntity, we get a struct value
+		// whose method set excludes pointer receiver methods.
+		// asDgraphMapper must use Addr() to recover the pointer.
+		e := &privateFieldEntity{name: "Test", year: 2025}
+		v := reflect.ValueOf(e).Elem() // struct value, not pointer
+		m := asDgraphMapper(v)
+		require.NotNil(t, m, "asDgraphMapper should detect pointer receiver DgraphMap()")
+		result := m.DgraphMap()
+		assert.Equal(t, "Test", result["name"])
+		assert.Equal(t, 2025, result["year"])
+	})
+
+	t.Run("NonMapperReturnsNil", func(t *testing.T) {
+		e := &AllTags{Email: "test@example.com"}
+		v := reflect.ValueOf(e).Elem()
+		m := asDgraphMapper(v)
+		assert.Nil(t, m, "AllTags does not implement DgraphMapper")
+	})
+}
+
+func TestToDgraphMapPointerReceiver(t *testing.T) {
+	t.Run("SingleStructPointer", func(t *testing.T) {
+		e := &privateFieldEntity{name: "Studio A", year: 2000}
+		mapped, ok := toDgraphMap(e)
+		require.True(t, ok, "toDgraphMap should detect DgraphMapper via pointer receiver")
+		m, isMap := mapped.(map[string]interface{})
+		require.True(t, isMap)
+		assert.Equal(t, "Studio A", m["name"])
+		assert.Equal(t, 2000, m["year"])
+	})
+
+	t.Run("SliceOfStructPointers", func(t *testing.T) {
+		objs := []*privateFieldEntity{
+			{name: "Studio A", year: 2000},
+			{name: "Studio B", year: 2010},
+		}
+		mapped, ok := toDgraphMap(objs)
+		require.True(t, ok, "toDgraphMap should detect DgraphMapper in slice elements")
+		maps, isSlice := mapped.([]map[string]interface{})
+		require.True(t, isSlice)
+		require.Len(t, maps, 2)
+		assert.Equal(t, "Studio A", maps[0]["name"])
+		assert.Equal(t, "Studio B", maps[1]["name"])
 	})
 }
 
