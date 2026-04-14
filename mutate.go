@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dgraph-io/dgo/v250/protos/api"
 	dg "github.com/dolan-in/dgman/v2"
 )
 
@@ -328,34 +329,58 @@ func toDgraphMap(obj any) (any, bool) {
 	return nil, false
 }
 
-// mutateWithMap performs a Dgraph mutation using a map representation and writes
-// the generated UID back to the original struct's exported UID field.
+// mutateWithMap sends a DgraphMapper-produced map directly to Dgraph, bypassing
+// dgman's reflectwalk pipeline (which cannot handle unexported fields). It fills
+// in dgraph.type and a blank UID when missing, then writes the allocated UID
+// back to the original struct.
 func mutateWithMap(tx *dg.TxnContext, original any, mapped any) ([]string, error) {
-	uids, err := tx.MutateBasic(mapped)
-	if err != nil {
-		return nil, err
+	m, ok := mapped.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("mutateWithMap: expected map[string]interface{}, got %T", mapped)
 	}
-	if len(uids) > 0 {
-		writeUIDBack(original, uids)
-	}
-	return uids, nil
-}
 
-// writeUIDBack sets the UID field on the original struct after a map-based mutation.
-// Since UID is always exported, reflect can set it directly.
-func writeUIDBack(obj any, uids []string) {
-	if len(uids) == 0 {
-		return
+	// Set dgraph.type from the Go struct name if not already present.
+	if _, ok := m["dgraph.type"]; !ok {
+		v := reflect.ValueOf(original)
+		if v.Kind() == reflect.Ptr {
+			v = v.Elem()
+		}
+		m["dgraph.type"] = v.Type().Name()
 	}
-	v := reflect.ValueOf(obj)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
+
+	// Assign a blank node UID so Dgraph allocates one and returns it.
+	if uid, _ := m["uid"].(string); uid == "" {
+		m["uid"] = "_:new"
 	}
-	if v.Kind() != reflect.Struct {
-		return
+
+	setJSON, err := json.Marshal(m)
+	if err != nil {
+		return nil, fmt.Errorf("marshal DgraphMap: %w", err)
 	}
-	uidField := v.FieldByName("UID")
-	if uidField.IsValid() && uidField.CanSet() {
-		uidField.SetString(uids[0])
+
+	resp, err := tx.Txn().Mutate(tx.Context(), &api.Mutation{
+		SetJson:   setJSON,
+		CommitNow: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("txn mutate failed: %w", err)
 	}
+
+	var uids []string
+	for _, uid := range resp.Uids {
+		uids = append(uids, uid)
+	}
+
+	// Write the Dgraph-allocated UID back to the struct's exported UID field.
+	if len(uids) > 0 {
+		v := reflect.ValueOf(original)
+		if v.Kind() == reflect.Ptr {
+			v = v.Elem()
+		}
+		if f := v.FieldByName("UID"); f.IsValid() && f.CanSet() {
+			f.SetString(uids[0])
+		}
+	}
+
+	return uids, nil
 }
