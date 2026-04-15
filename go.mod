@@ -157,3 +157,5 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/dolan-in/dgman/v2 => github.com/mlwelles/dgman/v2 v2.2.0-preview2.0.20260415160033-bc0b95f26417

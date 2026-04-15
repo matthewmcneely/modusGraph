@@ -3,7 +3,6 @@ package {{.PackageName}}
 {{$hasPrivate := hasPrivateFields .Entity.Fields}}
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/matthewmcneely/modusgraph"
 )
@@ -15,32 +14,12 @@ type {{$name}}Client struct {
 
 // Get retrieves a single {{$name}} by its UID.
 func (c *{{$name}}Client) Get(ctx context.Context, uid string) (*{{$name}}, error) {
-{{- if $hasPrivate}}
-	// Query using the reflectable struct so dgman can project all fields.
-	var proxy {{lcFirst $name}}Reflectable
-	err := c.conn.Get(ctx, &proxy, uid)
-	if err != nil {
-		return nil, err
-	}
-	// Unmarshal back into the entity via JSON round-trip, which invokes
-	// the entity's UnmarshalJSON and populates private fields.
-	data, err := json.Marshal(&proxy)
-	if err != nil {
-		return nil, err
-	}
-	var result {{$name}}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-{{- else}}
 	var result {{$name}}
 	err := c.conn.Get(ctx, &result, uid)
 	if err != nil {
 		return nil, err
 	}
 	return &result, nil
-{{- end}}
 }
 
 // Add inserts a new {{$name}} into the database.
@@ -64,22 +43,12 @@ func (c *{{$name}}Client) Search(ctx context.Context, term string, opts ...PageO
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-{{- if $hasPrivate}}
-	var proxies []{{lcFirst $name}}Reflectable
-	q := c.conn.Query(ctx, {{lcFirst $name}}Reflectable{}).
-		Filter(`alloftext({{searchPredicate .Entity}}, "` + term + `")`).
-		First(cfg.first)
-	if cfg.offset > 0 {
-		q = q.Offset(cfg.offset)
-	}
-	err := q.Nodes(&proxies)
-	if err != nil {
-		return nil, err
-	}
-	return unmarshal{{$name}}Slice(proxies)
-{{- else}}
 	var results []{{$name}}
+{{- if $hasPrivate}}
+	q := c.conn.Query(ctx, &{{$name}}{}).
+{{- else}}
 	q := c.conn.Query(ctx, {{$name}}{}).
+{{- end}}
 		Filter(`alloftext({{searchPredicate .Entity}}, "` + term + `")`).
 		First(cfg.first)
 	if cfg.offset > 0 {
@@ -90,7 +59,6 @@ func (c *{{$name}}Client) Search(ctx context.Context, term string, opts ...PageO
 		return nil, err
 	}
 	return results, nil
-{{- end}}
 }
 {{end}}
 // List retrieves {{$name}} entities with optional pagination.
@@ -99,21 +67,12 @@ func (c *{{$name}}Client) List(ctx context.Context, opts ...PageOption) ([]{{$na
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-{{- if $hasPrivate}}
-	var proxies []{{lcFirst $name}}Reflectable
-	q := c.conn.Query(ctx, {{lcFirst $name}}Reflectable{}).
-		First(cfg.first)
-	if cfg.offset > 0 {
-		q = q.Offset(cfg.offset)
-	}
-	err := q.Nodes(&proxies)
-	if err != nil {
-		return nil, err
-	}
-	return unmarshal{{$name}}Slice(proxies)
-{{- else}}
 	var results []{{$name}}
+{{- if $hasPrivate}}
+	q := c.conn.Query(ctx, &{{$name}}{}).
+{{- else}}
 	q := c.conn.Query(ctx, {{$name}}{}).
+{{- end}}
 		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
@@ -123,19 +82,4 @@ func (c *{{$name}}Client) List(ctx context.Context, opts ...PageOption) ([]{{$na
 		return nil, err
 	}
 	return results, nil
-{{- end}}
 }
-{{if $hasPrivate}}
-// unmarshal{{$name}}Slice converts reflectable proxies to entities via JSON round-trip.
-func unmarshal{{$name}}Slice(proxies []{{lcFirst $name}}Reflectable) ([]{{$name}}, error) {
-	data, err := json.Marshal(proxies)
-	if err != nil {
-		return nil, err
-	}
-	var results []{{$name}}
-	if err := json.Unmarshal(data, &results); err != nil {
-		return nil, err
-	}
-	return results, nil
-}
-{{end}}

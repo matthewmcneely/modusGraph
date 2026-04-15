@@ -21,15 +21,6 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// Reflectable is implemented by generated entities with private fields.
-// ToReflectable returns an all-exported copy of the entity that dgman's
-// reflectwalk can traverse for mutations. FromReflectable copies UID and
-// any dgman-assigned values back from the exported copy after mutation.
-type Reflectable interface {
-	ToReflectable() any
-	FromReflectable(any)
-}
-
 // SelfValidator is implemented by generated entities with private fields that
 // have validate tags. It provides field-level validation using a mirror struct
 // with exported fields, allowing the go-playground/validator to access values
@@ -399,7 +390,9 @@ func (c client) Insert(ctx context.Context, obj any) error {
 		return err
 	}
 
-	return c.process(ctx, obj, "Insert", mutateFunc(obj))
+	return c.process(ctx, obj, "Insert", func(tx *dg.TxnContext, obj any) ([]string, error) {
+		return tx.MutateBasic(obj)
+	})
 }
 
 // InsertRaw adds a new object or slice of objects to the database.
@@ -414,7 +407,9 @@ func (c client) InsertRaw(ctx context.Context, obj any) error {
 		return err
 	}
 
-	return c.process(ctx, obj, "Insert", mutateFunc(obj))
+	return c.process(ctx, obj, "Insert", func(tx *dg.TxnContext, obj any) ([]string, error) {
+		return tx.MutateBasic(obj)
+	})
 }
 
 // Upsert implements inserting or updating an object or slice of objects in the database.
@@ -440,28 +435,9 @@ func (c client) Update(ctx context.Context, obj any) error {
 		return err
 	}
 
-	return c.process(ctx, obj, "Update", mutateFunc(obj))
-}
-
-// mutateFunc returns a txn function that handles both Reflectable entities
-// (private fields) and plain structs (exported fields). For Reflectable
-// entities, it copies to an all-exported struct, lets dgman mutate it
-// normally, then copies UID/DType back.
-func mutateFunc(obj any) func(*dg.TxnContext, any) ([]string, error) {
-	if r, ok := obj.(Reflectable); ok {
-		return func(tx *dg.TxnContext, _ any) ([]string, error) {
-			shadow := r.ToReflectable()
-			uids, err := tx.MutateBasic(shadow)
-			if err != nil {
-				return nil, err
-			}
-			r.FromReflectable(shadow)
-			return uids, nil
-		}
-	}
-	return func(tx *dg.TxnContext, obj any) ([]string, error) {
+	return c.process(ctx, obj, "Update", func(tx *dg.TxnContext, obj any) ([]string, error) {
 		return tx.MutateBasic(obj)
-	}
+	})
 }
 
 // Delete implements removing objects with the specified UIDs.

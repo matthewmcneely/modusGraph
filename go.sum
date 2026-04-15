@@ -148,8 +148,6 @@ github.com/docker/go-connections v0.6.0 h1:LlMG9azAe1TqfR7sO+NJttz1gy6KO7VJBh+pM
 github.com/docker/go-connections v0.6.0/go.mod h1:AahvXYshr6JgfUJGdDCs2b5EZG/vmaMAntpSFH5BFKE=
 github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4=
 github.com/docker/go-units v0.5.0/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
-github.com/dolan-in/dgman/v2 v2.2.0-preview2 h1:BuyUS4KesesYteG8h9fQt2rUWfgk1Sst9ACjkN9b5Yo=
-github.com/dolan-in/dgman/v2 v2.2.0-preview2/go.mod h1:sL8WeQ6yPsb9GwuhKLLGGKmWRjqbwjQCoJNhF/I5zxQ=
 github.com/dolan-in/reflectwalk v1.0.2-0.20210101124621-dc2073a29d71 h1:v3bErDrPApxsyBlz8/8nFTCb7Ai0wecA8TokfEHIQ80=
 github.com/dolan-in/reflectwalk v1.0.2-0.20210101124621-dc2073a29d71/go.mod h1:Y9TyDkSL5jQ18ZnDaSxOdCUhbb5SCeamqYFQ7LYxxFs=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
@@ -416,6 +414,8 @@ github.com/mitchellh/go-homedir v1.1.0/go.mod h1:SfyaCUpYCn1Vlf4IUYiD9fPX4A5wJrk
 github.com/mitchellh/mapstructure v0.0.0-20180203102830-a4e142e9c047/go.mod h1:FVVH3fgwuzCH5S8UJGiWEs2h04kUh9fWfEaFds41c1Y=
 github.com/mitchellh/mapstructure v1.5.1-0.20231216201459-8508981c8b6c h1:cqn374mizHuIWj+OSJCajGr/phAmuMug9qIX3l9CflE=
 github.com/mitchellh/mapstructure v1.5.1-0.20231216201459-8508981c8b6c/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
+github.com/mlwelles/dgman/v2 v2.2.0-preview2.0.20260415160033-bc0b95f26417 h1:/0loaTzNyogwRrmjFwieyeL/16cxHnzXi/J+ST5/gYA=
+github.com/mlwelles/dgman/v2 v2.2.0-preview2.0.20260415160033-bc0b95f26417/go.mod h1:sL8WeQ6yPsb9GwuhKLLGGKmWRjqbwjQCoJNhF/I5zxQ=
 github.com/moby/docker-image-spec v1.3.1 h1:jMKff3w6PgbfSa69GfNg+zN/XLhfXJGnEx3Nl2EsFP0=
 github.com/moby/docker-image-spec v1.3.1/go.mod h1:eKmb5VW8vQEh/BAr2yvVNvuiJuY6UIocYsFu/DxxRpo=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=

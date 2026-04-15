@@ -1160,7 +1160,7 @@ func TestGeneratedMarshalForEdgeVariants(t *testing.T) {
 	})
 
 	t.Run("FromReflectableMethod", func(t *testing.T) {
-		if !strings.Contains(content, "func (e *Studio) FromReflectable(r any)") {
+		if !strings.Contains(content, "func (e *Studio) FromReflectable(model any)") {
 			t.Error("missing FromReflectable method")
 		}
 	})

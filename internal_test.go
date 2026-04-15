@@ -249,8 +249,8 @@ func (e *privateFieldEntity) ToReflectable() any {
 	}
 }
 
-func (e *privateFieldEntity) FromReflectable(r any) {
-	s := r.(*privateFieldEntityReflectable)
+func (e *privateFieldEntity) FromReflectable(model any) {
+	s := model.(*privateFieldEntityReflectable)
 	e.UID = s.UID
 	e.DType = s.DType
 }
@@ -429,7 +429,7 @@ func TestValidateOneDispatchesSelfValidator(t *testing.T) {
 	})
 }
 
-func TestReflectable(t *testing.T) {
+func TestHasReflectable(t *testing.T) {
 	t.Run("ToReflectable", func(t *testing.T) {
 		e := &privateFieldEntity{UID: "0x1", name: "Studio A", year: 2000, score: 85.5, ok: true}
 		r := e.ToReflectable()
@@ -450,17 +450,5 @@ func TestReflectable(t *testing.T) {
 		assert.Equal(t, []string{"privateFieldEntity"}, e.DType)
 		// Private fields unchanged.
 		assert.Equal(t, "Studio A", e.name)
-	})
-
-	t.Run("MutateFuncDetectsReflectable", func(t *testing.T) {
-		e := &privateFieldEntity{name: "Test"}
-		fn := mutateFunc(e)
-		require.NotNil(t, fn)
-		// We can't call fn without a real txn, but we can verify the
-		// interface detection works by checking that AllTags (non-Reflectable)
-		// returns a different function.
-		plain := &AllTags{Email: "test@example.com"}
-		fn2 := mutateFunc(plain)
-		require.NotNil(t, fn2)
 	})
 }

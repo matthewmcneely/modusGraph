@@ -4,7 +4,6 @@ package movies
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/matthewmcneely/modusgraph"
 )
@@ -16,20 +15,9 @@ type StudioClient struct {
 
 // Get retrieves a single Studio by its UID.
 func (c *StudioClient) Get(ctx context.Context, uid string) (*Studio, error) {
-	// Query using the reflectable struct so dgman can project all fields.
-	var proxy studioReflectable
-	err := c.conn.Get(ctx, &proxy, uid)
-	if err != nil {
-		return nil, err
-	}
-	// Unmarshal back into the entity via JSON round-trip, which invokes
-	// the entity's UnmarshalJSON and populates private fields.
-	data, err := json.Marshal(&proxy)
-	if err != nil {
-		return nil, err
-	}
 	var result Studio
-	if err := json.Unmarshal(data, &result); err != nil {
+	err := c.conn.Get(ctx, &result, uid)
+	if err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -56,27 +44,14 @@ func (c *StudioClient) List(ctx context.Context, opts ...PageOption) ([]Studio, 
 	for _, opt := range opts {
 		opt.applyPage(&cfg)
 	}
-	var proxies []studioReflectable
-	q := c.conn.Query(ctx, studioReflectable{}).
+	var results []Studio
+	q := c.conn.Query(ctx, &Studio{}).
 		First(cfg.first)
 	if cfg.offset > 0 {
 		q = q.Offset(cfg.offset)
 	}
-	err := q.Nodes(&proxies)
+	err := q.Nodes(&results)
 	if err != nil {
-		return nil, err
-	}
-	return unmarshalStudioSlice(proxies)
-}
-
-// unmarshalStudioSlice converts reflectable proxies to entities via JSON round-trip.
-func unmarshalStudioSlice(proxies []studioReflectable) ([]Studio, error) {
-	data, err := json.Marshal(proxies)
-	if err != nil {
-		return nil, err
-	}
-	var results []Studio
-	if err := json.Unmarshal(data, &results); err != nil {
 		return nil, err
 	}
 	return results, nil

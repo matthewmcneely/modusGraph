@@ -12,9 +12,10 @@ import (
 	dg "github.com/dolan-in/dgman/v2"
 )
 
-// studioReflectable is an all-exported copy of Studio that dgman's
-// reflectwalk can traverse for mutations. It carries the same json and dgraph
-// tags so the Dgraph schema is identical.
+// studioReflectable is an all-exported mirror of Studio that carries
+// the same json and dgraph tags. It is used for dgman query building (tag
+// introspection via QueryModel) and mutation payload (MutateModel). It is
+// never populated during the query result path.
 type studioReflectable struct {
 	UID           string            `json:"uid,omitempty"`
 	DType         []string          `json:"dgraph.type,omitempty" dgraph:"Studio"`
@@ -40,7 +41,9 @@ type studioReflectable struct {
 	Milestones    []time.Time       `json:"milestones,omitempty"`
 }
 
-// ToReflectable returns an all-exported copy of Studio that dgman can mutate.
+// ToReflectable returns a populated all-exported copy for dgman.
+// On the query path only its reflect.Type is used (tag introspection).
+// On the mutation path the full copy is passed through dgman's pipeline.
 func (e *Studio) ToReflectable() any {
 	return &studioReflectable{
 		UID:           e.UID,
@@ -68,42 +71,146 @@ func (e *Studio) ToReflectable() any {
 	}
 }
 
-// FromReflectable copies UID and DType back from the reflectable copy after mutation.
-func (e *Studio) FromReflectable(r any) {
-	s := r.(*studioReflectable)
+// FromReflectable copies UID and DType back from the mutated reflectable.
+func (e *Studio) FromReflectable(model any) {
+	s := model.(*studioReflectable)
 	e.UID = s.UID
 	e.DType = s.DType
 }
 
+// MarshalJSON implements custom JSON marshaling for Studio,
+// allowing private fields to be serialized using predicate names as keys.
+func (e Studio) MarshalJSON() ([]byte, error) {
+	m := make(map[string]interface{})
+	if e.UID != "" {
+		m["uid"] = e.UID
+	}
+	if len(e.DType) > 0 {
+		m["dgraph.type"] = e.DType
+	}
+	if e.name != "" {
+		m["name"] = e.name
+	}
+	if e.yearFounded != 0 {
+		m["yearFounded"] = e.yearFounded
+	}
+	if e.revenue != 0 {
+		m["revenue"] = e.revenue
+	}
+	if e.active {
+		m["active"] = e.active
+	}
+	if !e.createdAt.IsZero() {
+		m["createdAt"] = e.createdAt
+	}
+	m["embedding"] = e.embedding
+	if e.Founded != "" {
+		m["founded"] = e.Founded
+	}
+	m["founder"] = e.founder
+	m["headquarters"] = e.headquarters
+	m["currentHead"] = e.currentHead
+	m["ceo"] = e.ceo
+	m["homeBase"] = e.homeBase
+	m["parentCompany"] = e.parentCompany
+	if len(e.films) > 0 {
+		m["films"] = e.films
+	}
+	if len(e.advisors) > 0 {
+		m["advisors"] = e.advisors
+	}
+	if len(e.tags) > 0 {
+		m["tags"] = e.tags
+	}
+	if len(e.scores) > 0 {
+		m["scores"] = e.scores
+	}
+	if len(e.weights) > 0 {
+		m["weights"] = e.weights
+	}
+	if len(e.flags) > 0 {
+		m["flags"] = e.flags
+	}
+	if len(e.milestones) > 0 {
+		m["milestones"] = e.milestones
+	}
+	return json.Marshal(m)
+}
+
 // UnmarshalJSON implements custom JSON unmarshaling for Studio,
-// allowing private fields to be populated from Dgraph query responses.
+// allowing private fields to be populated directly from JSON keyed by
+// predicate names (as returned by Dgraph).
 func (e *Studio) UnmarshalJSON(data []byte) error {
-	var a studioReflectable
-	if err := json.Unmarshal(data, &a); err != nil {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	e.UID = a.UID
-	e.DType = a.DType
-	e.name = a.Name
-	e.yearFounded = a.YearFounded
-	e.revenue = a.Revenue
-	e.active = a.Active
-	e.createdAt = a.CreatedAt
-	e.embedding = a.Embedding
-	e.Founded = a.Founded
-	e.founder = a.Founder
-	e.headquarters = a.Headquarters
-	e.currentHead = a.CurrentHead
-	e.ceo = a.Ceo
-	e.homeBase = a.HomeBase
-	e.parentCompany = a.ParentCompany
-	e.films = a.Films
-	e.advisors = a.Advisors
-	e.tags = a.Tags
-	e.scores = a.Scores
-	e.weights = a.Weights
-	e.flags = a.Flags
-	e.milestones = a.Milestones
+	if v, ok := raw["uid"]; ok {
+		json.Unmarshal(v, &e.UID)
+	}
+	if v, ok := raw["dgraph.type"]; ok {
+		json.Unmarshal(v, &e.DType)
+	}
+	if v, ok := raw["name"]; ok {
+		json.Unmarshal(v, &e.name)
+	}
+	if v, ok := raw["yearFounded"]; ok {
+		json.Unmarshal(v, &e.yearFounded)
+	}
+	if v, ok := raw["revenue"]; ok {
+		json.Unmarshal(v, &e.revenue)
+	}
+	if v, ok := raw["active"]; ok {
+		json.Unmarshal(v, &e.active)
+	}
+	if v, ok := raw["createdAt"]; ok {
+		json.Unmarshal(v, &e.createdAt)
+	}
+	if v, ok := raw["embedding"]; ok {
+		json.Unmarshal(v, &e.embedding)
+	}
+	if v, ok := raw["founded"]; ok {
+		json.Unmarshal(v, &e.Founded)
+	}
+	if v, ok := raw["founder"]; ok {
+		json.Unmarshal(v, &e.founder)
+	}
+	if v, ok := raw["headquarters"]; ok {
+		json.Unmarshal(v, &e.headquarters)
+	}
+	if v, ok := raw["currentHead"]; ok {
+		json.Unmarshal(v, &e.currentHead)
+	}
+	if v, ok := raw["ceo"]; ok {
+		json.Unmarshal(v, &e.ceo)
+	}
+	if v, ok := raw["homeBase"]; ok {
+		json.Unmarshal(v, &e.homeBase)
+	}
+	if v, ok := raw["parentCompany"]; ok {
+		json.Unmarshal(v, &e.parentCompany)
+	}
+	if v, ok := raw["films"]; ok {
+		json.Unmarshal(v, &e.films)
+	}
+	if v, ok := raw["advisors"]; ok {
+		json.Unmarshal(v, &e.advisors)
+	}
+	if v, ok := raw["tags"]; ok {
+		json.Unmarshal(v, &e.tags)
+	}
+	if v, ok := raw["scores"]; ok {
+		json.Unmarshal(v, &e.scores)
+	}
+	if v, ok := raw["weights"]; ok {
+		json.Unmarshal(v, &e.weights)
+	}
+	if v, ok := raw["flags"]; ok {
+		json.Unmarshal(v, &e.flags)
+	}
+	if v, ok := raw["milestones"]; ok {
+		json.Unmarshal(v, &e.milestones)
+	}
 	return nil
 }
 

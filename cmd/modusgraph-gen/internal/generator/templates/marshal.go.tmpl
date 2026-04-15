@@ -28,9 +28,10 @@ import (
 {{- end}}
 )
 
-// {{lcFirst $name}}Reflectable is an all-exported copy of {{$name}} that dgman's
-// reflectwalk can traverse for mutations. It carries the same json and dgraph
-// tags so the Dgraph schema is identical.
+// {{lcFirst $name}}Reflectable is an all-exported mirror of {{$name}} that carries
+// the same json and dgraph tags. It is used for dgman query building (tag
+// introspection via QueryModel) and mutation payload (MutateModel). It is
+// never populated during the query result path.
 type {{lcFirst $name}}Reflectable struct {
 	UID   string   `json:"uid,omitempty"`
 	DType []string `json:"dgraph.type,omitempty" dgraph:"{{$name}}"`
@@ -48,7 +49,9 @@ type {{lcFirst $name}}Reflectable struct {
 {{- end}}
 }
 
-// ToReflectable returns an all-exported copy of {{$name}} that dgman can mutate.
+// ToReflectable returns a populated all-exported copy for dgman.
+// On the query path only its reflect.Type is used (tag introspection).
+// On the mutation path the full copy is passed through dgman's pipeline.
 func (e *{{$name}}) ToReflectable() any {
 	return &{{lcFirst $name}}Reflectable{
 		UID:   e.UID,
@@ -68,33 +71,93 @@ func (e *{{$name}}) ToReflectable() any {
 	}
 }
 
-// FromReflectable copies UID and DType back from the reflectable copy after mutation.
-func (e *{{$name}}) FromReflectable(r any) {
-	s := r.(*{{lcFirst $name}}Reflectable)
+// FromReflectable copies UID and DType back from the mutated reflectable.
+func (e *{{$name}}) FromReflectable(model any) {
+	s := model.(*{{lcFirst $name}}Reflectable)
 	e.UID = s.UID
 	e.DType = s.DType
 }
 
-// UnmarshalJSON implements custom JSON unmarshaling for {{$name}},
-// allowing private fields to be populated from Dgraph query responses.
-func (e *{{$name}}) UnmarshalJSON(data []byte) error {
-	var a {{lcFirst $name}}Reflectable
-	if err := json.Unmarshal(data, &a); err != nil {
-		return err
+// MarshalJSON implements custom JSON marshaling for {{$name}},
+// allowing private fields to be serialized using predicate names as keys.
+func (e {{$name}}) MarshalJSON() ([]byte, error) {
+	m := make(map[string]interface{})
+	if e.UID != "" {
+		m["uid"] = e.UID
 	}
-	e.UID = a.UID
-	e.DType = a.DType
+	if len(e.DType) > 0 {
+		m["dgraph.type"] = e.DType
+	}
 {{- range $scalars}}{{if not .IsUID}}{{if not .IsDType}}
-	e.{{.Name}} = a.{{. | accessorName}}
+	{{- if contains .GoType "time."}}
+	if !e.{{.Name}}.IsZero() {
+		m["{{.Predicate}}"] = e.{{.Name}}
+	}
+	{{- else if or (eq .GoType "string") (contains .GoType "enums.")}}
+	if e.{{.Name}} != "" {
+		m["{{.Predicate}}"] = e.{{.Name}}
+	}
+	{{- else if or (eq .GoType "int") (eq .GoType "int64") (eq .GoType "float64") (eq .GoType "float32")}}
+	if e.{{.Name}} != 0 {
+		m["{{.Predicate}}"] = e.{{.Name}}
+	}
+	{{- else if eq .GoType "bool"}}
+	if e.{{.Name}} {
+		m["{{.Predicate}}"] = e.{{.Name}}
+	}
+	{{- else}}
+	m["{{.Predicate}}"] = e.{{.Name}}
+	{{- end}}
 {{- end}}{{end}}{{end}}
 {{- range $singularEdges}}
-	e.{{.Name}} = a.{{. | accessorName}}
+	m["{{.Predicate}}"] = e.{{.Name}}
 {{- end}}
 {{- range $multiEdges}}
-	e.{{.Name}} = a.{{. | accessorName}}
+	if len(e.{{.Name}}) > 0 {
+		m["{{.Predicate}}"] = e.{{.Name}}
+	}
 {{- end}}
 {{- range $sliceFields}}
-	e.{{.Name}} = a.{{. | accessorName}}
+	if len(e.{{.Name}}) > 0 {
+		m["{{.Predicate}}"] = e.{{.Name}}
+	}
+{{- end}}
+	return json.Marshal(m)
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for {{$name}},
+// allowing private fields to be populated directly from JSON keyed by
+// predicate names (as returned by Dgraph).
+func (e *{{$name}}) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if v, ok := raw["uid"]; ok {
+		json.Unmarshal(v, &e.UID)
+	}
+	if v, ok := raw["dgraph.type"]; ok {
+		json.Unmarshal(v, &e.DType)
+	}
+{{- range $scalars}}{{if not .IsUID}}{{if not .IsDType}}
+	if v, ok := raw["{{.Predicate}}"]; ok {
+		json.Unmarshal(v, &e.{{.Name}})
+	}
+{{- end}}{{end}}{{end}}
+{{- range $singularEdges}}
+	if v, ok := raw["{{.Predicate}}"]; ok {
+		json.Unmarshal(v, &e.{{.Name}})
+	}
+{{- end}}
+{{- range $multiEdges}}
+	if v, ok := raw["{{.Predicate}}"]; ok {
+		json.Unmarshal(v, &e.{{.Name}})
+	}
+{{- end}}
+{{- range $sliceFields}}
+	if v, ok := raw["{{.Predicate}}"]; ok {
+		json.Unmarshal(v, &e.{{.Name}})
+	}
 {{- end}}
 	return nil
 }
