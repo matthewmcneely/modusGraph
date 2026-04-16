@@ -93,6 +93,11 @@ type Client interface {
 	// DgraphClient returns a gRPC Dgraph client from the connection pool and a cleanup function.
 	// The cleanup function must be called when finished with the client to return it to the pool.
 	DgraphClient() (*dgo.Dgraph, func(), error)
+
+	// WithRetry executes fn, retrying on aborted transactions with exponential
+	// backoff according to the given policy. This is opt-in; normal Insert/Upsert/
+	// Update calls do not retry. See RetryPolicy and DefaultRetryPolicy.
+	WithRetry(ctx context.Context, policy RetryPolicy, fn func() error) error
 }
 
 const (
@@ -128,7 +133,6 @@ type clientOptions struct {
 	poolSize         int
 	maxEdgeTraversal int
 	cacheSizeMB      int
-	maxRetries       int
 	namespace        string
 	logger           logr.Logger
 	validator        StructValidator
@@ -193,20 +197,6 @@ func WithValidator(v StructValidator) ClientOpt {
 	}
 }
 
-// WithMaxRetries sets the maximum number of retries for aborted transactions.
-// Dgraph uses optimistic concurrency control; concurrent mutations on overlapping
-// predicates can cause transaction aborts. When an abort is detected, the client
-// retries with a fresh transaction up to this many times. Default is 3.
-// Set to 0 to disable retries.
-func WithMaxRetries(n int) ClientOpt {
-	return func(o *clientOptions) {
-		if n < 0 {
-			n = 0
-		}
-		o.maxRetries = n
-	}
-}
-
 // NewValidator creates a new validator instance with default settings.
 // This is a convenience function for creating a validator to use with WithValidator.
 // It returns a *validator.Validate from github.com/go-playground/validator/v10.
@@ -228,7 +218,6 @@ func NewValidator() *validator.Validate {
 //   - WithLogger(logr.Logger) - Configure structured logging with custom verbosity levels
 //   - WithCacheSizeMB(int) - Set the memory cache size in MB (only applicable for embedded databases)
 //   - WithValidator(*validator.Validate) - Set a validator instance for struct validation before mutations
-//   - WithMaxRetries(int) - Set maximum retries for aborted transactions (default 3)
 //
 // The returned Client provides a consistent interface regardless of whether you're
 // connected to a remote Dgraph cluster or a local embedded database. This abstraction
@@ -243,8 +232,7 @@ func NewClient(uri string, opts ...ClientOpt) (Client, error) {
 		poolSize:         10,
 		namespace:        "",
 		maxEdgeTraversal: 10,
-		cacheSizeMB:      64, // 64 MB
-		maxRetries:       3,
+		cacheSizeMB:      64,             // 64 MB
 		logger:           logr.Discard(), // No-op logger by default
 	}
 
@@ -335,8 +323,8 @@ func (c client) key() string {
 	if c.options.validator != nil {
 		validatorKey = fmt.Sprintf("%p", c.options.validator)
 	}
-	return fmt.Sprintf("%s:%t:%d:%d:%d:%d:%s:%s", c.uri, c.options.autoSchema, c.options.poolSize,
-		c.options.maxEdgeTraversal, c.options.cacheSizeMB, c.options.maxRetries, c.options.namespace, validatorKey)
+	return fmt.Sprintf("%s:%t:%d:%d:%d:%s:%s", c.uri, c.options.autoSchema, c.options.poolSize,
+		c.options.maxEdgeTraversal, c.options.cacheSizeMB, c.options.namespace, validatorKey)
 }
 
 func checkPointer(obj any) error {
