@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dgraph-io/dgo/v250"
 	dg "github.com/dolan-in/dgman/v2"
 )
 
@@ -90,24 +91,35 @@ func (c client) process(ctx context.Context,
 		}
 	}
 
-	client, err := c.pool.get()
+	dgClient, err := c.pool.get()
 	if err != nil {
 		c.logger.Error(err, "Failed to get client from pool")
 		return err
 	}
-	defer c.pool.put(client)
+	defer c.pool.put(dgClient)
 
-	tx := dg.NewTxnContext(ctx, client).SetCommitNow()
-	uids, err := txFunc(tx, obj)
-	if err != nil {
-		// Check if this is a unique constraint violation error from Dgraph
+	maxRetries := c.options.maxRetries
+	for attempt := 0; ; attempt++ {
+		tx := dg.NewTxnContext(ctx, dgClient).SetCommitNow()
+		uids, err := txFunc(tx, obj)
+		if err == nil {
+			c.logger.V(2).Info(operation+" successful", "uidCount", len(uids))
+			return nil
+		}
+		if errors.Is(err, dgo.ErrAborted) && attempt < maxRetries {
+			c.logger.V(1).Info("Transaction aborted, retrying",
+				"operation", operation, "attempt", attempt+1, "maxRetries", maxRetries)
+			continue
+		}
+		// Non-retryable error or max retries exceeded
+		if errors.Is(err, dgo.ErrAborted) {
+			return fmt.Errorf("transaction aborted after %d retries: %w", maxRetries, err)
+		}
 		if uniqueErr := parseUniqueError(err); uniqueErr != nil {
 			return uniqueErr
 		}
 		return err
 	}
-	c.logger.V(2).Info(operation+" successful", "uidCount", len(uids))
-	return nil
 }
 
 func generateUniquePredicateQuery(predicates map[string]interface{}, nodeType string) (string, map[string]string) {
