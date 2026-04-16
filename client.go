@@ -98,6 +98,12 @@ type Client interface {
 	// backoff according to the given policy. This is opt-in; normal Insert/Upsert/
 	// Update calls do not retry. See RetryPolicy and DefaultRetryPolicy.
 	WithRetry(ctx context.Context, policy RetryPolicy, fn func() error) error
+
+	// LoadData loads RDF or JSON data files from dataDir into the database.
+	// Files must have .rdf, .rdf.gz, .json, or .json.gz extensions.
+	// Options:
+	//   - WithSchema(path) - apply schema before loading data
+	LoadData(ctx context.Context, dataDir string, opts ...LoadOpt) error
 }
 
 const (
