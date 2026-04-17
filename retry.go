@@ -18,21 +18,17 @@ import (
 // Modeled after dgraph4j's RetryPolicy: exponential backoff with jitter.
 type RetryPolicy struct {
 	// MaxRetries is the maximum number of retry attempts after the initial try.
-	// Default: 5.
 	MaxRetries int
 
 	// BaseDelay is the initial delay before the first retry.
 	// Subsequent delays grow exponentially: BaseDelay * 2^attempt.
-	// Default: 100ms.
 	BaseDelay time.Duration
 
-	// MaxDelay caps the backoff duration. No single delay will exceed this.
-	// Default: 5s.
+	// MaxDelay caps the backoff duration. No single delay exceeds this.
 	MaxDelay time.Duration
 
 	// Jitter adds randomness to each delay to prevent thundering herd.
 	// Expressed as a fraction of the computed delay (e.g. 0.1 = 10%).
-	// Default: 0.1.
 	Jitter float64
 }
 
@@ -58,13 +54,6 @@ func (p RetryPolicy) delay(attempt int) time.Duration {
 	return d
 }
 
-// isAbortedError returns true if err (or any error in its chain) is a Dgraph
-// transaction abort. This works through pkg/errors wrapping because both
-// withStack and withMessage implement Unwrap().
-func isAbortedError(err error) bool {
-	return errors.Is(err, dgo.ErrAborted)
-}
-
 // WithRetry executes fn, retrying on aborted transactions according to policy.
 //
 // This is an opt-in mechanism modeled after dgraph4j's client.withRetry().
@@ -85,14 +74,12 @@ func isAbortedError(err error) bool {
 //	    return client.Insert(ctx, &entity)
 //	})
 func (c client) WithRetry(ctx context.Context, policy RetryPolicy, fn func() error) error {
-	var lastErr error
-	for attempt := 0; attempt <= policy.MaxRetries; attempt++ {
+	for attempt := range policy.MaxRetries + 1 {
 		err := fn()
 		if err == nil {
 			return nil
 		}
-		lastErr = err
-		if !isAbortedError(err) || attempt >= policy.MaxRetries {
+		if !errors.Is(err, dgo.ErrAborted) || attempt >= policy.MaxRetries {
 			return err
 		}
 		d := policy.delay(attempt)
@@ -104,5 +91,6 @@ func (c client) WithRetry(ctx context.Context, policy RetryPolicy, fn func() err
 			return ctx.Err()
 		}
 	}
-	return lastErr // unreachable, but satisfies the compiler
+	// Unreachable: the loop runs MaxRetries+1 times and returns on every path.
+	panic("unreachable")
 }

@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Package load provides option types for configuring modusgraph.Client.LoadData calls.
+// Package load provides the Loader and option types for configuring
+// modusgraph.Client.LoadData calls.
 //
 // Usage:
 //
@@ -19,30 +20,37 @@ import "strings"
 // Option configures a LoadData call.
 type Option func(*Options)
 
-// FileMatcher selects which files in the data directory to load.
-// A nil FileMatcher matches all files.
-type FileMatcher interface {
+// FileMatch selects which files in the data directory to load.
+type FileMatch interface {
 	Match(path string) bool
 }
 
-// NewFileMatcher adapts a plain function to the FileMatcher interface.
-type NewFileMatcher func(path string) bool
+// FileMatchFunc adapts a plain function to the FileMatch interface.
+type FileMatchFunc func(path string) bool
 
-// Match implements FileMatcher.
-func (f NewFileMatcher) Match(path string) bool { return f(path) }
+// Match implements FileMatch.
+func (f FileMatchFunc) Match(path string) bool { return f(path) }
 
 // FileSort reorders the list of data files before processing.
 type FileSort func([]string) []string
 
-// DefaultExtensions is the default set of file extensions loaded by LoadData.
-var DefaultExtensions = []string{".rdf", ".rdf.gz", ".json", ".json.gz"}
+// defaultExtensions is the set of file extensions loaded by LoadData when
+// no FileMatch is configured.
+var defaultExtensions = []string{".rdf", ".rdf.gz", ".json", ".json.gz"}
 
-// ExtensionsMatcher matches files by suffix.
-type ExtensionsMatcher struct {
+// DefaultExtensions returns the default file extensions loaded by LoadData.
+func DefaultExtensions() []string {
+	out := make([]string, len(defaultExtensions))
+	copy(out, defaultExtensions)
+	return out
+}
+
+// extensionMatch matches files by suffix.
+type extensionMatch struct {
 	exts []string
 }
 
-func (m *ExtensionsMatcher) Match(path string) bool {
+func (m extensionMatch) Match(path string) bool {
 	for _, ext := range m.exts {
 		if strings.HasSuffix(path, ext) {
 			return true
@@ -51,16 +59,16 @@ func (m *ExtensionsMatcher) Match(path string) bool {
 	return false
 }
 
-// NewExtensionsMatcher returns a FileMatcher that accepts files whose path ends
+// NewExtensionMatch returns a FileMatch that accepts files whose path ends
 // with any of the given suffixes.
-func NewExtensionsMatcher(exts ...string) FileMatcher {
-	return &ExtensionsMatcher{exts: exts}
+func NewExtensionMatch(exts ...string) FileMatch {
+	return extensionMatch{exts: exts}
 }
 
 // Options control the behavior of LoadData.
 // Zero values use defaults (BatchSize=1000, MutationWorkers=1).
 //
-// File processing pipeline: walk directory → FilterFiles (applies FileMatcher) → SortFiles → process.
+// File processing pipeline: walk directory → FilterFiles (applies FileMatch) → SortFiles → process.
 type Options struct {
 	// SchemaPath is the path to a Dgraph schema file applied before loading.
 	// Empty means the schema must already exist.
@@ -76,12 +84,12 @@ type Options struct {
 	// Dgraph cluster. Default is 1 (sequential).
 	MutationWorkers int
 
-	// FileMatcher, if set, selects which individual files to include during
-	// directory walking. A nil FileMatcher matches all files.
-	FileMatcher FileMatcher
+	// FileMatch, if set, selects which individual files to include.
+	// A nil FileMatch matches all files.
+	FileMatch FileMatch
 
-	// SortFiles, if set, controls the order in which data files are processed.
-	// Called after FilterFiles. By default files are in the lexicographic
+	// SortFiles, if set, reorders data files before processing.
+	// Applied after FilterFiles. By default files are in the lexicographic
 	// order returned by filepath.Walk.
 	SortFiles FileSort
 }
@@ -109,22 +117,22 @@ func (o Options) GetMutationWorkers() int {
 }
 
 // MatchFile reports whether an individual path should be included.
-// If FileMatcher is nil, all files match.
+// If FileMatch is nil, all files match.
 func (o Options) MatchFile(path string) bool {
-	if o.FileMatcher == nil {
+	if o.FileMatch == nil {
 		return true
 	}
-	return o.FileMatcher.Match(path)
+	return o.FileMatch.Match(path)
 }
 
 // FilterFiles returns only the files from the input that pass MatchFile.
 func (o Options) FilterFiles(files []string) []string {
-	if o.FileMatcher == nil {
+	if o.FileMatch == nil {
 		return files
 	}
 	var out []string
 	for _, f := range files {
-		if o.FileMatcher.Match(f) {
+		if o.FileMatch.Match(f) {
 			out = append(out, f)
 		}
 	}
@@ -154,11 +162,11 @@ func WithMutationWorkers(n int) Option {
 	}
 }
 
-// WithFileMatcher sets a FileMatcher for per-file matching during directory walking.
+// WithFileMatch sets a FileMatch for per-file matching during directory walking.
 // A nil filter matches all files.
-func WithFileMatcher(f FileMatcher) Option {
+func WithFileMatch(f FileMatch) Option {
 	return func(o *Options) {
-		o.FileMatcher = f
+		o.FileMatch = f
 	}
 }
 
@@ -182,8 +190,8 @@ func WithOptions(lo Options) Option {
 		if lo.MutationWorkers > 0 {
 			o.MutationWorkers = lo.MutationWorkers
 		}
-		if lo.FileMatcher != nil {
-			o.FileMatcher = lo.FileMatcher
+		if lo.FileMatch != nil {
+			o.FileMatch = lo.FileMatch
 		}
 		if lo.SortFiles != nil {
 			o.SortFiles = lo.SortFiles
