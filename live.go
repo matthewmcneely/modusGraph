@@ -25,11 +25,11 @@ import (
 )
 
 const (
-	maxRoutines        = 4
-	numMutationWorkers = 8
-	batchSize          = 1000
-	numBatchesInBuf    = 100
-	progressFrequency  = 5 * time.Second
+	defaultMaxRoutines       = 4
+	defaultMutationWorkers   = 1
+	defaultBatchSize         = 1000
+	defaultNumBatchesInBuf   = 100
+	defaultProgressFrequency = 5 * time.Second
 )
 
 // mutator abstracts mutation submission for the LiveLoader.
@@ -59,6 +59,7 @@ type liveLoader struct {
 	blankNodes map[string]string
 	mutex      sync.RWMutex
 	logger     logr.Logger
+	batchSize  int
 }
 
 func (n *Namespace) Load(ctx context.Context, schemaPath, dataPath string) error {
@@ -84,12 +85,12 @@ func (n *Namespace) LoadData(inCtx context.Context, dataDir string) error {
 		blankNodes: make(map[string]string),
 		logger:     n.engine.logger,
 	}
-	return loadData(inCtx, ll, dataDir)
+	return loadData(inCtx, ll, dataDir, LoadOptions{})
 }
 
 // loadData runs the core data-loading pipeline: find files, spawn file
 // processors, and feed mutations through nqch to the consumer goroutine.
-func loadData(inCtx context.Context, ll *liveLoader, dataDir string) error {
+func loadData(inCtx context.Context, ll *liveLoader, dataDir string, opts LoadOptions) error {
 	fs := filestore.NewFileStore(dataDir)
 	files := fs.FindDataFiles(dataDir, []string{".rdf", ".rdf.gz", ".json", ".json.gz"})
 	if len(files) == 0 {
@@ -101,7 +102,10 @@ func loadData(inCtx context.Context, ll *liveLoader, dataDir string) error {
 	// end. This also ensures that we can cancel the context tree if there is an error.
 	rootG, rootCtx := errgroup.WithContext(inCtx)
 	procG, procCtx := errgroup.WithContext(rootCtx)
-	procG.SetLimit(maxRoutines)
+	procG.SetLimit(defaultMaxRoutines)
+
+	ll.batchSize = opts.getBatchSize()
+	numWorkers := opts.getMutationWorkers()
 
 	// Start concurrent mutation workers and a progress ticker.
 	start := time.Now()
@@ -113,7 +117,7 @@ func loadData(inCtx context.Context, ll *liveLoader, dataDir string) error {
 	tickCtx, tickCancel := context.WithCancel(rootCtx)
 	defer tickCancel()
 	go func() {
-		ticker := time.NewTicker(progressFrequency)
+		ticker := time.NewTicker(defaultProgressFrequency)
 		defer ticker.Stop()
 
 		var last int64
@@ -124,7 +128,7 @@ func loadData(inCtx context.Context, ll *liveLoader, dataDir string) error {
 			case <-ticker.C:
 				cur := nquadsProcessed.Load()
 				elapsed := time.Since(start).Round(time.Second)
-				rate := float64(cur-last) / progressFrequency.Seconds()
+				rate := float64(cur-last) / defaultProgressFrequency.Seconds()
 				ll.logger.Info("Data loading progress", "elapsed", x.FixedDuration(elapsed),
 					"nquadsProcessed", cur,
 					"writesPerSecond", fmt.Sprintf("%5.0f", rate))
@@ -135,7 +139,7 @@ func loadData(inCtx context.Context, ll *liveLoader, dataDir string) error {
 
 	// Mutation workers — with pre-allocated UIDs, mutations are independent
 	// and can execute concurrently.
-	for range numMutationWorkers {
+	for range numWorkers {
 		rootG.Go(func() error {
 			for nqs := range nqch {
 				if _, err := ll.mut.mutate(rootCtx, nqs); err != nil {
@@ -184,17 +188,18 @@ func (l *liveLoader) processFile(inCtx context.Context, fs filestore.FileStore,
 		}
 	}
 
+	bs := l.batchSize
 	g, ctx := errgroup.WithContext(inCtx)
-	ck := chunker.NewChunker(loadType, batchSize)
+	ck := chunker.NewChunker(loadType, bs)
 	nqbuf := ck.NQuads()
 
 	g.Go(func() error {
-		buffer := make([]*api.NQuad, 0, numBatchesInBuf*batchSize)
+		buffer := make([]*api.NQuad, 0, defaultNumBatchesInBuf*bs)
 
 		drain := func() {
 			for len(buffer) > 0 {
-				sz := batchSize
-				if len(buffer) < batchSize {
+				sz := bs
+				if len(buffer) < bs {
 					sz = len(buffer)
 				}
 				nqch <- &api.Mutation{Set: buffer[:sz]}
@@ -232,7 +237,7 @@ func (l *liveLoader) processFile(inCtx context.Context, fs filestore.FileStore,
 				}
 
 				buffer = append(buffer, nqs...)
-				if len(buffer) < numBatchesInBuf*batchSize {
+				if len(buffer) < defaultNumBatchesInBuf*bs {
 					continue
 				}
 				drain()

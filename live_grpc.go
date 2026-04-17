@@ -80,16 +80,16 @@ func (m *grpcMutator) mutate(ctx context.Context, mu *api.Mutation) (map[string]
 // LoadData loads RDF or JSON data files from dataDir into the database.
 // Files must have .rdf, .rdf.gz, .json, or .json.gz extensions.
 func (c client) LoadData(ctx context.Context, dataDir string, opts ...LoadOpt) error {
-	options := loadOptions{}
+	options := LoadOptions{}
 	for _, opt := range opts {
 		opt(&options)
 	}
 
 	// Apply schema if requested.
-	if options.schemaPath != "" {
-		schemaData, err := os.ReadFile(options.schemaPath)
+	if options.SchemaPath != "" {
+		schemaData, err := os.ReadFile(options.SchemaPath)
 		if err != nil {
-			return fmt.Errorf("read schema file [%s]: %w", options.schemaPath, err)
+			return fmt.Errorf("read schema file [%s]: %w", options.SchemaPath, err)
 		}
 		if err := c.alterSchema(ctx, string(schemaData)); err != nil {
 			return fmt.Errorf("alter schema: %w", err)
@@ -109,7 +109,7 @@ func (c client) LoadData(ctx context.Context, dataDir string, opts ...LoadOpt) e
 		blankNodes: make(map[string]string),
 		logger:     c.logger,
 	}
-	return loadData(ctx, ll, dataDir)
+	return loadData(ctx, ll, dataDir, options)
 }
 
 func (c client) alterSchema(ctx context.Context, schema string) error {
