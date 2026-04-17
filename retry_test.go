@@ -135,7 +135,7 @@ func TestRetryPolicyDelay(t *testing.T) {
 	// Use the public struct fields to verify delay behavior indirectly
 	// by checking that DefaultRetryPolicy has the expected values.
 	p := modusgraph.DefaultRetryPolicy
-	assert.Equal(t, 5, p.MaxRetries)
+	assert.Equal(t, 10, p.MaxRetries)
 	assert.Equal(t, 100*time.Millisecond, p.BaseDelay)
 	assert.Equal(t, 5*time.Second, p.MaxDelay)
 	assert.InDelta(t, 0.1, p.Jitter, 0.001)
