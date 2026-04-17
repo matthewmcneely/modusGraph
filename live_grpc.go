@@ -9,9 +9,50 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/dgraph-io/dgo/v250/protos/api"
+	"github.com/dgraph-io/dgraph/v25/protos/pb"
 )
+
+// grpcUIDAllocator implements uidAllocator for the gRPC path by calling
+// dgo.Dgraph.AllocateUIDs in bulk. UIDs are leased in batches to minimise
+// round-trips to the Zero leader.
+type grpcUIDAllocator struct {
+	pool    *clientPool
+	mu      sync.Mutex
+	nextUID uint64
+	maxUID  uint64 // exclusive upper bound of the current lease
+}
+
+const uidLeaseBatch = 10000
+
+func (a *grpcUIDAllocator) LeaseUIDs(n uint64) (*pb.AssignedIds, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.nextUID+n > a.maxUID {
+		alloc := uidLeaseBatch
+		if n > uidLeaseBatch {
+			alloc = int(n)
+		}
+		dc, err := a.pool.get()
+		if err != nil {
+			return nil, fmt.Errorf("get client from pool for UID allocation: %w", err)
+		}
+		start, end, err := dc.AllocateUIDs(context.Background(), uint64(alloc))
+		a.pool.put(dc)
+		if err != nil {
+			return nil, fmt.Errorf("allocate UIDs: %w", err)
+		}
+		a.nextUID = start
+		a.maxUID = end
+	}
+
+	uid := a.nextUID
+	a.nextUID += n
+	return &pb.AssignedIds{StartId: uid}, nil
+}
 
 // grpcMutator implements mutator for the gRPC (remote Dgraph) path.
 type grpcMutator struct {
@@ -60,10 +101,11 @@ func (c client) LoadData(ctx context.Context, dataDir string, opts ...LoadOpt) e
 		return c.engine.db0.LoadData(ctx, dataDir)
 	}
 
-	// gRPC path.
+	// gRPC path: pre-allocate UIDs locally (like the embedded path) so
+	// mutations are independent and can execute concurrently.
 	ll := &liveLoader{
 		mut:        &grpcMutator{pool: c.pool},
-		uidAlloc:   nil,
+		uidAlloc:   &grpcUIDAllocator{pool: c.pool},
 		blankNodes: make(map[string]string),
 		logger:     c.logger,
 	}

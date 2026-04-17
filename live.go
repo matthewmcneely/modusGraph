@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/dgo/v250/protos/api"
@@ -24,10 +25,11 @@ import (
 )
 
 const (
-	maxRoutines       = 4
-	batchSize         = 1000
-	numBatchesInBuf   = 100
-	progressFrequency = 5 * time.Second
+	maxRoutines        = 4
+	numMutationWorkers = 8
+	batchSize          = 1000
+	numBatchesInBuf    = 100
+	progressFrequency  = 5 * time.Second
 )
 
 // mutator abstracts mutation submission for the LiveLoader.
@@ -101,49 +103,49 @@ func loadData(inCtx context.Context, ll *liveLoader, dataDir string) error {
 	procG, procCtx := errgroup.WithContext(rootCtx)
 	procG.SetLimit(maxRoutines)
 
-	// start a goroutine to do the mutations
+	// Start concurrent mutation workers and a progress ticker.
 	start := time.Now()
-	nqudsProcessed := 0
+	var nquadsProcessed atomic.Int64
 	nqch := make(chan *api.Mutation, 10000)
-	rootG.Go(func() error {
+
+	// Progress reporter — runs outside the errgroup so it doesn't block
+	// completion. Stopped via context cancellation when loadData returns.
+	tickCtx, tickCancel := context.WithCancel(rootCtx)
+	defer tickCancel()
+	go func() {
 		ticker := time.NewTicker(progressFrequency)
 		defer ticker.Stop()
 
-		last := nqudsProcessed
+		var last int64
 		for {
 			select {
-			case <-rootCtx.Done():
-				return rootCtx.Err()
-
+			case <-tickCtx.Done():
+				return
 			case <-ticker.C:
+				cur := nquadsProcessed.Load()
 				elapsed := time.Since(start).Round(time.Second)
-				rate := float64(nqudsProcessed-last) / progressFrequency.Seconds()
+				rate := float64(cur-last) / progressFrequency.Seconds()
 				ll.logger.Info("Data loading progress", "elapsed", x.FixedDuration(elapsed),
-					"nquadsProcessed", nqudsProcessed,
+					"nquadsProcessed", cur,
 					"writesPerSecond", fmt.Sprintf("%5.0f", rate))
-				last = nqudsProcessed
-
-			case nqs, ok := <-nqch:
-				if !ok {
-					return nil
-				}
-				uidMap, err := ll.mut.mutate(rootCtx, nqs)
-				if err != nil {
-					return fmt.Errorf("error applying mutations: %w", err)
-				}
-				// Merge returned blank-node -> UID mappings (gRPC path).
-				// For the embedded path uidMap is nil, so this is a no-op.
-				if len(uidMap) > 0 {
-					ll.mutex.Lock()
-					for k, v := range uidMap {
-						ll.blankNodes[k] = v
-					}
-					ll.mutex.Unlock()
-				}
-				nqudsProcessed += len(nqs.Set)
+				last = cur
 			}
 		}
-	})
+	}()
+
+	// Mutation workers — with pre-allocated UIDs, mutations are independent
+	// and can execute concurrently.
+	for range numMutationWorkers {
+		rootG.Go(func() error {
+			for nqs := range nqch {
+				if _, err := ll.mut.mutate(rootCtx, nqs); err != nil {
+					return fmt.Errorf("error applying mutations: %w", err)
+				}
+				nquadsProcessed.Add(int64(len(nqs.Set)))
+			}
+			return nil
+		})
+	}
 
 	for _, datafile := range files {
 		procG.Go(func() error {
