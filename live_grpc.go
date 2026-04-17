@@ -7,12 +7,17 @@ package modusgraph
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"sync"
+	"time"
 
+	"github.com/dgraph-io/dgo/v250"
 	"github.com/dgraph-io/dgo/v250/protos/api"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
+	"github.com/matthewmcneely/modusgraph/load"
 )
 
 // grpcUIDAllocator implements uidAllocator for the gRPC path by calling
@@ -55,32 +60,61 @@ func (a *grpcUIDAllocator) LeaseUIDs(n uint64) (*pb.AssignedIds, error) {
 }
 
 // grpcMutator implements mutator for the gRPC (remote Dgraph) path.
+// It retries aborted transactions with exponential backoff since concurrent
+// mutation workers can cause Dgraph transaction conflicts.
 type grpcMutator struct {
-	pool *clientPool
+	pool       *clientPool
+	maxRetries int
 }
 
+const (
+	grpcMutateMaxRetries = 5
+	grpcMutateBaseDelay  = 100 * time.Millisecond
+	grpcMutateMaxDelay   = 5 * time.Second
+)
+
 func (m *grpcMutator) mutate(ctx context.Context, mu *api.Mutation) (map[string]string, error) {
-	dc, err := m.pool.get()
-	if err != nil {
-		return nil, fmt.Errorf("get client from pool: %w", err)
+	maxRetries := m.maxRetries
+	if maxRetries <= 0 {
+		maxRetries = grpcMutateMaxRetries
 	}
-	defer m.pool.put(dc)
 
-	mu.CommitNow = true
-	txn := dc.NewTxn()
-	defer txn.Discard(ctx)
+	for attempt := 0; ; attempt++ {
+		dc, err := m.pool.get()
+		if err != nil {
+			return nil, fmt.Errorf("get client from pool: %w", err)
+		}
 
-	resp, err := txn.Mutate(ctx, mu)
-	if err != nil {
-		return nil, err
+		mu.CommitNow = true
+		txn := dc.NewTxn()
+		resp, err := txn.Mutate(ctx, mu)
+		txn.Discard(ctx)
+		m.pool.put(dc)
+
+		if err == nil {
+			return resp.GetUids(), nil
+		}
+		if !errors.Is(err, dgo.ErrAborted) || attempt >= maxRetries {
+			return nil, err
+		}
+		// Exponential backoff with jitter.
+		delay := grpcMutateBaseDelay * time.Duration(1<<uint(attempt))
+		if delay > grpcMutateMaxDelay {
+			delay = grpcMutateMaxDelay
+		}
+		delay += time.Duration(float64(delay) * 0.1 * rand.Float64())
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
-	return resp.GetUids(), nil
 }
 
 // LoadData loads RDF or JSON data files from dataDir into the database.
 // Files must have .rdf, .rdf.gz, .json, or .json.gz extensions.
-func (c client) LoadData(ctx context.Context, dataDir string, opts ...LoadOpt) error {
-	options := LoadOptions{}
+func (c client) LoadData(ctx context.Context, dataDir string, opts ...load.Option) error {
+	options := load.Options{}
 	for _, opt := range opts {
 		opt(&options)
 	}

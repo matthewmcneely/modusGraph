@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,14 +21,13 @@ import (
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
 	"github.com/dgraph-io/dgraph/v25/x"
 	"github.com/go-logr/logr"
+	"github.com/matthewmcneely/modusgraph/load"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
 	defaultMaxRoutines       = 4
-	defaultMutationWorkers   = 1
-	defaultBatchSize         = 1000
 	defaultNumBatchesInBuf   = 100
 	defaultProgressFrequency = 5 * time.Second
 )
@@ -85,14 +85,30 @@ func (n *Namespace) LoadData(inCtx context.Context, dataDir string) error {
 		blankNodes: make(map[string]string),
 		logger:     n.engine.logger,
 	}
-	return loadData(inCtx, ll, dataDir, LoadOptions{})
+	return loadData(inCtx, ll, dataDir, load.Options{})
 }
 
 // loadData runs the core data-loading pipeline: find files, spawn file
 // processors, and feed mutations through nqch to the consumer goroutine.
-func loadData(inCtx context.Context, ll *liveLoader, dataDir string, opts LoadOptions) error {
+func loadData(inCtx context.Context, ll *liveLoader, dataDir string, opts load.Options) error {
 	fs := filestore.NewFileStore(dataDir)
-	files := fs.FindDataFiles(dataDir, []string{".rdf", ".rdf.gz", ".json", ".json.gz"})
+	var allFiles []string
+	err := filepath.Walk(dataDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			allFiles = append(allFiles, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("walk data dir [%s]: %w", dataDir, err)
+	}
+	files := opts.FilterFiles(allFiles)
+	if opts.SortFiles != nil {
+		files = opts.SortFiles(files)
+	}
 	if len(files) == 0 {
 		return errors.Errorf("no data files found in [%v]", dataDir)
 	}
@@ -104,8 +120,8 @@ func loadData(inCtx context.Context, ll *liveLoader, dataDir string, opts LoadOp
 	procG, procCtx := errgroup.WithContext(rootCtx)
 	procG.SetLimit(defaultMaxRoutines)
 
-	ll.batchSize = opts.getBatchSize()
-	numWorkers := opts.getMutationWorkers()
+	ll.batchSize = opts.GetBatchSize()
+	numWorkers := opts.GetMutationWorkers()
 
 	// Start concurrent mutation workers and a progress ticker.
 	start := time.Now()

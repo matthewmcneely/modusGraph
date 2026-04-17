@@ -19,6 +19,7 @@ import (
 	dg "github.com/dolan-in/dgman/v2"
 	"github.com/go-logr/logr"
 	"github.com/go-playground/validator/v10"
+	"github.com/matthewmcneely/modusgraph/load"
 )
 
 // SelfValidator is implemented by generated entities with private fields that
@@ -102,8 +103,10 @@ type Client interface {
 	// LoadData loads RDF or JSON data files from dataDir into the database.
 	// Files must have .rdf, .rdf.gz, .json, or .json.gz extensions.
 	// Options:
-	//   - WithSchema(path) - apply schema before loading data
-	LoadData(ctx context.Context, dataDir string, opts ...LoadOpt) error
+	//   - load.WithSchema(path) - apply schema before loading data
+	//   - load.WithBatchSize(n) - NQuads per mutation (default 1000)
+	//   - load.WithMutationWorkers(n) - concurrent mutation goroutines (default 1)
+	LoadData(ctx context.Context, dataDir string, opts ...load.Option) error
 }
 
 const (

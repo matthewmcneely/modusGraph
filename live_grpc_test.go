@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	mg "github.com/matthewmcneely/modusgraph"
+	"github.com/matthewmcneely/modusgraph/load"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,7 +53,7 @@ type Person {
 
 	// Load data with schema.
 	ctx := context.Background()
-	err := client.LoadData(ctx, rdfDir, mg.WithSchema(schemaFile))
+	err := client.LoadData(ctx, rdfDir, load.WithSchema(schemaFile))
 	require.NoError(t, err)
 
 	// Query for Alice and verify friend edge to Bob.
@@ -132,7 +133,7 @@ func TestClientLoadDataBadSchemaPath(t *testing.T) {
 	require.NoError(t, os.MkdirAll(rdfDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(rdfDir, "data.rdf"), []byte(`_:a <name> "x" .`+"\n"), 0600))
 
-	err := client.LoadData(context.Background(), rdfDir, mg.WithSchema("/nonexistent/schema.dgraph"))
+	err := client.LoadData(context.Background(), rdfDir, load.WithSchema("/nonexistent/schema.dgraph"))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "read schema file")
 }
@@ -171,9 +172,9 @@ _:x <name> "test" .
 
 	// Use all option funcs together.
 	err := client.LoadData(context.Background(), rdfDir,
-		mg.WithSchema(schemaFile),
-		mg.WithBatchSize(5000),
-		mg.WithMutationWorkers(4),
+		load.WithSchema(schemaFile),
+		load.WithBatchSize(5000),
+		load.WithMutationWorkers(4),
 	)
 	require.NoError(t, err)
 }
@@ -196,7 +197,7 @@ _:y <name> "struct-test" .
 	require.NoError(t, os.WriteFile(schemaFile, []byte("name: string @index(exact) .\ntype StructOptsNode {\n  name: string\n}\n"), 0600))
 
 	err := client.LoadData(context.Background(), rdfDir,
-		mg.WithLoadOptions(mg.LoadOptions{
+		load.WithOptions(load.Options{
 			SchemaPath:      schemaFile,
 			BatchSize:       10000,
 			MutationWorkers: 8,
@@ -255,7 +256,7 @@ type LoadTestPerson {
 	require.NoError(t, os.WriteFile(schemaFile, []byte(schemaData), 0600))
 
 	// Load data with schema.
-	err = client.LoadData(ctx, rdfDir, mg.WithSchema(schemaFile))
+	err = client.LoadData(ctx, rdfDir, load.WithSchema(schemaFile))
 	require.NoError(t, err)
 
 	// Verify count is 100.
