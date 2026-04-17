@@ -90,6 +90,121 @@ type Person {
 	require.Equal(t, 25, result.Q[0].Friend[0].Age)
 }
 
+// NoSchemaNode is a test struct used by TestClientLoadDataFileNoSchema.
+type NoSchemaNode struct {
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
+	Title string   `json:"title,omitempty" dgraph:"index=exact"`
+}
+
+// TestClientLoadDataFileNoSchema tests LoadData without WithSchema — the schema
+// must already exist in the database.
+func TestClientLoadDataFileNoSchema(t *testing.T) {
+	tmpDir := GetTempDir(t)
+	client, cleanup := CreateTestClient(t, "file://"+tmpDir)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Manually set up schema first via autoSchema.
+	err := client.UpdateSchema(ctx, &NoSchemaNode{})
+	require.NoError(t, err)
+
+	// Write RDF file with no schema option.
+	rdfDir := filepath.Join(tmpDir, "rdf_noschema")
+	require.NoError(t, os.MkdirAll(rdfDir, 0755))
+	rdf := `_:a <dgraph.type> "NoSchemaNode" .
+_:a <title> "Hello" .
+`
+	require.NoError(t, os.WriteFile(filepath.Join(rdfDir, "data.rdf"), []byte(rdf), 0600))
+
+	err = client.LoadData(ctx, rdfDir)
+	require.NoError(t, err)
+}
+
+// TestClientLoadDataBadSchemaPath verifies that a bad schema path returns an error.
+func TestClientLoadDataBadSchemaPath(t *testing.T) {
+	tmpDir := GetTempDir(t)
+	client, cleanup := CreateTestClient(t, "file://"+tmpDir)
+	defer cleanup()
+
+	rdfDir := filepath.Join(tmpDir, "rdf_empty")
+	require.NoError(t, os.MkdirAll(rdfDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(rdfDir, "data.rdf"), []byte(`_:a <name> "x" .`+"\n"), 0600))
+
+	err := client.LoadData(context.Background(), rdfDir, mg.WithSchema("/nonexistent/schema.dgraph"))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "read schema file")
+}
+
+// TestClientLoadDataEmptyDir verifies that an empty data directory returns an error.
+func TestClientLoadDataEmptyDir(t *testing.T) {
+	tmpDir := GetTempDir(t)
+	client, cleanup := CreateTestClient(t, "file://"+tmpDir)
+	defer cleanup()
+
+	emptyDir := filepath.Join(tmpDir, "empty_rdf")
+	require.NoError(t, os.MkdirAll(emptyDir, 0755))
+
+	err := client.LoadData(context.Background(), emptyDir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no data files found")
+}
+
+// TestClientLoadDataWithOptions verifies that WithBatchSize and WithMutationWorkers
+// are accepted and don't cause errors.
+func TestClientLoadDataWithOptions(t *testing.T) {
+	tmpDir := GetTempDir(t)
+	client, cleanup := CreateTestClient(t, "file://"+tmpDir)
+	defer cleanup()
+
+	rdfDir := filepath.Join(tmpDir, "rdf_opts")
+	require.NoError(t, os.MkdirAll(rdfDir, 0755))
+
+	rdf := `_:x <dgraph.type> "OptsTestNode" .
+_:x <name> "test" .
+`
+	require.NoError(t, os.WriteFile(filepath.Join(rdfDir, "data.rdf"), []byte(rdf), 0600))
+
+	schemaFile := filepath.Join(tmpDir, "opts_schema.dgraph")
+	require.NoError(t, os.WriteFile(schemaFile, []byte("name: string @index(exact) .\ntype OptsTestNode {\n  name: string\n}\n"), 0600))
+
+	// Use all option funcs together.
+	err := client.LoadData(context.Background(), rdfDir,
+		mg.WithSchema(schemaFile),
+		mg.WithBatchSize(5000),
+		mg.WithMutationWorkers(4),
+	)
+	require.NoError(t, err)
+}
+
+// TestClientLoadDataWithLoadOptions verifies the struct-based option func.
+func TestClientLoadDataWithLoadOptions(t *testing.T) {
+	tmpDir := GetTempDir(t)
+	client, cleanup := CreateTestClient(t, "file://"+tmpDir)
+	defer cleanup()
+
+	rdfDir := filepath.Join(tmpDir, "rdf_struct_opts")
+	require.NoError(t, os.MkdirAll(rdfDir, 0755))
+
+	rdf := `_:y <dgraph.type> "StructOptsNode" .
+_:y <name> "struct-test" .
+`
+	require.NoError(t, os.WriteFile(filepath.Join(rdfDir, "data.rdf"), []byte(rdf), 0600))
+
+	schemaFile := filepath.Join(tmpDir, "struct_opts_schema.dgraph")
+	require.NoError(t, os.WriteFile(schemaFile, []byte("name: string @index(exact) .\ntype StructOptsNode {\n  name: string\n}\n"), 0600))
+
+	err := client.LoadData(context.Background(), rdfDir,
+		mg.WithLoadOptions(mg.LoadOptions{
+			SchemaPath:      schemaFile,
+			BatchSize:       10000,
+			MutationWorkers: 8,
+		}),
+	)
+	require.NoError(t, err)
+}
+
 // TestClientLoadDataGRPC tests LoadData via the dgraph:// URI (gRPC) path.
 // This is the critical test — it verifies blank node resolution works across
 // batches over gRPC.

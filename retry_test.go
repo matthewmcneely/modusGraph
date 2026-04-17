@@ -140,3 +140,58 @@ func TestRetryPolicyDelay(t *testing.T) {
 	assert.Equal(t, 5*time.Second, p.MaxDelay)
 	assert.InDelta(t, 0.1, p.Jitter, 0.001)
 }
+
+// TestWithRetryNonAbortError verifies that non-abort errors are returned
+// immediately without any retry.
+func TestWithRetryNonAbortError(t *testing.T) {
+	uri := "file://" + GetTempDir(t)
+	client, cleanup := CreateTestClient(t, uri)
+	defer cleanup()
+
+	callCount := 0
+	expectedErr := fmt.Errorf("not an abort error")
+
+	err := client.WithRetry(context.Background(), modusgraph.DefaultRetryPolicy, func() error {
+		callCount++
+		return expectedErr
+	})
+
+	assert.ErrorIs(t, err, expectedErr)
+	assert.Equal(t, 1, callCount, "non-abort errors should not trigger retry")
+}
+
+// TestWithRetrySucceedsFirstTry verifies that WithRetry returns nil
+// when fn succeeds on the first call.
+func TestWithRetrySucceedsFirstTry(t *testing.T) {
+	uri := "file://" + GetTempDir(t)
+	client, cleanup := CreateTestClient(t, uri)
+	defer cleanup()
+
+	callCount := 0
+	err := client.WithRetry(context.Background(), modusgraph.DefaultRetryPolicy, func() error {
+		callCount++
+		return nil
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, 1, callCount)
+}
+
+// TestWithRetryMaxRetriesZero verifies that MaxRetries=0 calls fn exactly once
+// and returns any error without retrying.
+func TestWithRetryMaxRetriesZero(t *testing.T) {
+	uri := "file://" + GetTempDir(t)
+	client, cleanup := CreateTestClient(t, uri)
+	defer cleanup()
+
+	policy := modusgraph.RetryPolicy{MaxRetries: 0}
+	callCount := 0
+
+	err := client.WithRetry(context.Background(), policy, func() error {
+		callCount++
+		return fmt.Errorf("always fails")
+	})
+
+	assert.Error(t, err)
+	assert.Equal(t, 1, callCount, "MaxRetries=0 should call fn exactly once")
+}
