@@ -17,6 +17,50 @@ import (
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/model"
 )
 
+// reservedWrapperMethods lists method names the generator emits on the
+// wrapper type. A schema field whose Set<Field>/<Field>() name collides
+// with one of these creates a compile-time shadow; the parser rejects it.
+var reservedWrapperMethods = map[string]struct{}{
+	"Unwrap":        {},
+	"MarshalJSON":   {},
+	"UnmarshalJSON": {},
+	"Validate":      {},
+	"UID":           {},
+	"SetUID":        {},
+	"DType":         {},
+	"SetDType":      {},
+}
+
+// reservedSchemaMethods lists method names the generator emits on the
+// schema struct via the marker template (SchemaTypeName, etc.).
+var reservedSchemaMethods = map[string]struct{}{
+	"SchemaTypeName":        {},
+	"SchemaPredicates":      {},
+	"SchemaSearchPredicate": {},
+}
+
+// checkReservedNames returns an error if any of the entity's exported field
+// names collide with a reserved method name on the wrapper or schema struct.
+// UID and DType are expected fields and are skipped.
+func checkReservedNames(entityName string, fields []model.Field) error {
+	for _, f := range fields {
+		if f.Name == "UID" || f.Name == "DType" {
+			continue
+		}
+		if _, ok := reservedWrapperMethods[f.Name]; ok {
+			return fmt.Errorf("field %q on entity %s collides with reserved wrapper method %q; rename the field", f.Name, entityName, f.Name)
+		}
+		setterName := "Set" + f.Name
+		if _, ok := reservedWrapperMethods[setterName]; ok {
+			return fmt.Errorf("field %q on entity %s would generate setter %q, colliding with a reserved wrapper method; rename the field", f.Name, entityName, setterName)
+		}
+		if _, ok := reservedSchemaMethods[f.Name]; ok {
+			return fmt.Errorf("field %q on entity %s collides with reserved schema marker method %q; rename the field", f.Name, entityName, f.Name)
+		}
+	}
+	return nil
+}
+
 // Parse loads all Go source files in the directory at pkgDir, extracts exported
 // structs, and returns a model.Package with fully resolved entities and fields.
 func Parse(pkgDir string) (*model.Package, error) {
@@ -78,9 +122,13 @@ func Parse(pkgDir string) (*model.Package, error) {
 				}
 
 				entity, isEntity := parseStruct(typeSpec.Name.Name, structType, structNames)
-				if isEntity {
-					entities = append(entities, entity)
+				if !isEntity {
+					continue
 				}
+				if err := checkReservedNames(entity.Name, entity.Fields); err != nil {
+					return nil, err
+				}
+				entities = append(entities, entity)
 			}
 		}
 	}

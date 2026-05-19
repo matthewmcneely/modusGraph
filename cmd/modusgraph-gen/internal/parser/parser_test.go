@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/model"
@@ -855,4 +856,73 @@ type Widget struct {
 			t.Errorf("name.AccessorName = %q, want empty", f.AccessorName)
 		}
 	})
+}
+
+func TestParse_RejectsReservedWrapperName(t *testing.T) {
+	dir := t.TempDir()
+	src := `package schema
+
+type Studio struct {
+	UID    string   ` + "`json:\"uid,omitempty\"`" + `
+	DType  []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Unwrap string   ` + "`json:\"unwrap\"`" + `
+}
+`
+	mustWriteFile(t, filepath.Join(dir, "studio.go"), src)
+
+	_, err := Parse(dir)
+	if err == nil {
+		t.Fatalf("expected error rejecting field 'Unwrap' on Studio, got nil")
+	}
+	if !strings.Contains(err.Error(), "Unwrap") || !strings.Contains(err.Error(), "Studio") {
+		t.Fatalf("error must name the field and the entity; got: %v", err)
+	}
+}
+
+func TestParse_RejectsReservedSchemaName(t *testing.T) {
+	dir := t.TempDir()
+	src := `package schema
+
+type Studio struct {
+	UID            string   ` + "`json:\"uid,omitempty\"`" + `
+	DType          []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	SchemaTypeName string   ` + "`json:\"schema_type_name\"`" + `
+}
+`
+	mustWriteFile(t, filepath.Join(dir, "studio.go"), src)
+
+	_, err := Parse(dir)
+	if err == nil {
+		t.Fatalf("expected error rejecting field 'SchemaTypeName' on Studio")
+	}
+}
+
+func TestParse_AcceptsNonReservedNames(t *testing.T) {
+	dir := t.TempDir()
+	src := `package schema
+
+type Studio struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Name  string   ` + "`json:\"name\"`" + `
+}
+`
+	mustWriteFile(t, filepath.Join(dir, "studio.go"), src)
+
+	pkg, err := Parse(dir)
+	if err != nil {
+		t.Fatalf("expected acceptance of normal fields, got error: %v", err)
+	}
+	if len(pkg.Entities) != 1 || pkg.Entities[0].Name != "Studio" {
+		t.Fatalf("expected one Studio entity, got: %+v", pkg.Entities)
+	}
+}
+
+// mustWriteFile materializes a source file in a temp dir for parser tests
+// that need to drive Parse() against arbitrary fixtures.
+func mustWriteFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("writing %s: %v", path, err)
+	}
 }
