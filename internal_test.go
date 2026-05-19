@@ -227,34 +227,6 @@ type privateFieldEntity struct {
 	ok    bool
 }
 
-// privateFieldEntityReflectable is the all-exported shadow struct for
-// privateFieldEntity. dgman's reflectwalk can traverse this normally.
-type privateFieldEntityReflectable struct {
-	UID   string   `json:"uid,omitempty"`
-	DType []string `json:"dgraph.type,omitempty"`
-	Name  string   `json:"name,omitempty"`
-	Year  int      `json:"year,omitempty"`
-	Score float64  `json:"score,omitempty"`
-	Ok    bool     `json:"ok,omitempty"`
-}
-
-func (e *privateFieldEntity) ToReflectable() any {
-	return &privateFieldEntityReflectable{
-		UID:   e.UID,
-		DType: e.DType,
-		Name:  e.name,
-		Year:  e.year,
-		Score: e.score,
-		Ok:    e.ok,
-	}
-}
-
-func (e *privateFieldEntity) FromReflectable(model any) {
-	s := model.(*privateFieldEntityReflectable)
-	e.UID = s.UID
-	e.DType = s.DType
-}
-
 func (e *privateFieldEntity) ValidateWith(ctx context.Context, v StructValidator) error {
 	type mirror struct {
 		Name  string  `validate:"required,min=2"`
@@ -426,29 +398,5 @@ func TestValidateOneDispatchesSelfValidator(t *testing.T) {
 		// Should not panic (AllTags has only exported fields)
 		// May fail validation but should not panic
 		_ = err
-	})
-}
-
-func TestHasReflectable(t *testing.T) {
-	t.Run("ToReflectable", func(t *testing.T) {
-		e := &privateFieldEntity{UID: "0x1", name: "Studio A", year: 2000, score: 85.5, ok: true}
-		r := e.ToReflectable()
-		s, ok := r.(*privateFieldEntityReflectable)
-		require.True(t, ok)
-		assert.Equal(t, "0x1", s.UID)
-		assert.Equal(t, "Studio A", s.Name)
-		assert.Equal(t, 2000, s.Year)
-		assert.Equal(t, 85.5, s.Score)
-		assert.True(t, s.Ok)
-	})
-
-	t.Run("FromReflectable", func(t *testing.T) {
-		e := &privateFieldEntity{name: "Studio A"}
-		shadow := &privateFieldEntityReflectable{UID: "0xabc", DType: []string{"privateFieldEntity"}}
-		e.FromReflectable(shadow)
-		assert.Equal(t, "0xabc", e.UID)
-		assert.Equal(t, []string{"privateFieldEntity"}, e.DType)
-		// Private fields unchanged.
-		assert.Equal(t, "Studio A", e.name)
 	})
 }
