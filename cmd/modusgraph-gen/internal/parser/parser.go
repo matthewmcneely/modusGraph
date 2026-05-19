@@ -79,6 +79,34 @@ func checkReservedNames(entityName string, fields []model.Field) error {
 	return nil
 }
 
+// checkSliceOfEntityIsPointer returns an error if fieldType is a slice whose
+// element type names a known entity but is not a pointer. The rule applies
+// to all entity-element slices (true multi-edges and singular-via-list)
+// because both can have wrapper-pointer-into-slice invalidation hazards.
+// Scalar slices (e.g., []string) and pointer-element slices ([]*X) are fine.
+func checkSliceOfEntityIsPointer(entityName, fieldName string, fieldType ast.Expr, structNames map[string]bool) error {
+	arrType, ok := fieldType.(*ast.ArrayType)
+	if !ok {
+		return nil // not a slice/array
+	}
+	// Pointer element: *X — always fine, even for entities.
+	if _, isStar := arrType.Elt.(*ast.StarExpr); isStar {
+		return nil
+	}
+	// Value element: bare identifier — only an issue when it names an entity in this package.
+	ident, ok := arrType.Elt.(*ast.Ident)
+	if !ok {
+		return nil // composite element types (maps, qualified idents, etc.) aren't bare entity slices
+	}
+	if !structNames[ident.Name] {
+		return nil // scalar slice (e.g., []string) — fine
+	}
+	return fmt.Errorf(
+		"slice-of-entity field %q on %s must use []*%s (pointer slice); value-element slices are unsupported because wrapper pointer captures into the slice can be silently invalidated by setter calls that reassign or grow the slice",
+		fieldName, entityName, ident.Name,
+	)
+}
+
 // Parse loads all Go source files in the directory at pkgDir, extracts exported
 // structs, and returns a model.Package with fully resolved entities and fields.
 func Parse(pkgDir string) (*model.Package, error) {
@@ -139,7 +167,10 @@ func Parse(pkgDir string) (*model.Package, error) {
 					continue
 				}
 
-				entity, isEntity := parseStruct(typeSpec.Name.Name, structType, structNames)
+				entity, isEntity, err := parseStruct(typeSpec.Name.Name, structType, structNames)
+				if err != nil {
+					return nil, err
+				}
 				if !isEntity {
 					continue
 				}
@@ -192,8 +223,9 @@ func collectStructNames(pkg *ast.Package) map[string]bool {
 
 // parseStruct parses a single struct into a model.Entity. Returns the entity and
 // true if the struct qualifies as an entity (has both UID and DType fields),
-// or a zero Entity and false otherwise.
-func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (model.Entity, bool) {
+// or a zero Entity and false otherwise. An error is returned if a field
+// violates a structural constraint (e.g., value-element entity slice).
+func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (model.Entity, bool, error) {
 	var fields []model.Field
 	hasUID := false
 	hasDType := false
@@ -302,12 +334,16 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 				field.IsReverse = true
 			}
 
+			if err := checkSliceOfEntityIsPointer(name, fieldName, f.Type, structNames); err != nil {
+				return model.Entity{}, false, err
+			}
+
 			fields = append(fields, field)
 		} // end for each name in multi-name declaration
 	}
 
 	if !hasUID || !hasDType {
-		return model.Entity{}, false
+		return model.Entity{}, false, nil
 	}
 
 	entity := model.Entity{
@@ -318,7 +354,7 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 	// Apply inference rules.
 	applyInference(&entity)
 
-	return entity, true
+	return entity, true, nil
 }
 
 // typeString converts an ast.Expr representing a type into a human-readable Go

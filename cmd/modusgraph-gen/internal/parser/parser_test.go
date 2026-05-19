@@ -671,7 +671,11 @@ type MultiName struct {
 			if !ok {
 				continue
 			}
-			entity, found = parseStruct(typeSpec.Name.Name, st, map[string]bool{})
+			var parseErr error
+			entity, found, parseErr = parseStruct(typeSpec.Name.Name, st, map[string]bool{})
+			if parseErr != nil {
+				t.Fatalf("parseStruct returned unexpected error: %v", parseErr)
+			}
 			break
 		}
 	}
@@ -966,5 +970,114 @@ func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("writing %s: %v", path, err)
+	}
+}
+
+func TestParse_RejectsValueElementMultiEdge(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "film.go"), `package schema
+
+type Film struct {
+	UID   string   `+"`json:\"uid,omitempty\"`"+`
+	DType []string `+"`json:\"dgraph.type,omitempty\"`"+`
+	Title string   `+"`json:\"title\"`"+`
+}
+`)
+	mustWriteFile(t, filepath.Join(dir, "studio.go"), `package schema
+
+type Studio struct {
+	UID   string   `+"`json:\"uid,omitempty\"`"+`
+	DType []string `+"`json:\"dgraph.type,omitempty\"`"+`
+	Films []Film   `+"`json:\"films,omitempty\"`"+`
+}
+`)
+
+	_, err := Parse(dir)
+	if err == nil {
+		t.Fatalf("expected error rejecting value-element multi-edge Films []Film")
+	}
+	if !strings.Contains(err.Error(), "Films") || !strings.Contains(err.Error(), "Studio") {
+		t.Fatalf("error must name field and entity; got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "[]*") {
+		t.Fatalf("error must suggest the pointer-slice fix; got: %v", err)
+	}
+}
+
+func TestParse_RejectsValueElementSingularViaList(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "director.go"), `package schema
+
+type Director struct {
+	UID   string   `+"`json:\"uid,omitempty\"`"+`
+	DType []string `+"`json:\"dgraph.type,omitempty\"`"+`
+	Name  string   `+"`json:\"name\"`"+`
+}
+`)
+	mustWriteFile(t, filepath.Join(dir, "studio.go"), `package schema
+
+type Studio struct {
+	UID         string     `+"`json:\"uid,omitempty\"`"+`
+	DType       []string   `+"`json:\"dgraph.type,omitempty\"`"+`
+	CurrentHead []Director `+"`json:\"current_head,omitempty\" validate:\"max=1\"`"+`
+}
+`)
+
+	_, err := Parse(dir)
+	if err == nil {
+		t.Fatalf("expected error rejecting value-element singular-via-list CurrentHead []Director")
+	}
+	if !strings.Contains(err.Error(), "CurrentHead") {
+		t.Fatalf("error must name field; got: %v", err)
+	}
+}
+
+func TestParse_AcceptsPointerSlice(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "film.go"), `package schema
+
+type Film struct {
+	UID   string   `+"`json:\"uid,omitempty\"`"+`
+	DType []string `+"`json:\"dgraph.type,omitempty\"`"+`
+	Title string   `+"`json:\"title\"`"+`
+}
+`)
+	mustWriteFile(t, filepath.Join(dir, "studio.go"), `package schema
+
+type Studio struct {
+	UID   string   `+"`json:\"uid,omitempty\"`"+`
+	DType []string `+"`json:\"dgraph.type,omitempty\"`"+`
+	Films []*Film  `+"`json:\"films,omitempty\"`"+`
+}
+`)
+
+	pkg, err := Parse(dir)
+	if err != nil {
+		t.Fatalf("expected acceptance of pointer slice, got: %v", err)
+	}
+	if len(pkg.Entities) != 2 {
+		t.Fatalf("expected 2 entities (Studio, Film), got %d", len(pkg.Entities))
+	}
+}
+
+func TestParse_AcceptsScalarSlice(t *testing.T) {
+	// Scalar slices like []string must NOT be rejected — the pointer-slice
+	// rule only applies to slices whose element type is an entity.
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "studio.go"), `package schema
+
+type Studio struct {
+	UID   string   `+"`json:\"uid,omitempty\"`"+`
+	DType []string `+"`json:\"dgraph.type,omitempty\"`"+`
+	Tags  []string `+"`json:\"tags,omitempty\"`"+`
+}
+`)
+
+	pkg, err := Parse(dir)
+	if err != nil {
+		t.Fatalf("scalar slice must not be rejected; got: %v", err)
+	}
+	if len(pkg.Entities) != 1 {
+		t.Fatalf("expected 1 entity, got %d", len(pkg.Entities))
 	}
 }
