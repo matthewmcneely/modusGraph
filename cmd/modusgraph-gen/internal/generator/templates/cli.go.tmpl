@@ -15,7 +15,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/matthewmcneely/modusgraph"
-	"{{.ModulePath}}/{{.Name}}"
+	"{{.SchemaImportPath}}"
 {{range $cliExtImports}}
 	{{- if .Alias}}
 	{{.Alias}} "{{.Path}}"

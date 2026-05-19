@@ -1070,3 +1070,71 @@ func TestGenerate_WrapperQuery(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerate_CLIImportsSchemaByFullPath(t *testing.T) {
+	// A schema package physically nested below the module root must be
+	// imported by its FULL path, not module/<pkgname>.
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"), []byte("module example.com/proj\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatalf("go.mod: %v", err)
+	}
+	// schema dir nested two levels below module root
+	schemaDir := filepath.Join(srcDir, "movies", "schema")
+	if err := os.MkdirAll(schemaDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	src := `package schema
+
+type Studio struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Name  string   ` + "`json:\"name\"`" + `
+}
+`
+	if err := os.WriteFile(filepath.Join(schemaDir, "studio.go"), []byte(src), 0o644); err != nil {
+		t.Fatalf("studio.go: %v", err)
+	}
+	pkg, err := parser.Parse(schemaDir)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	// Confirm the parser resolved the full nested import path.
+	const wantImportPath = "example.com/proj/movies/schema"
+	if pkg.SchemaImportPath != wantImportPath {
+		t.Fatalf("parser resolved SchemaImportPath = %q, want %q", pkg.SchemaImportPath, wantImportPath)
+	}
+
+	outDir := t.TempDir()
+	cliDir := filepath.Join(outDir, "cmd", "movies")
+	if err := os.MkdirAll(cliDir, 0o755); err != nil {
+		t.Fatalf("mkdir cliDir: %v", err)
+	}
+	cfg := Config{
+		SchemaDir:               schemaDir,
+		SchemaClientDir:         schemaDir,
+		EntityDir:               outDir,
+		EntityClientDir:         outDir,
+		CLIDir:                  cliDir,
+		EntityPackageName:       "movies",
+		EntityClientPackageName: "movies",
+		SchemaClientPackageName: "schema",
+		SchemaAlias:             "schema",
+		SchemaImportPath:        pkg.SchemaImportPath,
+		CLIName:                 "movies",
+	}
+	if err := Generate(pkg, cfg); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(cliDir, "main.go"))
+	if err != nil {
+		t.Fatalf("reading generated CLI: %v", err)
+	}
+	out := string(data)
+	if !strings.Contains(out, `"example.com/proj/movies/schema"`) {
+		t.Errorf("CLI must import the schema package by its full path; got:\n%s", out)
+	}
+	if strings.Contains(out, `"example.com/proj/schema"`) {
+		t.Errorf("CLI imports the truncated (wrong) schema path example.com/proj/schema")
+	}
+}
