@@ -16,8 +16,6 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/matthewmcneely/modusgraph"
 	"github.com/mlwelles/modusGraphMoviesProject/schema"
-
-	dg "github.com/dolan-in/dgman/v2"
 )
 
 // CLI is the root command parsed by Kong.
@@ -596,7 +594,6 @@ type StudioAddCmd struct {
 	Revenue     float64 `help:"Set Revenue." name:"revenue"`
 	Active      bool    `help:"Set Active." name:"active"`
 	CreatedAt   string  `help:"Set CreatedAt." name:"createdat"`
-	Embedding   string  `help:"Set Embedding." name:"embedding"`
 }
 
 func (c *StudioAddCmd) Run(client *schema.Client) error {
@@ -612,7 +609,6 @@ func (c *StudioAddCmd) Run(client *schema.Client) error {
 		}
 		e.CreatedAt = parsed
 	}
-	e.Embedding = *dg.VectorFloat32(c.Embedding)
 	if err := client.Studio.Add(context.Background(), e); err != nil {
 		return err
 	}

@@ -119,7 +119,7 @@ func (c *{{.Name}}ListCmd) Run(client *{{$.Name}}.Client) error {
 }
 
 type {{.Name}}AddCmd struct {
-{{- range nonSliceScalarFields .Fields}}{{if and (not .IsUID) (not .IsDType)}}
+{{- range nonSliceScalarFields .Fields}}{{if and (not .IsUID) (not .IsDType) (cliSettable .GoType)}}
 	{{- if .IsPrivate}}
 	{{. | accessorName}} {{cliType .GoType}} `help:"Set {{.Name}}." name:"{{toLower .Name}}"`
 	{{- else}}
@@ -130,7 +130,7 @@ type {{.Name}}AddCmd struct {
 
 func (c *{{.Name}}AddCmd) Run(client *{{$.Name}}.Client) error {
 	e := &{{$.Name}}.{{.Name}}{}
-{{- range nonSliceScalarFields .Fields}}{{if and (not .IsUID) (not .IsDType)}}
+{{- range nonSliceScalarFields .Fields}}{{if and (not .IsUID) (not .IsDType) (cliSettable .GoType)}}
 	{{- if contains .GoType "time."}}
 	if c.{{if .IsPrivate}}{{. | accessorName}}{{else}}{{.Name}}{{end}} != "" {
 		parsed, err := time.Parse(time.RFC3339, c.{{if .IsPrivate}}{{. | accessorName}}{{else}}{{.Name}}{{end}})

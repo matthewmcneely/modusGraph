@@ -115,6 +115,7 @@ func Generate(pkg *model.Package, cfg Config) error {
 		"elemType":                     elemType,
 		"cliType":                      cliType,
 		"cliConvert":                   cliConvert,
+		"cliSettable":                  cliSettable,
 		"hasValidateTags":              hasValidateTags,
 		"fieldsWithValidation":         fieldsWithValidation,
 		"lcFirst":                      lcFirst,
@@ -199,12 +200,21 @@ func Generate(pkg *model.Package, cfg Config) error {
 
 	// 4. iter.go.tmpl → iter_gen.go (EntityDir, gated by NoEntities)
 	if !cfg.NoEntities {
-		if err := executeAndWrite(tmpl, "iter.go.tmpl", pkg, filepath.Join(cfg.EntityDir, "iter_gen.go")); err != nil {
+		// iter and page_options live in EntityDir and must use entityPkg as the
+		// package name, NOT pkg.Name (which is the schema package name).
+		entityPkgData := struct {
+			Name     string
+			Entities []model.Entity
+		}{
+			Name:     entityPkg,
+			Entities: pkg.Entities,
+		}
+		if err := executeAndWrite(tmpl, "iter.go.tmpl", entityPkgData, filepath.Join(cfg.EntityDir, "iter_gen.go")); err != nil {
 			return err
 		}
 
 		// 5. page_options.go.tmpl → page_options_gen.go (EntityDir, gated by NoEntities)
-		if err := executeAndWrite(tmpl, "page_options.go.tmpl", pkg, filepath.Join(cfg.EntityDir, "page_options_gen.go")); err != nil {
+		if err := executeAndWrite(tmpl, "page_options.go.tmpl", entityPkgData, filepath.Join(cfg.EntityDir, "page_options_gen.go")); err != nil {
 			return err
 		}
 	}
@@ -674,6 +684,9 @@ func cliType(goType string) string {
 // For time.Time, this wraps with time.Parse. For external types (e.g.,
 // enums.ArchiveStatus, scalars.UUID) that are represented as strings in the
 // CLI, this wraps with a type conversion.
+//
+// Pointer-to-external types (e.g., *dg.VectorFloat32) are not settable via
+// CLI string conversion; use cliSettable to gate before calling cliConvert.
 func cliConvert(goType, expr string) string {
 	switch goType {
 	case "string", "int", "int64", "float64", "bool":
@@ -687,6 +700,24 @@ func cliConvert(goType, expr string) string {
 		// the CLI and need an explicit type conversion to the target type.
 		return goType + "(" + expr + ")"
 	}
+}
+
+// cliSettable reports whether a field's Go type can be set from a CLI string
+// argument. Primitive types (string, int*, float*, bool, time.Time) and
+// non-pointer external types (e.g. enums.Status) are settable. Pointer-to-
+// external types (e.g. *dg.VectorFloat32) are excluded because there is no
+// universal way to parse them from a single string flag.
+func cliSettable(goType string) bool {
+	switch goType {
+	case "string", "int", "int32", "int64", "float32", "float64", "bool", "time.Time":
+		return true
+	}
+	// Pointer types to external packages cannot be auto-converted.
+	if strings.HasPrefix(goType, "*") {
+		return false
+	}
+	// Non-pointer types (e.g. enums.Status) can be string-converted.
+	return true
 }
 
 // hasValidateTags returns true if any field has a non-empty ValidateTag.
