@@ -43,32 +43,64 @@ dgman and a substantial amount of generated glue.
 
 ### Layout
 
-Two-package model per generated entity collection:
+Both packages host a full set of generated CRUD/query types. The schema
+package exposes a *raw* client that operates on `*schema.Studio`; the
+parent package exposes a *wrapper* client that operates on `*movies.Studio`.
+Consumers pick the level of abstraction they want — same method names,
+different return types.
 
 ```
-movies/                              parent package — generated, consumer-facing
+movies/                              parent package — generated, wrapper-facing
   generate.go                        //go:generate directive (hand-edited, ~3 lines)
-  client_gen.go                      typed Client
+  client_gen.go                      top-level movies.Client factory
   iter_gen.go                        iter.Seq2 helpers
   page_options_gen.go                pagination types
   studio_gen.go                      wrapper: type Studio struct { s *schema.Studio }
+                                     + movies.StudioClient (composes over schema.StudioClient)
   studio_accessors_gen.go            field/edge accessors delegating to e.s
   studio_options_gen.go              StudioOption + WithStudio<Field>
-  studio_query_gen.go                typed query builder
+  studio_query_gen.go                wrapper-level query builder (wraps schema query results)
   film_gen.go
   film_*_gen.go
   ...
   studio_ext.go                      (optional) hand-written wrapper extensions
-  schema/                            user-edited source of truth
+  schema/                            user-edited types + generated raw CRUD
     studio.go                        type Studio struct { Name string ...; Films []*Film ... }
     film.go
     doc.go                           (optional) package doc
+    marker_gen.go                    SchemaTypeName/SchemaPredicates/SchemaSearchPredicate
+                                     for every entity in this package
+    client_gen.go                    top-level schema.Client factory + per-entity clients
+    studio_client_gen.go             schema.StudioClient — operates on *schema.Studio directly
+    studio_query_gen.go              schema-level query builder
+    film_client_gen.go
+    film_query_gen.go
+    ...
 ```
 
 Layout follows the `ent` ORM precedent: schemas in a `schema/` subpackage,
-the consumer-facing API in the parent. Consumers `import "<path>/movies"`
-and use `movies.Studio`; the `schema` package is reached only when callers
-want raw struct access via `Unwrap()`.
+the consumer-facing wrapper API in the parent. Two same-named generated
+clients in two packages give consumers a choice:
+
+- `schema.StudioClient` — raw client; methods take and return `*schema.Studio`.
+  No wrapper allocation. Best for bulk processing, ETL, callers who never
+  need the method-based wrapper API.
+- `movies.StudioClient` — wrapper client; methods take and return
+  `*movies.Studio`. Holds a `*schema.StudioClient` internally and adds a
+  wrap/unwrap layer at the boundary. Best for code that wants the method
+  API (validation, encapsulation, ergonomic field access).
+
+The wrapper client's CRUD methods are tiny — a `WrapStudio(...)` on read
+returns, a `w.s` deref on write. Single source of truth for actual logic
+lives in the schema-level client.
+
+**The schema package imports modusgraph.** This isn't ideal in a pure-types
+sense, but the trade-off doesn't pay for itself here: schema types are
+Dgraph-specific (json/dgraph tags, validation predicates), nobody is
+porting them across stores, and any project using these types already has
+modusgraph in its dependency tree from the parent package. Carrying a
+dependency on modusgraph in `schema/` costs nothing realistic and lets the
+schema package host its own first-class CRUD client.
 
 The `schema/` package is plain (not `internal/`) so the `*schema.Studio`
 returned by `Unwrap()` is nameable by external callers.
@@ -390,89 +422,150 @@ func (e *Studio) UnmarshalJSON(data []byte) error {
 `schema.Studio` itself needs no custom marshaling — its fields are public,
 so `encoding/json` handles it directly.
 
-### Typed client
+### Typed clients (two layers, same names)
 
-**Input/output discipline:** the typed client deals exclusively in
-**wrappers** (`*movies.Studio`, `[]*movies.Studio`) for entity arguments
-and returns. UIDs pass as `string`. Schema structs never appear in the
-signature — callers who hold a `*schema.Studio` wrap it with
-`WrapStudio(s)` first; callers who want the raw struct out call
-`result.Unwrap()`.
+Two same-named `StudioClient` types are generated, one per package:
+
+- **`schema.StudioClient`** — operates on `*schema.Studio` directly. No
+  wrappers, no allocations beyond what dgman performs internally. The
+  single source of truth for CRUD logic.
+- **`movies.StudioClient`** — operates on `*movies.Studio`. Composes over
+  `schema.StudioClient`; adds a wrap on the way out of reads and an
+  unwrap on the way into writes.
+
+Consumers import the package they want and call `NewStudioClient(conn)`.
+The method names and signatures match across both clients except for the
+entity argument/return types.
 
 ```go
+// schema/studio_client_gen.go
+package schema
+
 type StudioClient struct { conn modusgraph.Client }
 
-// Get reads a single Studio by UID. Returns the wrapper.
+func NewStudioClient(conn modusgraph.Client) *StudioClient {
+    return &StudioClient{conn: conn}
+}
+
 func (c *StudioClient) Get(ctx context.Context, uid string) (*Studio, error) {
-    var rec schema.Studio
+    var rec Studio
     if err := c.conn.Get(ctx, &rec, uid); err != nil { return nil, err }
-    return &Studio{s: &rec}, nil
+    return &rec, nil
 }
 
-// Add inserts a new Studio. The wrapper passes through to modusgraph.Client,
-// which reflects on Unwrap() to substitute the inner *schema.Studio before
-// invoking dgman.
-func (c *StudioClient) Add(ctx context.Context, w *Studio) error {
-    return c.conn.Insert(ctx, w)
+func (c *StudioClient) Add(ctx context.Context, s *Studio) error {
+    return c.conn.Insert(ctx, s)
 }
 
-// Update modifies an existing Studio identified by w.UID().
-func (c *StudioClient) Update(ctx context.Context, w *Studio) error {
-    return c.conn.Update(ctx, w)
+func (c *StudioClient) Update(ctx context.Context, s *Studio) error {
+    return c.conn.Update(ctx, s)
 }
 
-// Upsert inserts the Studio if no node with a matching upsert predicate
-// exists, otherwise updates it. predicates names the upsert predicate(s);
-// if empty, modusgraph picks the first predicate tagged `dgraph:"upsert"`.
-func (c *StudioClient) Upsert(ctx context.Context, w *Studio, predicates ...string) error {
-    return c.conn.Upsert(ctx, w, predicates...)
+func (c *StudioClient) Upsert(ctx context.Context, s *Studio, predicates ...string) error {
+    return c.conn.Upsert(ctx, s, predicates...)
 }
 
-// Delete removes the Studio with the given UID.
 func (c *StudioClient) Delete(ctx context.Context, uid string) error {
     return c.conn.Delete(ctx, []string{uid})
 }
 
-// List returns Studios with optional pagination.
-func (c *StudioClient) List(ctx context.Context, opts ...PageOption) ([]*Studio, error) {
-    var recs []schema.Studio
-    // ...existing query construction unchanged
+func (c *StudioClient) List(ctx context.Context, opts ...PageOption) ([]Studio, error) {
+    var recs []Studio
+    // ...query construction...
     if err := q.Nodes(&recs); err != nil { return nil, err }
+    return recs, nil
+}
+
+func (c *StudioClient) Query(ctx context.Context) *StudioQuery {
+    return &StudioQuery{ /* ... */ }
+}
+```
+
+```go
+// movies/studio_client_gen.go
+package movies
+
+type StudioClient struct { schemaClient *schema.StudioClient }
+
+func NewStudioClient(conn modusgraph.Client) *StudioClient {
+    return &StudioClient{schemaClient: schema.NewStudioClient(conn)}
+}
+
+func (c *StudioClient) Get(ctx context.Context, uid string) (*Studio, error) {
+    s, err := c.schemaClient.Get(ctx, uid)
+    if err != nil { return nil, err }
+    return WrapStudio(s), nil
+}
+
+func (c *StudioClient) Add(ctx context.Context, w *Studio) error {
+    return c.schemaClient.Add(ctx, w.s)
+}
+
+func (c *StudioClient) Update(ctx context.Context, w *Studio) error {
+    return c.schemaClient.Update(ctx, w.s)
+}
+
+func (c *StudioClient) Upsert(ctx context.Context, w *Studio, predicates ...string) error {
+    return c.schemaClient.Upsert(ctx, w.s, predicates...)
+}
+
+func (c *StudioClient) Delete(ctx context.Context, uid string) error {
+    return c.schemaClient.Delete(ctx, uid)
+}
+
+func (c *StudioClient) List(ctx context.Context, opts ...PageOption) ([]*Studio, error) {
+    recs, err := c.schemaClient.List(ctx, opts...)
+    if err != nil { return nil, err }
     out := make([]*Studio, len(recs))
     for i := range recs {
-        out[i] = &Studio{s: &recs[i]}
+        out[i] = WrapStudio(&recs[i])
     }
     return out, nil
 }
 
-// Query returns a query builder for richer filtering, sorting, and pagination.
-// The builder's terminal methods (Nodes, First, Single) return wrappers.
 func (c *StudioClient) Query(ctx context.Context) *StudioQuery {
-    return &StudioQuery{ /* ...existing query construction... */ }
+    return &StudioQuery{schemaQuery: c.schemaClient.Query(ctx)}
 }
 ```
 
-The query builder type `StudioQuery` (existing today) follows the same
-discipline: its terminal methods (`Nodes() ([]*Studio, error)`,
-`First() (*Studio, error)`, etc.) return wrappers. Internally it
-queries against `[]schema.Studio` and wraps each result on return.
+**Input/output by client:**
 
-Write paths (`Add`, `Update`, `Upsert`) pass the wrapper through directly;
-modusgraph.Client's reflection-based unwrap probes for the `Unwrap()`
-method and substitutes the inner `*schema.Studio` before processing — see
-[modusGraph Package Changes](#modusgraph-package-changes). Read paths
-(`Get`, `List`, `Query.Nodes`) still wrap explicitly because `conn.Get`
-and `q.Nodes` fill structs they own.
+| Method | `schema.StudioClient` | `movies.StudioClient` |
+|---|---|---|
+| `Get(ctx, uid)` | `(*schema.Studio, error)` | `(*movies.Studio, error)` |
+| `Add(ctx, x)` | takes `*schema.Studio` | takes `*movies.Studio` |
+| `Update(ctx, x)` | takes `*schema.Studio` | takes `*movies.Studio` |
+| `Upsert(ctx, x, preds...)` | takes `*schema.Studio` | takes `*movies.Studio` |
+| `Delete(ctx, uid)` | (uid only) | (uid only) |
+| `List(ctx, opts...)` | `([]schema.Studio, error)` | `([]*movies.Studio, error)` |
+| `Query(ctx)` | `*schema.StudioQuery` | `*movies.StudioQuery` |
+
+`schema.StudioClient.List` returns a value slice (`[]schema.Studio`) since
+the schema struct is a value type and dgman fills a slice it owns;
+`movies.StudioClient.List` allocates wrappers around each element and
+returns `[]*movies.Studio`.
+
+**Why composition over duplication:**
+
+The wrapper-level client is a thin wrap/unwrap shim. The schema-level
+client holds all the actual CRUD logic. This keeps the two clients in
+lockstep automatically — change a method body in the schema client and
+the wrapper client follows for free.
 
 **The directionality at a glance:**
 
 ```
 *schema.Studio  ──── WrapStudio(s) ────►  *movies.Studio  ──── Unwrap() ────►  *schema.Studio
                                               ▲     │
-                                              │     │  the typed client lives here:
-                                              │     │  StudioClient.Add/Update/Upsert/Get/List
-                                              │     ▼  StudioQuery.Nodes/First/Single
+                                              │     │  movies.StudioClient
+                                              │     │      composes over
+                                              │     ▼  schema.StudioClient
 ```
+
+The query builder types `schema.StudioQuery` and `movies.StudioQuery`
+follow the same discipline: terminal methods (`Nodes`, `First`, `Single`)
+return raw schemas or wrappers respectively. The wrapper-level query
+composes over the schema-level query and wraps results on the way out.
 
 Schema-struct paths exist for native interop (loading from elsewhere,
 passing to raw `modusgraph.Client`, JSON unmarshalling). The moment a
@@ -718,57 +811,168 @@ dispatch stay available.
 
 ### Template inventory
 
-| Template | Output | New role | Status |
+Templates split into two groups by which package their output lives in.
+
+**Schema-side templates** (always emitted unless gated by toggle flags):
+
+| Template | Output | Gate flag | Role |
 |---|---|---|---|
-| `entity.go.tmpl` | `<out>/<snake>_gen.go` | Wrapper struct, `NewStudio`, `WrapStudio`, `Unwrap()`, `Validate()`, `MarshalJSON`/`UnmarshalJSON`, `UID`/`SetUID`/`DType`/`SetDType`, typed `StudioClient`. | rewritten |
-| `accessors.go.tmpl` | `<out>/<snake>_accessors_gen.go` | Per-field and per-edge methods on the wrapper that delegate to `e.s`, wrapping/unwrapping at edges. Always emitted (no longer gated on private fields). | rewritten |
-| `options.go.tmpl` | `<out>/<snake>_options_gen.go` | `StudioOption`, `WithStudio<Field>` family, `ApplyStudioOptions`. The schema-installation case is handled by the `WrapStudio` constructor in `entity.go.tmpl`, not by an option, to avoid any chance of collision with a `WithStudio<X>` field setter. | minor update |
-| `client.go.tmpl` | `<out>/client_gen.go` | Top-level `Client` factory and shared infrastructure. Per-entity client types now live in `entity.go.tmpl`. | minor update |
-| `query.go.tmpl` | `<out>/<snake>_query_gen.go` | Query builder. Public signatures take/return wrappers; internals run against `schema.X`. Results wrapped on return. | rewritten |
-| `iter.go.tmpl` | `<out>/iter_gen.go` | `iter.Seq2` helpers used by `<Edge>Seq` accessors. No change. | no change |
-| `page_options.go.tmpl` | `<out>/page_options_gen.go` | Pagination types. No change. | no change |
-| `cli.go.tmpl` | `<cli-dir>/main.go` | Builds `schema.X` directly from Kong flags; calls `conn.Insert(ctx, &record)`. Simpler than today. | minor update |
-| **`schema_marker.go.tmpl`** (new) | `<schema-dir>/marker_gen.go` | Emits `SchemaTypeName() string`, `SchemaPredicates() []string`, `SchemaSearchPredicate() string` on each schema struct. Single file per schema package containing all entities' marker methods. | added |
-| `marshal.go.tmpl` | — | Deleted. The private-field marshal mirror is no longer needed. | removed |
+| `schema_marker.go.tmpl` *(new)* | `<schema-dir>/marker_gen.go` | always emitted | `SchemaTypeName/SchemaPredicates/SchemaSearchPredicate` for every entity in the schema package. Single file. |
+| `schema_client.go.tmpl` *(new)* | `<schema-client-dir>/client_gen.go` | `-no-schema-clients` | Top-level `schema.Client` factory (returns conn-bound per-entity sub-clients). |
+| `schema_entity_client.go.tmpl` *(new)* | `<schema-client-dir>/<snake>_client_gen.go` | `-no-schema-clients` | Per-entity `schema.StudioClient` operating on `*schema.Studio` directly. Holds all CRUD logic. |
+| `schema_query.go.tmpl` *(new)* | `<schema-client-dir>/<snake>_query_gen.go` | `-no-schema-clients` | Per-entity `schema.StudioQuery` — returns raw schema slices. |
+
+**Wrapper-side templates** (gated by `-no-wrappers`):
+
+| Template | Output | Gate flag | Role |
+|---|---|---|---|
+| `entity.go.tmpl` | `<wrapper-dir>/<snake>_gen.go` | `-no-wrappers` | Wrapper struct, `NewStudio`, `WrapStudio`, `Unwrap`, `Validate`, `MarshalJSON`/`UnmarshalJSON`, `UID/DType` methods. |
+| `accessors.go.tmpl` | `<wrapper-dir>/<snake>_accessors_gen.go` | `-no-wrappers` | Per-field/edge methods delegating to `e.s`. Always emitted (no longer gated on private fields). |
+| `options.go.tmpl` | `<wrapper-dir>/<snake>_options_gen.go` | `-no-wrappers` | `StudioOption`, `WithStudio<Field>` family, `ApplyStudioOptions`. (No installer option — `WrapStudio` constructor handles that case.) |
+| `iter.go.tmpl` | `<wrapper-dir>/iter_gen.go` | `-no-wrappers` | `iter.Seq2` helpers used by `<Edge>Seq` accessors. No change. |
+| `page_options.go.tmpl` | `<wrapper-dir>/page_options_gen.go` | `-no-wrappers` | Pagination types. No change. |
+| `wrapper_client.go.tmpl` *(new)* | `<wrapper-client-dir>/client_gen.go` | `-no-wrappers` or `-no-wrapper-clients` | Top-level `movies.Client` factory. |
+| `wrapper_entity_client.go.tmpl` *(new)* | `<wrapper-client-dir>/<snake>_client_gen.go` | `-no-wrappers` or `-no-wrapper-clients` | Per-entity `movies.StudioClient`. Composes over `schema.StudioClient`. |
+| `wrapper_query.go.tmpl` *(new)* | `<wrapper-client-dir>/<snake>_query_gen.go` | `-no-wrappers` or `-no-wrapper-clients` | Per-entity `movies.StudioQuery`. Composes over `schema.StudioQuery`; wraps results. |
+
+**CLI:**
+
+| Template | Output | Gate flag | Role |
+|---|---|---|---|
+| `cli.go.tmpl` | `<cli-dir>/main.go` | `-no-cli` | Kong CLI. Builds `schema.X` directly from flags; calls `schema.<Entity>Client.Add(...)`. |
+
+**Removed:**
+
+| Template | Status |
+|---|---|
+| `marshal.go.tmpl` | Deleted. The private-field marshal mirror is no longer needed. |
+| `client.go.tmpl` (current, single-tier) | Split into `schema_client.go.tmpl` + `wrapper_client.go.tmpl`. |
+| `query.go.tmpl` (current, single-tier) | Split into `schema_query.go.tmpl` + `wrapper_query.go.tmpl`. |
 
 ### Generator flags
 
 All optional, all with defaults that match an unflagged
-`//go:generate go run github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen`:
+`//go:generate go run github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen`.
+Three categories: inputs, outputs, toggles.
+
+**Inputs:**
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `-schema-dir` | `./schema` | Path (relative to CWD) where schema source lives. |
-| `-out` | `.` | Path (relative to CWD) where generated files are written. |
+| `-schema-dir` | `./schema` | Path (relative to CWD) where schema source lives. Also the default output location for the schema-level client (overridable via `-schema-client-dir`). |
 | `-schema-alias` | dir basename of `-schema-dir` (`schema`) | Import alias for the schema package in generated code. |
-| `-pkg-name` | resolved from existing files in `-out`, then basename of `-out` | Package name to use in generated files (the `package X` declaration). |
-| `-cli-dir` | `./cmd/<pkg>` | Output directory for the Kong CLI. Unchanged. |
-| `-cli-name` | parent package name | Name for the CLI binary. Unchanged. |
-| `-with-validator` | `false` | Enable validation in the generated CLI. Unchanged. |
 
-The `//go:generate` directive lives in `<parent>/generate.go`. CWD when the
-directive runs is the directory containing the file (the parent package),
-so `./schema` resolves to `<parent>/schema`.
+**Outputs (one flag per generated artifact group):**
+
+| Flag | Default | What it controls |
+|---|---|---|
+| `-schema-client-dir` | same as `-schema-dir` | Where the schema-level CRUD clients (`schema.StudioClient`, etc.) and the schema-level query builders are written. Default puts them alongside the schema types they operate on. |
+| `-wrapper-dir` | `.` (parent of `-schema-dir`) | Where the wrapper types (`movies.Studio`, accessors, options) are written. |
+| `-wrapper-client-dir` | same as `-wrapper-dir` | Where the wrapper-level CRUD clients (`movies.StudioClient`, etc.) and the wrapper-level query builders are written. Default puts them alongside the wrapper types they operate on. |
+| `-cli-dir` | `./cmd/<pkg>` | Output directory for the Kong CLI. Unchanged. |
+| `-out` | `.` | *Deprecated alias* for `-wrapper-dir`. Accepted for backward compatibility with the unflagged default invocation. |
+
+**Toggles (turn off entire artifact groups):**
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `-no-schema-clients` | `false` | Skip generating schema-level clients and query builders. Schema types and markers are still generated. |
+| `-no-wrappers` | `false` | Skip generating wrapper types, wrapper accessors, wrapper options, *and* wrapper clients. Implies `-no-wrapper-clients`. Raw-only mode. |
+| `-no-wrapper-clients` | `false` | Skip wrapper-level clients and query builders, but still emit wrapper types and accessors. Useful when you want the wrapper data model but compose your own client over it. |
+| `-no-cli` | `false` | Skip CLI generation entirely. (Was implicit; making it a flag.) |
+
+**Other (unchanged):**
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `-pkg-name` | resolved from existing `.go` files in `-wrapper-dir`, then basename of the absolute `-wrapper-dir` path | Package name to use in generated wrapper files (the `package X` declaration). |
+| `-cli-name` | wrapper package name | Name for the CLI binary. |
+| `-with-validator` | `false` | Enable validation in the generated CLI. |
+
+The `//go:generate` directive lives in `<wrapper-dir>/generate.go`. CWD when
+the directive runs is the directory containing the file, so the default
+`-schema-dir ./schema` resolves to `<wrapper-dir>/schema`.
+
+**Common layouts and the flags that produce them:**
+
+```
+# Default — schemas + raw clients together, wrappers + wrapper clients together
+movies/
+  schema/                     types + markers + schema.StudioClient
+  *_gen.go                    wrappers + accessors + movies.StudioClient
+
+# Flags: (none — defaults are sufficient)
+```
+
+```
+# Pure schema package (types only), clients elsewhere
+movies/
+  schema/                     types + markers
+  schemaclient/               schema.StudioClient
+  *_gen.go                    wrappers + accessors + movies.StudioClient
+
+# Flags: -schema-client-dir ./schemaclient
+```
+
+```
+# Raw-only — no wrapper layer at all
+movies/
+  schema/                     types + markers + schema.StudioClient
+
+# Flags: -no-wrappers
+```
+
+```
+# Wrapper-only — schemas + types, but no schema-level client
+movies/
+  schema/                     types + markers (no client)
+  *_gen.go                    wrappers + accessors + movies.StudioClient
+
+# Flags: -no-schema-clients
+```
+
+```
+# Fully split — output dirs for everything
+project/
+  api/                        wrappers
+  api/clients/                wrapper clients
+  internal/types/             schemas + markers
+  internal/clients/           raw clients
+
+# Flags:
+#   -schema-dir ./internal/types
+#   -schema-client-dir ./internal/clients
+#   -wrapper-dir ./api
+#   -wrapper-client-dir ./api/clients
+```
 
 ### Parser changes
 
 `internal/parser/parser.go`:
 
-- Accept a source directory (`-schema-dir`) distinct from the output directory.
+- Accept a source directory (`-schema-dir`) distinct from the output directories.
 - Resolve the schema package's import path so it can be referenced in
-  generated code (`import "<modpath>/<parent>/schema"`).
-- Determine *two* package names:
-  - **Schema package name** — from parsing the source dir (e.g., `schema`).
-    Used as the import alias in generated code (overridable via
+  generated code (`import "<modpath>/<schema-pkg-path>"`).
+- Determine the relevant package names per output directory:
+  - **Schema package name** — from parsing `-schema-dir` (e.g., `schema`).
+    Used as the import alias in generated wrapper code (overridable via
     `-schema-alias`).
-  - **Parent package name** — for the `package` declaration in generated
-    files. Resolved in this order: (1) explicit `-pkg-name` flag if given,
-    (2) the `package` declaration in any existing `.go` file in `-out` if
-    one exists, (3) the basename of the absolute `-out` directory path as
-    a final fallback.
+  - **Schema-client package name** — needed only when `-schema-client-dir`
+    differs from `-schema-dir`. Resolved by reading the destination
+    directory if any `.go` file already exists there, otherwise basename
+    of the absolute path. Errors out if the destination directory's
+    existing package name doesn't match what would be emitted.
+  - **Wrapper package name** — for the `package X` declaration in generated
+    wrapper files. Resolved in this order: (1) explicit `-pkg-name` flag,
+    (2) `package` declaration in any existing `.go` file in `-wrapper-dir`,
+    (3) basename of the absolute `-wrapper-dir` path.
+  - **Wrapper-client package name** — needed only when
+    `-wrapper-client-dir` differs from `-wrapper-dir`. Resolved the same
+    way as schema-client package name.
 - Reject value-slice multi-edges (the [Schema constraints](#schema-constraints)
   rule). Error message must name the field, name the entity, and tell the
   user exactly what to change.
+- Apply the reserved-name collision guard against generated field accessors.
 - All other parsing logic (field types, edge detection, validate tag
   extraction, dgman tag handling, `dgraph:"-"` skipping) stays.
 
