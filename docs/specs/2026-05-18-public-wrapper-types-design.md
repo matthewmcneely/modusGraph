@@ -313,17 +313,34 @@ func (e *Studio) SetHeadquarters(v *Country) {
     if v != nil { e.s.Headquarters = *v.s }
 }
 
-// (3) Singular-via-list edge: schema has  CurrentHead []schema.Director with validate:"max=1"
+// (3) Singular-via-list edge: schema has  CurrentHead []*schema.Director with validate:"max=1"
 //     Treated as singular at the wrapper layer; slice is just storage shape.
+//     Must use a pointer slice (same rule as true multi-edges): a wrapper
+//     returned by CurrentHead() must remain valid across SetCurrentHead calls,
+//     which a value-element slice cannot guarantee because reassignment moves
+//     the backing array.
 func (e *Studio) CurrentHead() *Director {
-    if len(e.s.CurrentHead) == 0 { return nil }
-    return &Director{s: &e.s.CurrentHead[0]}
+    if len(e.s.CurrentHead) == 0 || e.s.CurrentHead[0] == nil { return nil }
+    return &Director{s: e.s.CurrentHead[0]}
 }
 func (e *Studio) SetCurrentHead(v *Director) {
     if v == nil { e.s.CurrentHead = nil; return }
-    e.s.CurrentHead = []schema.Director{*v.s}
+    e.s.CurrentHead = []*schema.Director{v.s}
 }
 ```
+
+**Set semantics — value vs pointer fields.** Shape (1) (pointer-typed
+singular) and shape (3) (singular-via-list with pointer-element slice) both
+store a pointer in the schema field, so the wrapper passed to `Set<Edge>`
+and the wrapper returned by `<Edge>()` afterward share the same
+`*schema.Director` — mutations through either are visible everywhere.
+Shape (2) (value-typed singular) copies the value into the schema field:
+`SetHeadquarters(v *Country)` runs `e.s.Headquarters = *v.s`, so `v` and
+`e.Headquarters()` no longer share state after the call. Mutations to `v`
+afterwards do not propagate to the studio. This asymmetry is inherent to
+how Go handles value vs pointer fields; callers using value-typed singular
+edges should `Set` once with their final value or use the returned wrapper
+from `e.Headquarters()` for further mutations.
 
 ### Multi-edge accessors
 
@@ -626,18 +643,30 @@ func main() {
 Constraints enforced by the generator at parse time. Violations produce a
 clear error that names the field and the rule.
 
-### Multi-edges must use pointer slices
+### Slice-of-entity fields must use pointer slices
 
-A field is a **multi-edge** when it has a slice element type that is itself
-an entity, with no `validate:"max=1"` or `validate:"len=1"` constraint.
+Any field whose element type is an entity (`[]X` where `X` is another
+schema struct) must use a pointer slice: `[]*X`, not `[]X`. The rule
+applies uniformly to both shapes:
 
-- Allowed: `Films []*schema.Film`
-- Rejected: `Films []schema.Film`
-  - Error: `multi-edge "Films" must use []*schema.Film (pointer slice); value-slice multi-edges are unsupported because wrapper pointer captures into the slice can be silently invalidated by AppendFilms or SetFilms`.
+- **True multi-edge** (no `validate:"max=1"`/`"len=1"` constraint):
+  - Allowed: `Films []*schema.Film`
+  - Rejected: `Films []schema.Film`
+- **Singular-via-list** (`validate:"max=1"` or `validate:"len=1"`):
+  - Allowed: `CurrentHead []*schema.Director` with `validate:"max=1"`
+  - Rejected: `CurrentHead []schema.Director` with `validate:"max=1"`
 
-A slice with `validate:"max=1"` or `validate:"len=1"` is a *singular-via-list*
-edge and is allowed in both value and pointer form. The wrapper accessor
-treats these as singular (returning `*Director`, not `[]*Director`).
+Error format: `slice-of-entity field "<Field>" on <Entity> must use []*<schema.Type> (pointer slice); value-element slices are unsupported because wrapper pointer captures into the slice can be silently invalidated by setter calls that reassign or grow the slice`.
+
+The hazard is identical in both shapes: a wrapper returned by `<Edge>()`
+holds a pointer into the slice's backing array. A subsequent
+`Set<Edge>`/`Append<Edge>`/`Remove<Edge>` call can reassign or grow the
+slice, leaving the previously returned wrapper pointing into a detached
+backing array. Requiring pointer-element slices closes the hazard for
+every entity-slice field with a single rule.
+
+(Scalar slices like `Tags []string` are unaffected — there are no wrappers
+to invalidate.)
 
 ### Schema field exports
 
@@ -729,16 +758,25 @@ func unwrapSchema(obj any) any {
 }
 ```
 
-`unwrapSchema` is invoked at the top of each `Client` method that takes an
-entity value (`Insert`, `InsertRaw`, `Update`, `Upsert`, `Get`, `Query`, and
-any other method that ultimately reflects over a struct).
+`unwrapSchema` is invoked at the top of each `Client` method that accepts a
+struct-shaped `any` parameter. Concretely, the wired entry points are:
 
-For methods that take `any` as a value parameter (Insert/Update/Upsert),
-the substitution is straightforward: `obj = unwrapSchema(obj)`. For methods
-like `Get(ctx, obj, uid)` where the caller passes a destination pointer to
-be filled, `unwrapSchema` returns the inner `*schema.Studio` so dgman writes
-the result into the schema struct that the wrapper already references. The
-wrapper sees the populated data through its `Unwrap()` accessor afterwards.
+- `Insert(ctx, any)` — `obj = unwrapSchema(obj)` before validation and dgman dispatch.
+- `InsertRaw(ctx, any)` — same treatment.
+- `Update(ctx, any)` — same treatment.
+- `Upsert(ctx, any, ...string)` — same treatment.
+- `Get(ctx, any, string)` — the destination pointer is unwrapped so dgman writes into the inner `*schema.Studio` that the wrapper already references; the wrapper sees the populated data via its `Unwrap()` accessor afterwards.
+- `Query(ctx, any)` — the template argument is unwrapped so the returned `*dg.Query` reflects over the schema struct shape (predicates, types) rather than the wrapper.
+- `UpdateSchema(ctx, ...any)` — each variadic template argument is unwrapped, so a caller that passes `*movies.Studio` gets the same schema derivation as if they had passed `*schema.Studio` directly.
+
+For `any`-valued parameters the substitution is straightforward
+(`obj = unwrapSchema(obj)`). For variadic `...any` (UpdateSchema only), the
+substitution loops over the slice and replaces each element.
+
+Methods that do *not* reflect over an entity value — `Delete(ctx, []string)`,
+`Close()`, `QueryRaw(ctx, string, map[string]string)`, `DgraphClient()`,
+`WithRetry(ctx, RetryPolicy, func() error)`, `LoadData(ctx, string, ...Option)`,
+`GetSchema(ctx)`, `DropAll(ctx)`, `DropData(ctx)` — are unaffected.
 
 Reflection cost: one `reflect.ValueOf` and one `MethodByName` lookup per
 modusgraph.Client call site that uses `unwrapSchema`. Negligible compared
@@ -876,7 +914,7 @@ Three categories: inputs, outputs, toggles.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `-no-schema-clients` | `false` | Skip generating schema-level clients and query builders. Schema types and markers are still generated. |
+| `-no-schema-clients` | `false` | Skip generating schema-level clients and query builders. Schema types and markers are still generated. **Implies `-no-wrapper-clients`** — the wrapper client composes over the schema client, so it cannot exist without one. |
 | `-no-wrappers` | `false` | Skip generating wrapper types, wrapper accessors, wrapper options, *and* wrapper clients. Implies `-no-wrapper-clients`. Raw-only mode. |
 | `-no-wrapper-clients` | `false` | Skip wrapper-level clients and query builders, but still emit wrapper types and accessors. Useful when you want the wrapper data model but compose your own client over it. |
 | `-no-cli` | `false` | Skip CLI generation entirely. (Was implicit; making it a flag.) |
@@ -923,12 +961,15 @@ movies/
 ```
 
 ```
-# Wrapper-only — schemas + types, but no schema-level client
+# Types-only — schemas + wrappers as data model, no clients on either side
+# (caller composes their own CRUD layer over modusgraph.Client)
 movies/
   schema/                     types + markers (no client)
-  *_gen.go                    wrappers + accessors + movies.StudioClient
+  *_gen.go                    wrappers + accessors (no client)
 
 # Flags: -no-schema-clients
+# (Implies -no-wrapper-clients: wrapper clients compose over schema clients,
+# so disabling schema clients disables wrapper clients automatically.)
 ```
 
 ```
@@ -969,9 +1010,10 @@ project/
   - **Wrapper-client package name** — needed only when
     `-wrapper-client-dir` differs from `-wrapper-dir`. Resolved the same
     way as schema-client package name.
-- Reject value-slice multi-edges (the [Schema constraints](#schema-constraints)
-  rule). Error message must name the field, name the entity, and tell the
-  user exactly what to change.
+- Reject value-element slices for any field whose element type is an entity
+  (the [Schema constraints](#schema-constraints) rule). Applies uniformly
+  to true multi-edges and singular-via-list edges. Error message must name
+  the field, name the entity, and tell the user exactly what to change.
 - Apply the reserved-name collision guard against generated field accessors.
 - All other parsing logic (field types, edge detection, validate tag
   extraction, dgman tag handling, `dgraph:"-"` skipping) stays.
@@ -1020,9 +1062,9 @@ Concrete migrations for `studio.go`:
 |---|---|
 | `name string` | `Name string` |
 | `yearFounded int` | `YearFounded int` |
-| `films []Film` (value slice, true multi-edge) | `Films []*Film` (pointer slice, Q8 rule) |
-| `currentHead []Director` with `validate:"max=1"` | unchanged shape (singular-via-list, allowed) |
-| `homeBase []Country` with `validate:"len=1"` | unchanged shape (singular-via-list, allowed) |
+| `films []Film` (value slice, true multi-edge) | `Films []*Film` (pointer slice — pointer-slice rule) |
+| `currentHead []Director` with `validate:"max=1"` | `CurrentHead []*Director` with `validate:"max=1"` (pointer-slice rule applies to singular-via-list too) |
+| `homeBase []Country` with `validate:"len=1"` | `HomeBase []*Country` with `validate:"len=1"` (pointer-slice rule applies to singular-via-list too) |
 | `advisors []*Director` | unchanged (already pointer slice) |
 | `tempCache string` (no json tag) | deleted (test fixture for skip behavior; no longer needed) |
 | `Internal string ... dgraph:"-"` | kept (test fixture for `dgraph:"-"` skip behavior) |
@@ -1030,8 +1072,10 @@ Concrete migrations for `studio.go`:
 Other entity files in `testdata/movies/` (`film.go`, `director.go`,
 `country.go`, `actor.go`, `genre.go`, `rating.go`, `performance.go`,
 `location.go`, `content_rating.go`): same treatment. Move to `schema/`,
-uppercase fields, convert value-slice multi-edges to pointer slices, drop
-test-only private-field fixtures that no longer exercise meaningful
+uppercase fields, convert any value-element slice-of-entity field (both
+true multi-edges and singular-via-list) to pointer slices per the
+[pointer-slice rule](#slice-of-entity-fields-must-use-pointer-slices),
+drop test-only private-field fixtures that no longer exercise meaningful
 generator behavior.
 
 Add `testdata/movies/generate.go`:
