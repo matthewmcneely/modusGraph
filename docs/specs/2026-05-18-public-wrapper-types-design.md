@@ -392,27 +392,48 @@ so `encoding/json` handles it directly.
 
 ### Typed client
 
+**Input/output discipline:** the typed client deals exclusively in
+**wrappers** (`*movies.Studio`, `[]*movies.Studio`) for entity arguments
+and returns. UIDs pass as `string`. Schema structs never appear in the
+signature — callers who hold a `*schema.Studio` wrap it with
+`WrapStudio(s)` first; callers who want the raw struct out call
+`result.Unwrap()`.
+
 ```go
 type StudioClient struct { conn modusgraph.Client }
 
+// Get reads a single Studio by UID. Returns the wrapper.
 func (c *StudioClient) Get(ctx context.Context, uid string) (*Studio, error) {
     var rec schema.Studio
     if err := c.conn.Get(ctx, &rec, uid); err != nil { return nil, err }
     return &Studio{s: &rec}, nil
 }
 
+// Add inserts a new Studio. The wrapper passes through to modusgraph.Client,
+// which reflects on Unwrap() to substitute the inner *schema.Studio before
+// invoking dgman.
 func (c *StudioClient) Add(ctx context.Context, w *Studio) error {
-    return c.conn.Insert(ctx, w)   // modusgraph.Client reflects on Unwrap() to unwrap
+    return c.conn.Insert(ctx, w)
 }
 
+// Update modifies an existing Studio identified by w.UID().
 func (c *StudioClient) Update(ctx context.Context, w *Studio) error {
     return c.conn.Update(ctx, w)
 }
 
+// Upsert inserts the Studio if no node with a matching upsert predicate
+// exists, otherwise updates it. predicates names the upsert predicate(s);
+// if empty, modusgraph picks the first predicate tagged `dgraph:"upsert"`.
+func (c *StudioClient) Upsert(ctx context.Context, w *Studio, predicates ...string) error {
+    return c.conn.Upsert(ctx, w, predicates...)
+}
+
+// Delete removes the Studio with the given UID.
 func (c *StudioClient) Delete(ctx context.Context, uid string) error {
     return c.conn.Delete(ctx, []string{uid})
 }
 
+// List returns Studios with optional pagination.
 func (c *StudioClient) List(ctx context.Context, opts ...PageOption) ([]*Studio, error) {
     var recs []schema.Studio
     // ...existing query construction unchanged
@@ -423,13 +444,39 @@ func (c *StudioClient) List(ctx context.Context, opts ...PageOption) ([]*Studio,
     }
     return out, nil
 }
+
+// Query returns a query builder for richer filtering, sorting, and pagination.
+// The builder's terminal methods (Nodes, First, Single) return wrappers.
+func (c *StudioClient) Query(ctx context.Context) *StudioQuery {
+    return &StudioQuery{ /* ...existing query construction... */ }
+}
 ```
 
-Write paths pass the wrapper through directly. The modusgraph.Client
-reflection-based unwrap probes for the `Unwrap()` method and substitutes
-the inner `*schema.Studio` before processing — see [modusGraph Package
-Changes](#modusgraph-package-changes). Read paths still wrap explicitly
-because `conn.Get` and `q.Nodes` fill structs they own.
+The query builder type `StudioQuery` (existing today) follows the same
+discipline: its terminal methods (`Nodes() ([]*Studio, error)`,
+`First() (*Studio, error)`, etc.) return wrappers. Internally it
+queries against `[]schema.Studio` and wraps each result on return.
+
+Write paths (`Add`, `Update`, `Upsert`) pass the wrapper through directly;
+modusgraph.Client's reflection-based unwrap probes for the `Unwrap()`
+method and substitutes the inner `*schema.Studio` before processing — see
+[modusGraph Package Changes](#modusgraph-package-changes). Read paths
+(`Get`, `List`, `Query.Nodes`) still wrap explicitly because `conn.Get`
+and `q.Nodes` fill structs they own.
+
+**The directionality at a glance:**
+
+```
+*schema.Studio  ──── WrapStudio(s) ────►  *movies.Studio  ──── Unwrap() ────►  *schema.Studio
+                                              ▲     │
+                                              │     │  the typed client lives here:
+                                              │     │  StudioClient.Add/Update/Upsert/Get/List
+                                              │     ▼  StudioQuery.Nodes/First/Single
+```
+
+Schema-struct paths exist for native interop (loading from elsewhere,
+passing to raw `modusgraph.Client`, JSON unmarshalling). The moment a
+caller wants the method-driven API, they wrap.
 
 ### Consumer code (the goal)
 
@@ -450,6 +497,7 @@ func main() {
     conn, _ := modusgraph.NewClient(...)
     studios := movies.NewStudioClient(conn)
 
+    // Empty wrapper + per-field options:
     pixar := movies.NewStudio(
         movies.WithStudioName("Pixar"),
         movies.WithStudioYearFounded(1986),
@@ -461,10 +509,17 @@ func main() {
         fmt.Println(f.Title())
     }
 
-    // Drop into schema-land for native field access.
+    // Drop into schema-land for native field access via Unwrap.
     rec := s.Unwrap()
     rec.Name = "Pixar Animation Studios"
     _ = studios.Update(ctx, s)
+
+    // Wrap an existing schema struct (e.g. one you unmarshalled, loaded from
+    // a file, or constructed elsewhere) and use the wrapper's method API:
+    raw := &schema.Studio{Name: "Disney", YearFounded: 1923}
+    disney := movies.WrapStudio(raw)
+    disney.SetActive(true)
+    _ = studios.Add(ctx, disney)
 
     // Raw modusgraph.Client also works — reflection on Unwrap() substitutes
     // the inner *schema.Studio automatically.
