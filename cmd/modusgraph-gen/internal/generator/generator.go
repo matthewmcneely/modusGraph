@@ -122,6 +122,11 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		return err
 	}
 
+	// 5. schema_client.go.tmpl → schema_client_gen.go (once per package, schema-side factory)
+	if err := executeAndWrite(tmpl, "schema_client.go.tmpl", pkg, filepath.Join(outputDir, "schema_client_gen.go")); err != nil {
+		return err
+	}
+
 	// Per-entity templates.
 	type entityData struct {
 		PackageName string
@@ -166,6 +171,19 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 			if err := executeAndWrite(tmpl, "marshal.go.tmpl", data, filepath.Join(outputDir, snake+"_marshal_gen.go")); err != nil {
 				return err
 			}
+		}
+
+		// schema-side per-entity client + query (will be normalized to <snake>_client_gen.go /
+		// <snake>_query_gen.go in Task 14 once old templates are deleted)
+		perEntity := struct {
+			Pkg    *model.Package
+			Entity model.Entity
+		}{pkg, entity}
+		if err := executeAndWrite(tmpl, "schema_entity_client.go.tmpl", perEntity, filepath.Join(outputDir, snake+"_schema_client_gen.go")); err != nil {
+			return err
+		}
+		if err := executeAndWrite(tmpl, "schema_query.go.tmpl", perEntity, filepath.Join(outputDir, snake+"_schema_query_gen.go")); err != nil {
+			return err
 		}
 	}
 

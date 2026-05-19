@@ -1,0 +1,25 @@
+package {{ .Name }}
+
+import (
+	"github.com/matthewmcneely/modusgraph"
+)
+
+// Client is a top-level holder for per-entity schema-side clients bound to
+// a single modusgraph.Client connection. It is a convenience layer over the
+// per-entity New<Entity>Client(conn) constructors.
+type Client struct {
+	conn modusgraph.Client
+{{- range .Entities }}
+	{{ .Name }} *{{ .Name }}Client
+{{- end }}
+}
+
+// NewClient binds conn to a Client whose per-entity sub-clients all share
+// the same connection.
+func NewClient(conn modusgraph.Client) *Client {
+	c := &Client{conn: conn}
+{{- range .Entities }}
+	c.{{ .Name }} = New{{ .Name }}Client(conn)
+{{- end }}
+	return c
+}

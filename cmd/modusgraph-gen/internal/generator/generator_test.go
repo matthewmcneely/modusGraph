@@ -1403,3 +1403,131 @@ type Plain struct {
 		t.Errorf("expected SchemaSearchPredicate to return \"\" for entity with no search field; got:\n%s", string(data))
 	}
 }
+
+func TestGenerate_EmitsSchemaClientFactory(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"), []byte("module example.com/test\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+	src := `package schema
+
+type Studio struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Name  string   ` + "`json:\"name\"`" + `
+}
+
+type Film struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Title string   ` + "`json:\"title\"`" + `
+}
+`
+	if err := os.WriteFile(filepath.Join(srcDir, "studio.go"), []byte(src), 0o644); err != nil {
+		t.Fatalf("writing studio.go: %v", err)
+	}
+	pkg, err := parser.Parse(srcDir)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	outDir := t.TempDir()
+	if err := Generate(pkg, outDir); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	data := mustReadGen(t, outDir, "schema_client_gen.go")
+	for _, want := range []string{
+		`package schema`,
+		`type Client struct {`,
+		`conn`,
+		`StudioClient`,
+		`FilmClient`,
+		`func NewClient(conn modusgraph.Client) *Client {`,
+		`c.Studio = NewStudioClient(conn)`,
+		`c.Film = NewFilmClient(conn)`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("schema_client_gen.go missing: %q\n---file---\n%s", want, data)
+		}
+	}
+}
+
+func TestGenerate_EmitsSchemaEntityClient(t *testing.T) {
+	srcDir, outDir := generateFromMinimalSchema(t)
+	_ = srcDir
+
+	data := mustReadGen(t, outDir, "studio_schema_client_gen.go")
+	for _, want := range []string{
+		`package schema`,
+		`type StudioClient struct {`,
+		`func NewStudioClient(conn modusgraph.Client) *StudioClient {`,
+		`func (c *StudioClient) Get(ctx context.Context, uid string) (*Studio, error)`,
+		`func (c *StudioClient) Add(ctx context.Context, s *Studio) error`,
+		`func (c *StudioClient) Update(ctx context.Context, s *Studio) error`,
+		`func (c *StudioClient) Upsert(ctx context.Context, s *Studio, predicates ...string) error`,
+		`func (c *StudioClient) Delete(ctx context.Context, uid string) error`,
+		`func (c *StudioClient) Query(ctx context.Context) *StudioQuery`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("studio_schema_client_gen.go missing: %q", want)
+		}
+	}
+}
+
+func TestGenerate_EmitsSchemaEntityQuery(t *testing.T) {
+	_, outDir := generateFromMinimalSchema(t)
+	data := mustReadGen(t, outDir, "studio_schema_query_gen.go")
+	for _, want := range []string{
+		`package schema`,
+		`type StudioQuery struct {`,
+		`func NewStudioQuery(ctx context.Context, conn modusgraph.Client) *StudioQuery`,
+		`func (q *StudioQuery) Nodes(recs any) error`,
+		`func (q *StudioQuery) First() (*Studio, error)`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("studio_schema_query_gen.go missing: %q", want)
+		}
+	}
+}
+
+// generateFromMinimalSchema creates a temp schema with a single Studio entity
+// and runs Generate against it, returning the temp source and output dirs.
+// Used by multiple per-entity emit tests.
+func generateFromMinimalSchema(t *testing.T) (srcDir, outDir string) {
+	t.Helper()
+	srcDir = t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"), []byte("module example.com/test\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+	src := `package schema
+
+type Studio struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Name  string   ` + "`json:\"name\"`" + `
+}
+`
+	if err := os.WriteFile(filepath.Join(srcDir, "studio.go"), []byte(src), 0o644); err != nil {
+		t.Fatalf("writing studio.go: %v", err)
+	}
+	pkg, err := parser.Parse(srcDir)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	outDir = t.TempDir()
+	if err := Generate(pkg, outDir); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	return srcDir, outDir
+}
+
+// mustReadGen reads a generated file from outDir, failing the test on error.
+func mustReadGen(t *testing.T, outDir, name string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(outDir, name))
+	if err != nil {
+		t.Fatalf("reading %s: %v", name, err)
+	}
+	return string(data)
+}
