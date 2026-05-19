@@ -78,9 +78,17 @@ movies/                              parent package — generated, wrapper-facin
     ...
 ```
 
-Layout follows the `ent` ORM precedent: schemas in a `schema/` subpackage,
-the consumer-facing wrapper API in the parent. Two same-named generated
-clients in two packages give consumers a choice:
+The example above shows the **wrapper-parent layout**: schemas in a
+`schema/` subpackage, wrappers in the parent. This follows the `ent` ORM
+precedent and is the default when the `//go:generate` stub lives in the
+parent of a `./schema/` directory. A **schema-local layout** is also
+supported (and is the default when the stub lives alongside the schema
+files themselves): schemas in CWD, wrappers in a sibling `./entity/`
+subpackage. See [Generator flags](#generator-flags) for the detection
+rule and an example. The architecture and vocabulary that follow apply
+to both layouts — only the file locations and import paths differ.
+
+Two same-named generated clients in two packages give consumers a choice:
 
 - `schema.StudioClient` — raw client; methods take and return `*schema.Studio`.
   No wrapper allocation. Best for bulk processing, ETL, callers who never
@@ -897,18 +905,18 @@ Three categories: inputs, outputs, toggles.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `-schema-dir` | `./schema` | Path (relative to CWD) where schema source lives. Also the default output location for the schema-level client (overridable via `-schema-client-dir`). |
-| `-schema-alias` | dir basename of `-schema-dir` (`schema`) | Import alias for the schema package in generated code. |
+| `-schema-dir` | `./schema` if a `./schema/` subdir exists in CWD; otherwise `.` (CWD itself) | Path (relative to CWD) where schema source lives. The "is `./schema/` a directory?" probe runs once at flag-parse time. Also the default output location for the schema-level client (overridable via `-schema-client-dir`). |
+| `-schema-alias` | dir basename of `-schema-dir` (`schema` for the default-subdir layout, basename of CWD for the schema-local layout) | Import alias for the schema package in generated code. |
 
 **Outputs (one flag per generated artifact group):**
 
 | Flag | Default | What it controls |
 |---|---|---|
 | `-schema-client-dir` | same as `-schema-dir` | Where the schema-level CRUD clients (`schema.StudioClient`, etc.) and the schema-level query builders are written. Default puts them alongside the schema types they operate on. |
-| `-wrapper-dir` | `.` (parent of `-schema-dir`) | Where the wrapper types (`movies.Studio`, accessors, options) are written. |
+| `-wrapper-dir` | `.` (CWD) when `-schema-dir` resolved to `./schema/`; `./entity/` (sibling of the schema files) when `-schema-dir` resolved to `.` | Where the wrapper types and accessors are written. The default depends on whether the `//go:generate` stub lives in the schema directory itself (→ `./entity/`) or in the parent of a `./schema/` subdir (→ `.`). |
 | `-wrapper-client-dir` | same as `-wrapper-dir` | Where the wrapper-level CRUD clients (`movies.StudioClient`, etc.) and the wrapper-level query builders are written. Default puts them alongside the wrapper types they operate on. |
 | `-cli-dir` | `./cmd/<pkg>` | Output directory for the Kong CLI. Unchanged. |
-| `-out` | `.` | *Deprecated alias* for `-wrapper-dir`. Accepted for backward compatibility with the unflagged default invocation. |
+| `-out` | matches `-wrapper-dir` default | *Deprecated alias* for `-wrapper-dir`. Accepted for backward compatibility with the unflagged default invocation. |
 
 **Toggles (turn off entire artifact groups):**
 
@@ -927,19 +935,51 @@ Three categories: inputs, outputs, toggles.
 | `-cli-name` | wrapper package name | Name for the CLI binary. |
 | `-with-validator` | `false` | Enable validation in the generated CLI. |
 
-The `//go:generate` directive lives in `<wrapper-dir>/generate.go`. CWD when
-the directive runs is the directory containing the file, so the default
-`-schema-dir ./schema` resolves to `<wrapper-dir>/schema`.
+The `//go:generate` directive can live in either of two natural places, and
+the unflagged defaults adapt to which one you pick:
+
+- **Wrapper-parent layout** — `generate.go` in the parent of `./schema/`.
+  CWD has a `./schema/` subdir; that subdir holds schema files. Defaults
+  resolve to `-schema-dir ./schema` and `-wrapper-dir .` so wrappers land
+  next to the generate stub.
+- **Schema-local layout** — `generate.go` alongside schema files in the
+  schema directory itself. CWD has no `./schema/` subdir; the schema files
+  are CWD. Defaults resolve to `-schema-dir .` and `-wrapper-dir ./entity/`
+  so wrappers land in a sibling `entity/` subpackage.
+
+The probe is "does CWD contain a directory named `schema`?" — no inspection
+of file contents, no guessing. Users who want different paths can override
+any flag explicitly.
 
 **Common layouts and the flags that produce them:**
 
 ```
-# Default — schemas + raw clients together, wrappers + wrapper clients together
+# Wrapper-parent layout (default A) — generate.go lives in the parent dir
 movies/
+  generate.go                 //go:generate go run ...
   schema/                     types + markers + schema.StudioClient
   *_gen.go                    wrappers + accessors + movies.StudioClient
 
+# CWD when generate runs: movies/   (./schema/ exists, so wrapper default is .)
 # Flags: (none — defaults are sufficient)
+```
+
+```
+# Schema-local layout (default B) — generate.go lives alongside schema files
+movies/
+  schema/
+    generate.go               //go:generate go run ...
+    studio.go                 schema struct
+    marker_gen.go             schema markers
+    studio_client_gen.go      schema.StudioClient
+    entity/
+      studio_gen.go           wrappers + accessors + entity.StudioClient
+
+# CWD when generate runs: movies/schema/   (no ./schema/ subdir, so wrapper default is ./entity/)
+# Flags: (none — defaults are sufficient)
+# Wrapper package name defaults to "entity" — consumers do
+#   import "example.com/proj/movies/schema/entity"
+# and reference entity.Studio, entity.NewStudio, entity.StudioClient.
 ```
 
 ```
