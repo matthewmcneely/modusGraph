@@ -106,34 +106,29 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		return fmt.Errorf("parsing templates: %w", err)
 	}
 
-	// 1. client.go.tmpl → client_gen.go (once)
-	if err := executeAndWrite(tmpl, "client.go.tmpl", pkg, filepath.Join(outputDir, "client_gen.go")); err != nil {
-		return err
-	}
-
-	// 2. page_options.go.tmpl → page_options_gen.go (once)
+	// 1. page_options.go.tmpl → page_options_gen.go (once)
 	if err := executeAndWrite(tmpl, "page_options.go.tmpl", pkg, filepath.Join(outputDir, "page_options_gen.go")); err != nil {
 		return err
 	}
 
-	// 3. iter.go.tmpl → iter_gen.go (once)
+	// 2. iter.go.tmpl → iter_gen.go (once)
 	if err := executeAndWrite(tmpl, "iter.go.tmpl", pkg, filepath.Join(outputDir, "iter_gen.go")); err != nil {
 		return err
 	}
 
-	// 4. schema_marker.go.tmpl → marker_gen.go (once per package)
+	// 3. schema_marker.go.tmpl → marker_gen.go (once per package)
 	// Always emitted — the marker is needed for unwrap dispatch regardless of
 	// which clients are generated.
 	if err := executeAndWrite(tmpl, "schema_marker.go.tmpl", pkg, filepath.Join(outputDir, "marker_gen.go")); err != nil {
 		return err
 	}
 
-	// 5. schema_client.go.tmpl → schema_client_gen.go (once per package, schema-side factory)
+	// 4. schema_client.go.tmpl → schema_client_gen.go (once per package, schema-side factory)
 	if err := executeAndWrite(tmpl, "schema_client.go.tmpl", pkg, filepath.Join(outputDir, "schema_client_gen.go")); err != nil {
 		return err
 	}
 
-	// 6. wrapper_client.go.tmpl → wrapper_client_gen.go (once per package, wrapper-side factory)
+	// 5. wrapper_client.go.tmpl → wrapper_client_gen.go (once per package, wrapper-side factory)
 	wrapperClientData := struct {
 		EntityPackageName string
 		SchemaAlias       string
@@ -182,18 +177,12 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 			return err
 		}
 
-		// 6. query.go.tmpl → <snake>_query_gen.go
-		if err := executeAndWrite(tmpl, "query.go.tmpl", data, filepath.Join(outputDir, snake+"_query_gen.go")); err != nil {
-			return err
-		}
-
-		// 7. accessors.go.tmpl → <snake>_accessors_gen.go (always emitted now — all schema fields are public)
+		// 6. accessors.go.tmpl → <snake>_accessors_gen.go (always emitted now — all schema fields are public)
 		if err := executeAndWrite(tmpl, "accessors.go.tmpl", data, filepath.Join(outputDir, snake+"_accessors_gen.go")); err != nil {
 			return err
 		}
 
-		// schema-side per-entity client + query (will be normalized to <snake>_client_gen.go /
-		// <snake>_query_gen.go in Task 14 once old templates are deleted)
+		// schema-side per-entity client + query.
 		perEntity := struct {
 			Pkg    *model.Package
 			Entity model.Entity
@@ -205,8 +194,7 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 			return err
 		}
 
-		// wrapper-side per-entity client + query (will be normalized to <snake>_client_gen.go /
-		// <snake>_query_gen.go in Task 14 once old templates are deleted)
+		// wrapper-side per-entity client + query.
 		if err := executeAndWrite(tmpl, "wrapper_entity_client.go.tmpl", data, filepath.Join(outputDir, snake+"_wrapper_client_gen.go")); err != nil {
 			return err
 		}
