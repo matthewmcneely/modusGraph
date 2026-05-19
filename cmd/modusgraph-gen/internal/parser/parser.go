@@ -34,9 +34,9 @@ type parseConfig struct {
 // &slice[i].
 //
 // Pass this option only when the wrapper layer is NOT being generated
-// (e.g., main.go's -no-entities flag is set). Upstream dgman handles
-// both value-element and pointer-element entity slices natively for
-// raw schema-struct use; the restriction is wrapper-specific.
+// (e.g., main.go's -entities flag is absent — the default). Upstream
+// dgman handles both value-element and pointer-element entity slices
+// natively for raw schema-struct use; the restriction is wrapper-specific.
 func WithAllowValueElementEntitySlices() ParseOption {
 	return func(c *parseConfig) { c.allowValueElementEntitySlices = true }
 }
