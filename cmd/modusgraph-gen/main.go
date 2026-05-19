@@ -33,7 +33,7 @@ func main() {
 	out := flag.String("out", "", "[deprecated] alias for -entity-dir")
 
 	noSchemaClients := flag.Bool("no-schema-clients", false, "skip schema-level clients/queries (implies -no-entity-clients)")
-	noEntities := flag.Bool("no-entities", false, "skip wrapper types/accessors/options/clients (raw-only mode)")
+	entities := flag.Bool("entities", false, "generate the wrapper/entity layer (types, accessors, options, clients); off by default")
 	noEntityClients := flag.Bool("no-entity-clients", false, "skip wrapper-level clients/queries only")
 	noCLI := flag.Bool("no-cli", false, "skip CLI generation")
 	withValidator := flag.Bool("with-validator", false, "enable validation in the generated CLI")
@@ -63,15 +63,15 @@ func main() {
 	if *noSchemaClients {
 		*noEntityClients = true
 	}
-	if *noEntities {
+	if !*entities {
 		*noEntityClients = true
 	}
 
 	// Parse phase: extract the model from Go source files.
-	// When -no-entities is set, relax the pointer-slice rule so schemas with
-	// []Entity value slices work in raw-only mode (Option B).
+	// When the wrapper layer is NOT being generated, relax the pointer-slice
+	// rule so schemas with []Entity value slices work in raw-only mode.
 	var parseOpts []parser.ParseOption
-	if *noEntities {
+	if !*entities {
 		parseOpts = append(parseOpts, parser.WithAllowValueElementEntitySlices())
 	}
 	pkg, err := parser.Parse(resolved.SchemaDir, parseOpts...)
@@ -119,7 +119,7 @@ func main() {
 		SchemaAlias:             schemaAliasResolved,
 		SchemaImportPath:        pkg.SchemaImportPath,
 		NoSchemaClients:         *noSchemaClients,
-		NoEntities:              *noEntities,
+		NoEntities:              !*entities,
 		NoEntityClients:         *noEntityClients,
 		NoCLI:                   *noCLI,
 		CLIName:                 *cliName,

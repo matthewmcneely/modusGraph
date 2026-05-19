@@ -685,11 +685,11 @@ by `Get<Edge>()` captures a pointer that must remain valid after subsequent
 `Set<Edge>` calls reassign the underlying slice. Value-element slices can't
 provide stable per-element addresses; pointer-element slices can.
 
-When wrappers are not being generated (e.g., the user runs with
-`-no-entities` for raw-only schema-side clients), the rule does not apply.
+When wrappers are not being generated (i.e., the user does not pass
+`-entities`, which is the default), the rule does not apply.
 The parser's `Parse` function accepts a `WithAllowValueElementEntitySlices()`
 option that the generator's main entry point sets automatically when the
-`-no-entities` flag is in effect.
+`-entities` flag is absent.
 
 ### Schema field exports
 
@@ -883,18 +883,18 @@ Templates split into two groups by which package their output lives in.
 | `schema_entity_client.go.tmpl` *(new)* | `<schema-client-dir>/<snake>_client_gen.go` | `-no-schema-clients` | Per-entity `schema.StudioClient` operating on `*schema.Studio` directly. Holds all CRUD logic. |
 | `schema_query.go.tmpl` *(new)* | `<schema-client-dir>/<snake>_query_gen.go` | `-no-schema-clients` | Per-entity `schema.StudioQuery` — returns raw schema slices. |
 
-**Wrapper-side templates** (gated by `-no-entities`):
+**Wrapper-side templates** (emitted only when `-entities` is passed):
 
 | Template | Output | Gate flag | Role |
 |---|---|---|---|
-| `entity.go.tmpl` | `<entity-dir>/<snake>_gen.go` | `-no-entities` | Wrapper struct, `NewStudio`, `WrapStudio`, `Unwrap`, `Validate`, `MarshalJSON`/`UnmarshalJSON`, `UID/DType` methods. |
-| `accessors.go.tmpl` | `<entity-dir>/<snake>_accessors_gen.go` | `-no-entities` | Per-field/edge methods delegating to `e.s`. Always emitted (no longer gated on private fields). |
-| `options.go.tmpl` | `<entity-dir>/<snake>_options_gen.go` | `-no-entities` | `StudioOption`, `WithStudio<Field>` family, `ApplyStudioOptions`. (No installer option — `WrapStudio` constructor handles that case.) |
-| `iter.go.tmpl` | `<entity-dir>/iter_gen.go` | `-no-entities` | `iter.Seq2` helpers used by `<Edge>Seq` accessors. No change. |
-| `page_options.go.tmpl` | `<entity-dir>/page_options_gen.go` | `-no-entities` | Pagination types. No change. |
-| `wrapper_client.go.tmpl` *(new)* | `<entity-client-dir>/client_gen.go` | `-no-entities` or `-no-entity-clients` | Top-level `movies.Client` factory. |
-| `wrapper_entity_client.go.tmpl` *(new)* | `<entity-client-dir>/<snake>_client_gen.go` | `-no-entities` or `-no-entity-clients` | Per-entity `movies.StudioClient`. Composes over `schema.StudioClient`. |
-| `wrapper_query.go.tmpl` *(new)* | `<entity-client-dir>/<snake>_query_gen.go` | `-no-entities` or `-no-entity-clients` | Per-entity `movies.StudioQuery`. Composes over `schema.StudioQuery`; wraps results. |
+| `entity.go.tmpl` | `<entity-dir>/<snake>_gen.go` | requires `-entities` | Wrapper struct, `NewStudio`, `WrapStudio`, `Unwrap`, `Validate`, `MarshalJSON`/`UnmarshalJSON`, `UID/DType` methods. |
+| `accessors.go.tmpl` | `<entity-dir>/<snake>_accessors_gen.go` | requires `-entities` | Per-field/edge methods delegating to `e.s`. Always emitted (no longer gated on private fields). |
+| `options.go.tmpl` | `<entity-dir>/<snake>_options_gen.go` | requires `-entities` | `StudioOption`, `WithStudio<Field>` family, `ApplyStudioOptions`. (No installer option — `WrapStudio` constructor handles that case.) |
+| `iter.go.tmpl` | `<entity-dir>/iter_gen.go` | requires `-entities` | `iter.Seq2` helpers used by `<Edge>Seq` accessors. No change. |
+| `page_options.go.tmpl` | `<entity-dir>/page_options_gen.go` | requires `-entities` | Pagination types. No change. |
+| `wrapper_client.go.tmpl` *(new)* | `<entity-client-dir>/client_gen.go` | requires `-entities`; also suppressed by `-no-entity-clients` | Top-level `movies.Client` factory. |
+| `wrapper_entity_client.go.tmpl` *(new)* | `<entity-client-dir>/<snake>_client_gen.go` | requires `-entities`; also suppressed by `-no-entity-clients` | Per-entity `movies.StudioClient`. Composes over `schema.StudioClient`. |
+| `wrapper_query.go.tmpl` *(new)* | `<entity-client-dir>/<snake>_query_gen.go` | requires `-entities`; also suppressed by `-no-entity-clients` | Per-entity `movies.StudioQuery`. Composes over `schema.StudioQuery`; wraps results. |
 
 **CLI:**
 
@@ -912,9 +912,12 @@ Templates split into two groups by which package their output lives in.
 
 ### Generator flags
 
-All optional, all with defaults that match an unflagged
-`//go:generate go run github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen`.
-Three categories: inputs, outputs, toggles.
+All optional. Three categories: inputs, outputs, toggles.
+
+**The wrapper/entity layer is opt-in.** By default the generator emits only
+the schema layer (raw types, schema markers, schema-level CRUD clients) plus
+the CLI. Pass `-entities` to additionally generate the method-based wrapper
+types, accessors, options, and wrapper-level clients.
 
 **Inputs:**
 
@@ -933,13 +936,13 @@ Three categories: inputs, outputs, toggles.
 | `-cli-dir` | `./cmd/<pkg>` | Output directory for the Kong CLI. Unchanged. |
 | `-out` | matches `-entity-dir` default | *Deprecated alias* for `-entity-dir`. Accepted for backward compatibility with the unflagged default invocation. |
 
-**Toggles (turn off entire artifact groups):**
+**Toggles / opt-ins (turn off or enable entire artifact groups):**
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `-no-schema-clients` | `false` | Skip generating schema-level clients and query builders. Schema types and markers are still generated. **Implies `-no-entity-clients`** — the wrapper client composes over the schema client, so it cannot exist without one. |
-| `-no-entities` | `false` | Skip generating wrapper types, wrapper accessors, wrapper options, *and* wrapper clients. Implies `-no-entity-clients`. Raw-only mode. |
-| `-no-entity-clients` | `false` | Skip wrapper-level clients and query builders, but still emit wrapper types and accessors. Useful when you want the wrapper data model but compose your own client over it. |
+| `-entities` | `false` | Generate the wrapper/entity layer (wrapper types, accessors, options, and wrapper-level clients). **Off by default** — the unflagged generator emits only the schema layer (types, markers, schema-level clients) and the CLI. Pass `-entities` to additionally emit the method-based wrapper layer. |
+| `-no-entity-clients` | `false` | Skip wrapper-level clients and query builders, but still emit wrapper types and accessors. Only meaningful together with `-entities`; emits wrapper types/accessors/options but skips the wrapper-level clients. Useful when you want the wrapper data model but compose your own client over it. |
 | `-no-cli` | `false` | Skip CLI generation entirely. (Was implicit; making it a flag.) |
 
 **Other (unchanged):**
@@ -986,23 +989,34 @@ flag explicitly.
 **Common layouts and the flags that produce them:**
 
 ```
-# Wrapper-parent layout (default A) — generate.go lives in the parent dir
+# Schema-only (default) — no flags needed; wrapper layer is off by default
 movies/
   generate.go                 //go:generate go run ...
+  schema/                     types + markers + schema.StudioClient
+
+# CWD when generate runs: movies/
+# Resolved -schema-dir: movies/schema/ (not equal to CWD)
+# Flags: (none — schema-only is the unflagged default)
+```
+
+```
+# Wrapper-parent layout — generate.go lives in the parent dir, -entities enables wrappers
+movies/
+  generate.go                 //go:generate go run ... -entities
   schema/                     types + markers + schema.StudioClient
   *_gen.go                    wrappers + accessors + movies.StudioClient
 
 # CWD when generate runs: movies/
 # Resolved -schema-dir: movies/schema/ (not equal to CWD)
 # → wrapper default: . (CWD)
-# Flags: (none — defaults are sufficient)
+# Flags: -entities
 ```
 
 ```
-# Schema-local layout (default B) — generate.go lives alongside schema files
+# Schema-local layout — generate.go lives alongside schema files, -entities enables wrappers
 movies/
   schema/
-    generate.go               //go:generate go run ...
+    generate.go               //go:generate go run ... -entities
     studio.go                 schema struct
     marker_gen.go             schema markers
     studio_client_gen.go      schema.StudioClient
@@ -1012,28 +1026,20 @@ movies/
 # CWD when generate runs: movies/schema/
 # Resolved -schema-dir: . → movies/schema/ (equal to CWD)
 # → wrapper default: ./entity/
-# Flags: (none — defaults are sufficient)
+# Flags: -entities
 # Wrapper package name defaults to "entity" — consumers do
 #   import "example.com/proj/movies/schema/entity"
 # and reference entity.Studio, entity.NewStudio, entity.StudioClient.
 ```
 
 ```
-# Pure schema package (types only), clients elsewhere
+# Pure schema package (types only), clients elsewhere, wrappers enabled
 movies/
   schema/                     types + markers
   schemaclient/               schema.StudioClient
   *_gen.go                    wrappers + accessors + movies.StudioClient
 
-# Flags: -schema-client-dir ./schemaclient
-```
-
-```
-# Raw-only — no wrapper layer at all
-movies/
-  schema/                     types + markers + schema.StudioClient
-
-# Flags: -no-entities
+# Flags: -entities -schema-client-dir ./schemaclient
 ```
 
 ```
@@ -1043,13 +1049,13 @@ movies/
   schema/                     types + markers (no client)
   *_gen.go                    wrappers + accessors (no client)
 
-# Flags: -no-schema-clients
+# Flags: -entities -no-schema-clients
 # (Implies -no-entity-clients: wrapper clients compose over schema clients,
 # so disabling schema clients disables wrapper clients automatically.)
 ```
 
 ```
-# Fully split — output dirs for everything
+# Fully split — output dirs for everything, with wrappers enabled
 project/
   api/                        wrappers
   api/clients/                wrapper clients
@@ -1057,6 +1063,7 @@ project/
   internal/clients/           raw clients
 
 # Flags:
+#   -entities
 #   -schema-dir ./internal/types
 #   -schema-client-dir ./internal/clients
 #   -entity-dir ./api
@@ -1159,8 +1166,13 @@ Add `testdata/movies/generate.go`:
 ```go
 package movies
 
-//go:generate go run github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen
+//go:generate go run github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen -entities
 ```
+
+The `-entities` flag is required because the wrapper layer is opt-in (off by
+default). The cross-package e2e tests in `unwrap_e2e_test.go` import the
+`movies` wrapper package, so the fixture must keep emitting the full two-layer
+output.
 
 ## Examples
 
