@@ -1704,3 +1704,39 @@ func TestGenerate_EntityWrapperStruct(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerate_OptionsScalarOnly(t *testing.T) {
+	_, outDir := generateFromMinimalSchema(t)
+	data := mustReadGen(t, outDir, "studio_options_gen.go")
+
+	for _, want := range []string{
+		`package entity`,
+		`type StudioOption func(*Studio)`,
+		`func ApplyStudioOptions(e *Studio, opts ...StudioOption)`,
+		`func WithStudioName(v string) StudioOption {`,
+		`return func(e *Studio) { e.SetName(v) }`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("studio_options_gen.go missing: %q\n---file---\n%s", want, data)
+		}
+	}
+
+	// Negative: UID/DType have direct method pairs on the wrapper, NOT With options.
+	for _, notWant := range []string{
+		`func WithStudioUID(`,
+		`func WithStudioDType(`,
+	} {
+		if strings.Contains(data, notWant) {
+			t.Errorf("studio_options_gen.go must NOT emit With options for UID/DType; found: %q", notWant)
+		}
+	}
+}
+
+func TestGenerate_NoMarshalFileEmitted(t *testing.T) {
+	_, outDir := generateFromMinimalSchema(t)
+	// The marshal template was deleted; no <snake>_marshal_gen.go should exist
+	// in the output regardless of which entities are present.
+	if _, err := os.Stat(filepath.Join(outDir, "studio_marshal_gen.go")); !os.IsNotExist(err) {
+		t.Errorf("studio_marshal_gen.go must NOT be emitted; stat err = %v", err)
+	}
+}

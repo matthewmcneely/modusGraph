@@ -76,7 +76,6 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"searchPredicate":              searchPredicate,
 		"externalImports":              externalImports,
 		"nonSliceScalarFields":         nonSliceScalarFields,
-		"hasPrivateFields":             hasPrivateFields,
 		"privateFields":                privateFields,
 		"privateScalarFields":          privateScalarFields,
 		"privateSingularEdgeFields":    privateSingularEdgeFields,
@@ -175,13 +174,6 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		// 7. accessors.go.tmpl → <snake>_accessors_gen.go (always emitted now — all schema fields are public)
 		if err := executeAndWrite(tmpl, "accessors.go.tmpl", data, filepath.Join(outputDir, snake+"_accessors_gen.go")); err != nil {
 			return err
-		}
-
-		// 8. marshal.go.tmpl → <snake>_marshal_gen.go (only if entity has private fields)
-		if hasPrivateFields(entity.Fields) {
-			if err := executeAndWrite(tmpl, "marshal.go.tmpl", data, filepath.Join(outputDir, snake+"_marshal_gen.go")); err != nil {
-				return err
-			}
 		}
 
 		// schema-side per-entity client + query (will be normalized to <snake>_client_gen.go /
@@ -386,16 +378,6 @@ func privateFields(fields []model.Field) []model.Field {
 		}
 	}
 	return result
-}
-
-// hasPrivateFields returns true if any field is private and not skipped.
-func hasPrivateFields(fields []model.Field) bool {
-	for _, f := range fields {
-		if f.IsPrivate && !f.IsSkipped && !f.IsUID && !f.IsDType {
-			return true
-		}
-	}
-	return false
 }
 
 // privateScalarFields returns private non-edge, non-UID, non-DType fields
