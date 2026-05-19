@@ -53,7 +53,7 @@ movies/                              parent package — generated, consumer-faci
   page_options_gen.go                pagination types
   studio_gen.go                      wrapper: type Studio struct { s *schema.Studio }
   studio_accessors_gen.go            field/edge accessors delegating to e.s
-  studio_options_gen.go              StudioOption + WithStudioRecord + WithStudio<Field>
+  studio_options_gen.go              StudioOption + WithStudio<Field>
   studio_query_gen.go                typed query builder
   film_gen.go
   film_*_gen.go
@@ -68,10 +68,10 @@ movies/                              parent package — generated, consumer-faci
 Layout follows the `ent` ORM precedent: schemas in a `schema/` subpackage,
 the consumer-facing API in the parent. Consumers `import "<path>/movies"`
 and use `movies.Studio`; the `schema` package is reached only when callers
-want raw struct access via `Record()`.
+want raw struct access via `Unwrap()`.
 
 The `schema/` package is plain (not `internal/`) so the `*schema.Studio`
-returned by `Record()` is nameable by external callers.
+returned by `Unwrap()` is nameable by external callers.
 
 ### Vocabulary
 
@@ -80,18 +80,57 @@ returned by `Record()` is nameable by external callers.
 | User-edited source-of-truth struct | `schema.Studio` | public fields, `json`/`dgraph` tags |
 | Generated wrapper exposing methods | `movies.Studio` | the consumer-facing type |
 | Wrapper's private backing field | `s *schema.Studio` | terse, never accessed outside generated methods |
-| Installer option | `WithStudioRecord(s *schema.Studio) StudioOption` | installs an existing schema struct |
-| Escape-hatch accessor (typed) | `(e *Studio) Record() *schema.Studio` | for native struct access |
-| Hook accessor (untyped) | `(e *Studio) SchemaRecord() any` | satisfies `modusgraph.SchemaCarrier` |
-| Field setter option family | `WithStudio<Field>(v) StudioOption` | matches existing generator pattern |
-| Constructor | `NewStudio(opts ...StudioOption) *Studio` | option-pattern only |
+| Empty-wrapper constructor | `NewStudio(opts ...StudioOption) *Studio` | allocates a fresh empty `schema.Studio` inside, then applies options |
+| Wrap-existing constructor | `WrapStudio(s *schema.Studio, opts ...StudioOption) *Studio` | wraps an existing `*schema.Studio`, then applies options |
+| Wrapper escape hatch | `(e *Studio) Unwrap() *schema.Studio` | returns the backing schema struct; idiomatic match for `errors.Unwrap` |
+| Type-name introspection (generated) | `(*schema.Studio) SchemaTypeName() string` | returns canonical entity name (e.g. `"Studio"`); satisfies `modusgraph.Schema` |
+| Predicates introspection (generated) | `(*schema.Studio) SchemaPredicates() []string` | returns all predicate names (json tag values), excluding `uid`/`dgraph.type` |
+| Search predicate introspection (generated) | `(*schema.Studio) SchemaSearchPredicate() string` | returns the predicate marked searchable, or `""` if none |
+| modusgraph marker interface | `modusgraph.Schema` | identifies a value as a generated schema record; minimal — just `SchemaTypeName() string` |
+| Field setter option family | `WithStudio<Field>(v) StudioOption` | one per public schema field, mechanically derived |
 | Validation shim | `(e *Studio) Validate(ctx, v) error` | delegates to `v.StructCtx(ctx, e.s)` |
 
-The word "schema" denotes type *definitions* (the `schema` package, the
-`schema.Studio` type, the `WithStudioRecord` parameter type). The word
-"record" denotes a value of that type — the wrapper carries one
-`*schema.Studio` "record". "Wrap"/"Record" describes the lifecycle relation;
-"schema" describes the typed shape. The two words don't overlap in meaning.
+**Three vocabularies, three namespaces, no collisions:**
+
+- **Lifecycle (Wrap / Unwrap)** — top-level constructor functions
+  `NewStudio` and `WrapStudio`, and the wrapper's single escape-hatch
+  method `Unwrap()`. These name the relationship between wrapper and
+  inner schema struct, not any field. None of them use the `WithStudio<X>`
+  prefix, so they're in a separate namespace from per-field setters.
+  `Unwrap` matches the established Go idiom (`errors.Unwrap`).
+- **Per-field setters (`WithStudio<Field>` option family)** —
+  mechanically derived from each public schema field. Collisions within
+  the family are impossible by construction (each field has a unique name);
+  collisions with lifecycle functions are impossible because lifecycle
+  functions don't use the `WithStudio*` prefix.
+- **Schema introspection (`Schema*` methods on schema structs)** —
+  `SchemaTypeName`, `SchemaPredicates`, `SchemaSearchPredicate`. Live on
+  the schema struct, not the wrapper. The `Schema` prefix signals "metadata
+  about the type itself", not "metadata about an instance". The set is
+  designed to grow over time (candidates: `SchemaUniquePredicates()`,
+  `SchemaIndexedPredicates()`) without changing the marker contract.
+  The modusgraph marker interface `modusgraph.Schema` requires only
+  `SchemaTypeName()`; the other methods are conventional additions that
+  callers probe via ad-hoc anonymous interfaces.
+
+Earlier drafts proposed `Record()` for the wrapper accessor and
+`WithStudioRecord(s *schema.Studio)` for an installer option. That design
+carried a real collision risk: a schema struct with a literal `Record`
+field (a common noun) would generate `Record() string`, `SetRecord(v
+string)`, and `WithStudioRecord(v string)`, all colliding with the
+lifecycle method and option. Moving to two top-level constructors and the
+`Unwrap` method eliminates the collision class entirely — no `With*` option
+takes `*schema.Studio`, so no field name can ever shadow a lifecycle name.
+
+**Reserved method names — generator collision guard.** The generator's
+parse phase rejects schema fields whose generated accessor or setter name
+would collide with any of these reserved methods:
+
+- On wrappers: `Unwrap`, `MarshalJSON`, `UnmarshalJSON`, `Validate`, `UID`, `SetUID`, `DType`, `SetDType`.
+- On schema structs: `SchemaTypeName`, `SchemaPredicates`, `SchemaSearchPredicate`.
+
+The error names the offending field and tells the author to rename it. Better
+loud at generate time than a silent shadow at compile time.
 
 ### Data Flow
 
@@ -103,15 +142,19 @@ Hand-edited schema.Studio  (public fields, validate/dgman tags)
 modusgraph-gen
         │
         │ emit phase writes wrapper + accessors + options + client + query
+        │ + schema marker methods (SchemaTypeName, SchemaPredicates, etc.)
         ▼
 movies.Studio { s *schema.Studio }    consumer code talks to this
         │
         │ typed StudioClient.Add/Update/Delete pass wrapper through;
         │ read-path StudioClient methods allocate wrappers from schema results
         ▼
-modusgraph.Client.Insert(ctx, w)      w is *movies.Studio (a SchemaCarrier)
+modusgraph.Client.Insert(ctx, w)      w is *movies.Studio
         │
-        │ SchemaCarrier hook detects wrapper, substitutes w.SchemaRecord()
+        │ modusgraph.Client unwraps: reflects on w to find Unwrap() method,
+        │ confirms its return satisfies modusgraph.Schema marker, substitutes
+        │ the inner *schema.Studio. Falls through transparently for callers
+        │ that pass *schema.Studio (or any other type) directly.
         ▼
 modusgraph.Client internal pipeline operates on *schema.Studio
         │
@@ -119,12 +162,17 @@ modusgraph.Client internal pipeline operates on *schema.Studio
 upstream github.com/dolan-in/dgman/v2   no fork, no HasReflectable, no mirror structs
 ```
 
+The unwrap is *additive*: existing modusgraph users who pass plain structs
+hit the same code path they hit today. The reflection probe only fires when
+the argument exposes an `Unwrap()` method whose return implements
+`modusgraph.Schema`. See [modusGraph Package Changes](#modusgraph-package-changes).
+
 ## Wrapper API
 
 The generator emits the same shape for every entity. Below uses `Studio` as
 the canonical example.
 
-### Wrapper struct, constructor, options
+### Wrapper struct, constructors, options
 
 ```go
 package movies
@@ -134,24 +182,27 @@ type Studio struct {
     s *schema.Studio
 }
 
-// StudioOption configures a *Studio at construction time, or in bulk later
-// via ApplyStudioOptions.
+// StudioOption configures a *Studio. Used at construction time via NewStudio
+// or WrapStudio, or in bulk later via ApplyStudioOptions.
 type StudioOption func(*Studio)
-
-// WithStudioRecord installs an existing schema.Studio as this wrapper's
-// backing record. If unset, NewStudio allocates a fresh empty schema.Studio.
-func WithStudioRecord(s *schema.Studio) StudioOption {
-    return func(e *Studio) { e.s = s }
-}
 
 // WithStudioName, WithStudioYearFounded, ... — one option per public field
 // on schema.Studio, generated mechanically. Each calls the corresponding
 // Set<Field> method on the wrapper.
 
-// NewStudio constructs a *Studio. With no options it has an empty backing
-// record; with options it applies them in order.
+// NewStudio constructs a *Studio with a fresh, empty schema.Studio inside,
+// then applies the given options.
 func NewStudio(opts ...StudioOption) *Studio {
     e := &Studio{s: &schema.Studio{}}
+    for _, opt := range opts { opt(e) }
+    return e
+}
+
+// WrapStudio constructs a *Studio backed by the given schema.Studio, then
+// applies the given options. The wrapper holds s directly — no defensive
+// copy. Mutations through Studio's setters write to s.
+func WrapStudio(s *schema.Studio, opts ...StudioOption) *Studio {
+    e := &Studio{s: s}
     for _, opt := range opts { opt(e) }
     return e
 }
@@ -161,22 +212,26 @@ func ApplyStudioOptions(e *Studio, opts ...StudioOption) {
 }
 ```
 
-### Escape hatches
+Two constructors, no installer option. `NewStudio` is for the empty case;
+`WrapStudio` is for the wrap-existing case. Splitting these means there is
+no `With*` option that takes `*schema.Studio` and therefore no risk of
+colliding with a per-field setter for any field a schema author might name.
+
+### Escape hatch
 
 ```go
-// Record returns the backing schema.Studio for direct field access.
-func (e *Studio) Record() *schema.Studio { return e.s }
-
-// SchemaRecord returns the backing schema.Studio as any. It satisfies
-// modusgraph.SchemaCarrier so wrappers can be passed to any modusgraph.Client
-// method directly.
-func (e *Studio) SchemaRecord() any { return e.s }
+// Unwrap returns the backing schema.Studio for direct field access. This is
+// the only schema-touching method on the wrapper; modusgraph.Client uses
+// reflection to call it when a wrapper is passed across the boundary.
+func (e *Studio) Unwrap() *schema.Studio { return e.s }
 ```
 
-Two accessors with the same return value: `Record()` for consumers (typed
-pointer, no assertion needed) and `SchemaRecord()` for the modusgraph hook
-(untyped, satisfies the interface). The redundancy is two trivial lines per
-entity.
+One method, typed. The name `Unwrap` matches the established Go idiom
+(`errors.Unwrap`) and avoids collision with any field name a schema author
+might pick. No untyped counterpart: `modusgraph.Client` finds the method
+via reflection and verifies its return via the `modusgraph.Schema` marker
+interface, which the schema struct satisfies through its generated
+`SchemaTypeName()` method.
 
 ### UID and DType
 
@@ -285,7 +340,7 @@ func (e *Studio) RemoveFilms(uids ...string) {
 Predicate-based removal (`RemoveFilmsFunc(fn func(Film) bool)` in the
 current generator) is dropped for multi-edges. The natural typing would be
 `func(*movies.Film) bool`, which forces a wrapper allocation per element to
-evaluate the predicate. Callers wanting custom predicates reach `Record()`
+evaluate the predicate. Callers wanting custom predicates reach `Unwrap()`
 and filter on `[]*schema.Film` directly.
 
 ### Scalar slice accessors
@@ -347,11 +402,11 @@ func (c *StudioClient) Get(ctx context.Context, uid string) (*Studio, error) {
 }
 
 func (c *StudioClient) Add(ctx context.Context, w *Studio) error {
-    return c.conn.Insert(ctx, w)   // SchemaCarrier hook unwraps internally
+    return c.conn.Insert(ctx, w)   // modusgraph.Client reflects on Unwrap() to unwrap
 }
 
 func (c *StudioClient) Update(ctx context.Context, w *Studio) error {
-    return c.conn.Update(ctx, w)   // hook unwraps
+    return c.conn.Update(ctx, w)
 }
 
 func (c *StudioClient) Delete(ctx context.Context, uid string) error {
@@ -370,9 +425,11 @@ func (c *StudioClient) List(ctx context.Context, opts ...PageOption) ([]*Studio,
 }
 ```
 
-Write paths pass the wrapper through; the `SchemaCarrier` hook in
-`modusgraph.Client` unwraps before doing any work. Read paths still wrap
-explicitly because `conn.Get` and `q.Nodes` fill structs they own.
+Write paths pass the wrapper through directly. The modusgraph.Client
+reflection-based unwrap probes for the `Unwrap()` method and substitutes
+the inner `*schema.Studio` before processing — see [modusGraph Package
+Changes](#modusgraph-package-changes). Read paths still wrap explicitly
+because `conn.Get` and `q.Nodes` fill structs they own.
 
 ### Consumer code (the goal)
 
@@ -405,11 +462,12 @@ func main() {
     }
 
     // Drop into schema-land for native field access.
-    rec := s.Record()
+    rec := s.Unwrap()
     rec.Name = "Pixar Animation Studios"
     _ = studios.Update(ctx, s)
 
-    // Raw modusgraph.Client also works — SchemaCarrier hook unwraps.
+    // Raw modusgraph.Client also works — reflection on Unwrap() substitutes
+    // the inner *schema.Studio automatically.
     studio := movies.NewStudio(movies.WithStudioName("Another"))
     _ = conn.Insert(ctx, studio)
 }
@@ -457,98 +515,166 @@ These are required by dgman; the generator emits methods on top of them.
 
 ## modusGraph Package Changes
 
+All modusGraph-side changes are **additive**. Existing users — including
+users who have written their own structs and pass them to `modusgraph.Client`
+without using `modusgraph-gen` — see no signature changes, no removed
+interfaces, and no behavior changes for the inputs they pass today. New
+behavior fires only when an input opts into it via the new `Schema`
+interface or the conventional `Unwrap()` method.
+
 ### Additions
 
+#### `Schema` interface
+
 ```go
-// SchemaCarrier is implemented by types that wrap a schema struct. When
-// modusgraph.Client receives a SchemaCarrier as its target value, it
-// operates on SchemaRecord() instead. Used by modusgraph-gen-generated
-// wrapper types; useful for any user-written wrapper type as well.
-type SchemaCarrier interface {
-    SchemaRecord() any
+// Schema identifies a value as a record of a generated schema-defining type.
+// It is implemented by every modusgraph-gen-emitted schema struct, via the
+// generated SchemaTypeName method that lives in <schema-pkg>/marker_gen.go.
+//
+// Plain user structs (not emitted by modusgraph-gen) do not implement Schema
+// and are unaffected — modusgraph.Client falls through to its existing
+// handling for them.
+type Schema interface {
+    SchemaTypeName() string
 }
 ```
 
-Detection is a one-line check at the top of each `Client` method that takes
-an entity value (`Insert`, `InsertRaw`, `Update`, `Upsert`, `Get`, `Query`,
-and any other method that ultimately reflects over a struct):
+The interface is intentionally minimal — a single method, returning a useful
+piece of metadata (the canonical entity name, e.g. `"Studio"`). The schema
+struct may also expose additional conventional methods (`SchemaPredicates()
+[]string`, `SchemaSearchPredicate() string`) — see [Generator Changes](#generator-changes).
+Those aren't part of the `Schema` contract; callers that want them probe
+for them via ad-hoc anonymous interfaces.
+
+#### `unwrapSchema` helper, called at the top of mutation/query methods
 
 ```go
-func unwrapSchemaCarrier(obj any) any {
-    if sc, ok := obj.(SchemaCarrier); ok {
-        return sc.SchemaRecord()
+// unwrapSchema returns the schema-defining record contained in obj. If obj
+// is already a Schema, it is returned as-is. If obj exposes an Unwrap()
+// method whose return value satisfies Schema, that return is substituted.
+// Otherwise obj is returned unchanged.
+//
+// This is the bridge between modusgraph-gen-emitted wrapper types and the
+// rest of modusgraph.Client. It is purely additive: types that don't
+// implement Schema and don't have an Unwrap() method (i.e. existing
+// modusgraph users' plain structs) pass through untouched.
+func unwrapSchema(obj any) any {
+    if obj == nil {
+        return obj
+    }
+    if _, ok := obj.(Schema); ok {
+        return obj
+    }
+    v := reflect.ValueOf(obj)
+    if !v.IsValid() {
+        return obj
+    }
+    m := v.MethodByName("Unwrap")
+    if !m.IsValid() || m.Type().NumIn() != 0 || m.Type().NumOut() != 1 {
+        return obj
+    }
+    inner := m.Call(nil)[0].Interface()
+    if _, ok := inner.(Schema); ok {
+        return inner
     }
     return obj
 }
 ```
 
-Implementation note: for methods that take `any` as a value parameter, the
-unwrap is straightforward. For methods like `Get(ctx, obj, uid)` where the
-caller passes a destination pointer to be filled, the hook can unwrap
-similarly: if `obj` is a `*Studio` (wrapper) implementing `SchemaCarrier`,
-the hook substitutes the inner `*schema.Studio` for population.
+`unwrapSchema` is invoked at the top of each `Client` method that takes an
+entity value (`Insert`, `InsertRaw`, `Update`, `Upsert`, `Get`, `Query`, and
+any other method that ultimately reflects over a struct).
+
+For methods that take `any` as a value parameter (Insert/Update/Upsert),
+the substitution is straightforward: `obj = unwrapSchema(obj)`. For methods
+like `Get(ctx, obj, uid)` where the caller passes a destination pointer to
+be filled, `unwrapSchema` returns the inner `*schema.Studio` so dgman writes
+the result into the schema struct that the wrapper already references. The
+wrapper sees the populated data through its `Unwrap()` accessor afterwards.
+
+Reflection cost: one `reflect.ValueOf` and one `MethodByName` lookup per
+modusgraph.Client call site that uses `unwrapSchema`. Negligible compared
+to the network/disk I/O these methods perform. Not on any tight inner loop.
+
+Note on the `errors.Unwrap` overlap: Go's `errors` package uses `Unwrap()
+error` as the standard "give me the wrapped thing" method. The `unwrapSchema`
+helper does an additional check — the returned value must implement `Schema`
+— so an `error` value with an `Unwrap()` method is not mistaken for a
+modusgraph wrapper. The reflection probe simply falls through.
 
 ### Removals
 
 | Symbol / file | Location | Reason |
 |---|---|---|
-| `SelfValidator` interface | `client.go:25-33` | Was the entity-side validation hook for private fields. Public-fielded schemas validate natively. |
-| `validateOne` SelfValidator branch | `client.go:388-396` | The interface check goes away; the function simplifies to a one-liner: `return c.options.validator.StructCtx(ctx, iface)`. |
-| Comment references to `SelfValidator` | `client.go` and elsewhere | Stale once the interface is gone. |
+| `replace github.com/dolan-in/dgman/v2 => github.com/mlwelles/dgman/v2 ...` | `go.mod` | Forked dgman only existed to host the `HasReflectable` hook for private-field machinery. modusGraph itself does not call into that hook; with codegen no longer producing `HasReflectable` implementations, upstream dgman is sufficient. |
 
-`StructValidator` (interface, `client.go:125-127`) stays. It's the type
-constraint on the validator implementation passed to `WithValidator(v)`;
-`*validator.Validate` satisfies it. This interface predates and is
-independent of the private-field machinery.
+That's the entire removal list inside the modusgraph package. Everything else
+stays:
 
-### go.mod
-
-Remove:
-
-```
-replace github.com/dolan-in/dgman/v2 => github.com/mlwelles/dgman/v2 v2.2.0-preview2.0.20260415160033-bc0b95f26417
-```
-
-Pin the `require` line to an upstream `dolan-in/dgman/v2` version that has
-the API surface modusGraph relies on (everything outside the
-`HasReflectable` hook, which modusGraph itself does not call). If upstream
-lacks something we still need, surface that as a separate finding during
-implementation.
+- `SelfValidator` interface stays. Even though codegen no longer emits
+  `ValidateWith` methods, the interface remains a documented extension point.
+  Any user who has implemented `ValidateWith` on their own type continues
+  to dispatch through it.
+- `StructValidator` interface stays (unchanged from today).
+- `validateOne` SelfValidator dispatch branch stays.
+- All Client/Engine/Embedded interfaces stay verbatim.
+- All `*_test.go` tests for `SelfValidator` dispatch stay.
 
 ### Test cleanup
 
-In `internal_test.go`:
+In `internal_test.go`, the only tests that go away are the ones bound to
+the dropped dgman fork:
 
-- Delete the `privateFieldEntity`, `customTagEntity`, and `privateFieldEntityReflectable` fixture types and their `ToReflectable` / `FromReflectable` / `ValidateWith` methods.
+- Delete `privateFieldEntityReflectable` type and `ToReflectable` / `FromReflectable` methods on `privateFieldEntity`.
 - Delete `TestHasReflectable` (line ~432).
-- Delete `TestSelfValidatorDispatch` (line ~287), `TestSelfValidatorWithCustomValidator` (line ~352), and `TestValidateOneDispatchesSelfValidator` (line ~402).
-- Keep any validator tests that exercise *public-fielded* structs against `WithValidator`. If none exist, add minimal coverage for the new flow: vanilla struct with validate tags, `WithValidator(*validator.Validate)` configured on the client, validation fires on Insert/Update.
+
+The `privateFieldEntity` struct itself **stays**, with only its
+`Reflectable`-related methods removed. Its `ValidateWith` method and the
+tests that exercise SelfValidator dispatch (`TestSelfValidatorDispatch`,
+`TestSelfValidatorWithCustomValidator`, `TestValidateOneDispatchesSelfValidator`)
+remain in place — they continue to verify that user-implemented
+`SelfValidator` types are dispatched correctly. Without them we'd have no
+test coverage for the `SelfValidator` path that we're keeping.
+
+Add new tests covering the additive `Record`-aware path:
+
+- `*schema.Studio` (with `SchemaTypeName()` generated) implements `modusgraph.Schema` and is processed normally.
+- `*movies.Studio` (wrapper, with `Unwrap() *schema.Studio`) is detected by `unwrapSchema` and the inner record is substituted.
+- Plain user struct with no `Unwrap()` method and no `SchemaTypeName()` method is passed through unchanged — proves backward compatibility for non-codegen users.
 
 ### VALIDATOR.md
 
-Rewrite to describe the new flow:
+Update — don't rewrite. The doc currently describes `SelfValidator` as
+*the* validation extension point. After this work it describes two equally
+valid patterns:
 
-- Schema structs declare validate tags on their public fields.
-- Callers pass `*validator.Validate` to the client via `modusgraph.WithValidator`.
-- Validation fires automatically on Insert/Update; no entity-side hook required.
+1. **Tag your struct fields and pass `WithValidator(v)`** — the default,
+   recommended for any new code. Works for hand-written structs and for
+   modusgraph-gen-emitted schema structs alike.
+2. **Implement `SelfValidator`** — the extension point for cases where you
+   need custom validation logic the validator can't express via tags
+   (cross-field rules, asynchronous checks, etc.). Unchanged from today.
 
-Remove all references to `SelfValidator` and `ValidateWith`.
+The `ValidateWith` generation in codegen disappears (no longer needed since
+public-fielded schemas validate natively), but the runtime interface and
+dispatch stay available.
 
 ## Generator Changes
 
 ### Template inventory
 
-| Template | New role | Status |
-|---|---|---|
-| `entity.go.tmpl` → `<snake>_gen.go` | Emits wrapper struct, `NewStudio`, `Record()`, `SchemaRecord()`, `Validate()`, `MarshalJSON`/`UnmarshalJSON`, `UID`/`SetUID`/`DType`/`SetDType`, typed `StudioClient`. | rewritten |
-| `accessors.go.tmpl` → `<snake>_accessors_gen.go` | Per-field and per-edge methods on the wrapper that delegate to `e.s`, wrapping/unwrapping at edges. Always emitted (no longer gated on private fields). | rewritten |
-| `options.go.tmpl` → `<snake>_options_gen.go` | `StudioOption`, `WithStudioRecord`, `WithStudio<Field>`, `ApplyStudioOptions`. `WithStudioRecord` is new; per-field options largely unchanged. | minor update |
-| `client.go.tmpl` → `client_gen.go` | Top-level `Client` factory and shared infrastructure. Per-entity client types now live in `entity.go.tmpl`. | minor update |
-| `query.go.tmpl` → `<snake>_query_gen.go` | Query builder. Public signatures take/return wrappers; internals run against `schema.X`. Results wrapped on return. | rewritten |
-| `iter.go.tmpl` → `iter_gen.go` | `iter.Seq2` helpers used by `<Edge>Seq` accessors. No change. | no change |
-| `page_options.go.tmpl` → `page_options_gen.go` | Pagination types. No change. | no change |
-| `cli.go.tmpl` → `cmd/<pkg>/main.go` | Builds `schema.X` directly from Kong flags; calls `conn.Insert(ctx, &record)`. Simpler than today. | minor update |
-| `marshal.go.tmpl` | Deleted. The private-field marshal mirror is no longer needed. | removed |
+| Template | Output | New role | Status |
+|---|---|---|---|
+| `entity.go.tmpl` | `<out>/<snake>_gen.go` | Wrapper struct, `NewStudio`, `WrapStudio`, `Unwrap()`, `Validate()`, `MarshalJSON`/`UnmarshalJSON`, `UID`/`SetUID`/`DType`/`SetDType`, typed `StudioClient`. | rewritten |
+| `accessors.go.tmpl` | `<out>/<snake>_accessors_gen.go` | Per-field and per-edge methods on the wrapper that delegate to `e.s`, wrapping/unwrapping at edges. Always emitted (no longer gated on private fields). | rewritten |
+| `options.go.tmpl` | `<out>/<snake>_options_gen.go` | `StudioOption`, `WithStudio<Field>` family, `ApplyStudioOptions`. The schema-installation case is handled by the `WrapStudio` constructor in `entity.go.tmpl`, not by an option, to avoid any chance of collision with a `WithStudio<X>` field setter. | minor update |
+| `client.go.tmpl` | `<out>/client_gen.go` | Top-level `Client` factory and shared infrastructure. Per-entity client types now live in `entity.go.tmpl`. | minor update |
+| `query.go.tmpl` | `<out>/<snake>_query_gen.go` | Query builder. Public signatures take/return wrappers; internals run against `schema.X`. Results wrapped on return. | rewritten |
+| `iter.go.tmpl` | `<out>/iter_gen.go` | `iter.Seq2` helpers used by `<Edge>Seq` accessors. No change. | no change |
+| `page_options.go.tmpl` | `<out>/page_options_gen.go` | Pagination types. No change. | no change |
+| `cli.go.tmpl` | `<cli-dir>/main.go` | Builds `schema.X` directly from Kong flags; calls `conn.Insert(ctx, &record)`. Simpler than today. | minor update |
+| **`schema_marker.go.tmpl`** (new) | `<schema-dir>/marker_gen.go` | Emits `SchemaTypeName() string`, `SchemaPredicates() []string`, `SchemaSearchPredicate() string` on each schema struct. Single file per schema package containing all entities' marker methods. | added |
+| `marshal.go.tmpl` | — | Deleted. The private-field marshal mirror is no longer needed. | removed |
 
 ### Generator flags
 
@@ -618,9 +744,11 @@ In `internal/generator/generator_test.go`:
   and any test asserting on `ToReflectable`/`FromReflectable`/`Reflectable`
   struct presence.
 - Replace with tests asserting on the new wrapper shape: presence of
-  `func NewStudio(opts ...StudioOption)`, `func (e *Studio) Record()`,
-  `func (e *Studio) SchemaRecord() any`, edge accessor wrapping behavior,
-  `MarshalJSON` delegation, etc.
+  `func NewStudio(opts ...StudioOption)`, `func WrapStudio(s *schema.Studio, opts ...StudioOption)`,
+  `func (e *Studio) Unwrap() *schema.Studio`, `func (e *Studio) Validate(...)`,
+  `func (e *Studio) MarshalJSON()`, edge accessor wrapping behavior,
+  schema-side `SchemaTypeName/SchemaPredicates/SchemaSearchPredicate`
+  presence, etc.
 
 ## Testdata Migration
 
