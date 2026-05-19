@@ -26,7 +26,26 @@ func moviesDir(t *testing.T) string {
 	return filepath.Join(filepath.Dir(genDir), "parser", "testdata", "movies", "schema")
 }
 
-// goldenDir returns the path to the golden test data directory.
+// wrapperDir returns the path to the wrapper-parent (entity) golden directory:
+// parser/testdata/movies/ (parent of schema/).
+// The freshly-generated *_gen.go files in that directory serve as the new
+// golden reference for entity-side output.
+func wrapperDir(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	// thisFile = .../generator/generator_test.go
+	genDir := filepath.Dir(thisFile)
+	return filepath.Join(filepath.Dir(genDir), "parser", "testdata", "movies")
+}
+
+// goldenDir returns the path to the legacy flat golden test data directory.
+// As of Task 18, this directory contains only a .gitkeep — the old flat goldens
+// were deleted and replaced by the split layout under parser/testdata/movies/.
+// The directory is kept for the -update flag workflow; Task 20 will remove the
+// TestGenerate golden-comparison test entirely.
 func goldenDir(t *testing.T) string {
 	t.Helper()
 	_, thisFile, _, ok := runtime.Caller(0)
@@ -103,19 +122,27 @@ func TestGenerate(t *testing.T) {
 	}
 
 	// Compare generated files against golden files.
+	// As of Task 18, the flat golden/ dir contains only a .gitkeep (the old
+	// flat goldens were replaced by the split layout under
+	// parser/testdata/movies/). When no .go golden files are present, skip
+	// gracefully — Task 20 will remove this comparison block entirely.
 	goldenEntries, err := os.ReadDir(golden)
 	if err != nil {
 		t.Fatalf("Reading golden dir %s: %v\nRun with -update to create golden files.", golden, err)
 	}
 
-	if len(goldenEntries) == 0 {
-		t.Fatalf("No golden files found in %s. Run with -update to create them.", golden)
+	// Count .go files only; ignore .gitkeep and other non-Go files.
+	var goldenGoFiles []os.DirEntry
+	for _, entry := range goldenEntries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".go" {
+			goldenGoFiles = append(goldenGoFiles, entry)
+		}
+	}
+	if len(goldenGoFiles) == 0 {
+		t.Skip("No .go golden files found in testdata/golden/ (replaced by split layout in parser/testdata/movies/); Task 20 will remove this comparison.")
 	}
 
-	for _, entry := range goldenEntries {
-		if entry.IsDir() {
-			continue
-		}
+	for _, entry := range goldenGoFiles {
 		name := entry.Name()
 		t.Run(name, func(t *testing.T) {
 			goldenPath := filepath.Join(golden, name)
