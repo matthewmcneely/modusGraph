@@ -330,6 +330,23 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 				field.IsSingularEdge = true
 			}
 
+			// Discriminate the three singular shapes by GoType.
+			if field.IsSingularEdge {
+				switch {
+				case strings.HasPrefix(field.GoType, "*"):
+					field.IsPointerSingularEdge = true
+				case strings.HasPrefix(field.GoType, "[]*"):
+					// []*Entity with validate:"max=1"/"len=1" → singular-via-list
+					field.IsSingularViaList = true
+				case strings.HasPrefix(field.GoType, "[]"):
+					// value-element slice with validate constraint — should already
+					// be rejected by Task 5's pointer-slice rule; defensively skip.
+				default:
+					// Bare entity name — value-singular edge (no slice, no pointer).
+					field.IsValueSingularEdge = true
+				}
+			}
+
 			// Detect reverse edges from predicate.
 			if strings.HasPrefix(field.Predicate, "~") {
 				field.IsReverse = true

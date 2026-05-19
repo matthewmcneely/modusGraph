@@ -1532,6 +1532,135 @@ func mustReadGen(t *testing.T, outDir, name string) string {
 	return string(data)
 }
 
+func TestGenerate_AccessorsAllShapes(t *testing.T) {
+	// Build a synthetic schema exercising the six shapes.
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"), []byte("module example.com/test\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+	src := `package schema
+
+type Director struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Name  string   ` + "`json:\"name\"`" + `
+}
+
+type Country struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Code  string   ` + "`json:\"code\"`" + `
+}
+
+type Film struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Title string   ` + "`json:\"title\"`" + `
+}
+
+type Studio struct {
+	UID          string      ` + "`json:\"uid,omitempty\"`" + `
+	DType        []string    ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Name         string      ` + "`json:\"name\"`" + `
+	Founder      *Director   ` + "`json:\"founder,omitempty\"`" + `
+	Headquarters Country     ` + "`json:\"headquarters,omitempty\"`" + `
+	CurrentHead  []*Director ` + "`json:\"current_head,omitempty\" validate:\"max=1\"`" + `
+	Films        []*Film     ` + "`json:\"films,omitempty\"`" + `
+	Tags         []string    ` + "`json:\"tags,omitempty\"`" + `
+}
+`
+	if err := os.WriteFile(filepath.Join(srcDir, "studio.go"), []byte(src), 0o644); err != nil {
+		t.Fatalf("writing studio.go: %v", err)
+	}
+	pkg, err := parser.Parse(srcDir)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	outDir := t.TempDir()
+	if err := Generate(pkg, outDir); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	data := mustReadGen(t, outDir, "studio_accessors_gen.go")
+
+	// Scalar
+	for _, want := range []string{
+		`func (e *Studio) Name() string { return e.s.Name }`,
+		`func (e *Studio) SetName(v string)`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("scalar accessor missing: %q", want)
+		}
+	}
+	// Pointer-singular edge
+	for _, want := range []string{
+		`func (e *Studio) Founder() *Director {`,
+		`if e.s.Founder == nil {`,
+		`return &Director{s: e.s.Founder}`,
+		`func (e *Studio) SetFounder(v *Director)`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("pointer-singular accessor missing: %q", want)
+		}
+	}
+	// Value-singular edge
+	for _, want := range []string{
+		`func (e *Studio) Headquarters() *Country {`,
+		`return &Country{s: &e.s.Headquarters}`,
+		`func (e *Studio) SetHeadquarters(v *Country)`,
+		`e.s.Headquarters = *v.s`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("value-singular accessor missing: %q", want)
+		}
+	}
+	// Singular-via-list
+	for _, want := range []string{
+		`func (e *Studio) CurrentHead() *Director {`,
+		`if len(e.s.CurrentHead) == 0 || e.s.CurrentHead[0] == nil {`,
+		`func (e *Studio) SetCurrentHead(v *Director)`,
+		`e.s.CurrentHead = []*schema.Director{v.s}`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("singular-via-list accessor missing: %q", want)
+		}
+	}
+	// Multi-edge
+	for _, want := range []string{
+		`func (e *Studio) Films() []*Film {`,
+		`func (e *Studio) FilmSeq() iter.Seq[*Film]`,
+		`func (e *Studio) SetFilms(items ...*Film)`,
+		`func (e *Studio) AppendFilms(items ...*Film)`,
+		`func (e *Studio) RemoveFilms(uids ...string)`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("multi-edge accessor missing: %q", want)
+		}
+	}
+	// Scalar slice
+	for _, want := range []string{
+		`func (e *Studio) Tags() []string`,
+		`func (e *Studio) SetTags(v []string)`,
+		`func (e *Studio) AppendTags(v ...string)`,
+		`func (e *Studio) RemoveTagsFunc(fn func(string) bool)`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("scalar-slice accessor missing: %q", want)
+		}
+	}
+
+	// Negative: NO UID/DType getter/setter (entity.go.tmpl already provides those).
+	for _, notWant := range []string{
+		`func (e *Studio) UID() string`,
+		`func (e *Studio) SetUID(v string)`,
+		`func (e *Studio) DType() []string`,
+		`func (e *Studio) SetDType(v []string)`,
+	} {
+		if strings.Contains(data, notWant) {
+			t.Errorf("accessors_gen.go must NOT include UID/DType methods (entity.go.tmpl provides them); found: %q", notWant)
+		}
+	}
+}
+
 func TestGenerate_EntityWrapperStruct(t *testing.T) {
 	_, outDir := generateFromMinimalSchema(t)
 	data := mustReadGen(t, outDir, "studio_gen.go")

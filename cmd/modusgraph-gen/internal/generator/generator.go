@@ -71,28 +71,35 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		"add":          func(a, b int) int { return a + b },
 
 		// Field helpers for templates.
-		"scalarFields":              scalarFields,
-		"edgeFields":                edgeFields,
-		"searchPredicate":           searchPredicate,
-		"externalImports":           externalImports,
-		"nonSliceScalarFields":      nonSliceScalarFields,
-		"hasPrivateFields":          hasPrivateFields,
-		"privateFields":             privateFields,
-		"privateScalarFields":       privateScalarFields,
-		"privateSingularEdgeFields": privateSingularEdgeFields,
-		"privateMultiEdgeFields":    privateMultiEdgeFields,
-		"privateSliceFields":        privateSliceFields,
-		"allSingularEdgeFields":     allSingularEdgeFields,
-		"allMultiEdgeFields":        allMultiEdgeFields,
-		"allSliceFields":            allSliceFields,
-		"marshalFields":             marshalFields,
-		"packageExternalImports":    packageExternalImports,
-		"elemType":                  elemType,
-		"cliType":                   cliType,
-		"cliConvert":                cliConvert,
-		"hasValidateTags":           hasValidateTags,
-		"fieldsWithValidation":      fieldsWithValidation,
-		"lcFirst":                   lcFirst,
+		"scalarFields":                 scalarFields,
+		"edgeFields":                   edgeFields,
+		"searchPredicate":              searchPredicate,
+		"externalImports":              externalImports,
+		"nonSliceScalarFields":         nonSliceScalarFields,
+		"hasPrivateFields":             hasPrivateFields,
+		"privateFields":                privateFields,
+		"privateScalarFields":          privateScalarFields,
+		"privateSingularEdgeFields":    privateSingularEdgeFields,
+		"privateMultiEdgeFields":       privateMultiEdgeFields,
+		"privateSliceFields":           privateSliceFields,
+		"allSingularEdgeFields":        allSingularEdgeFields,
+		"allPointerSingularEdgeFields": allPointerSingularEdgeFields,
+		"allValueSingularEdgeFields":   allValueSingularEdgeFields,
+		"allSingularViaListFields":     allSingularViaListFields,
+		"allMultiEdgeFields":           allMultiEdgeFields,
+		"allSliceFields":               allSliceFields,
+		"trimPointerPrefix":            trimPointerPrefix,
+		"trimSlicePrefix":              trimSlicePrefix,
+		"trimSliceOfPointerPrefix":     trimSliceOfPointerPrefix,
+		"trimSchemaAlias":              trimSchemaAlias,
+		"marshalFields":                marshalFields,
+		"packageExternalImports":       packageExternalImports,
+		"elemType":                     elemType,
+		"cliType":                      cliType,
+		"cliConvert":                   cliConvert,
+		"hasValidateTags":              hasValidateTags,
+		"fieldsWithValidation":         fieldsWithValidation,
+		"lcFirst":                      lcFirst,
 	}
 
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.tmpl")
@@ -165,11 +172,9 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 			return err
 		}
 
-		// 7. accessors.go.tmpl → <snake>_accessors_gen.go (only if entity has private fields)
-		if hasPrivateFields(entity.Fields) {
-			if err := executeAndWrite(tmpl, "accessors.go.tmpl", data, filepath.Join(outputDir, snake+"_accessors_gen.go")); err != nil {
-				return err
-			}
+		// 7. accessors.go.tmpl → <snake>_accessors_gen.go (always emitted now — all schema fields are public)
+		if err := executeAndWrite(tmpl, "accessors.go.tmpl", data, filepath.Join(outputDir, snake+"_accessors_gen.go")); err != nil {
+			return err
 		}
 
 		// 8. marshal.go.tmpl → <snake>_marshal_gen.go (only if entity has private fields)
@@ -447,6 +452,64 @@ func allSingularEdgeFields(fields []model.Field) []model.Field {
 		}
 	}
 	return result
+}
+
+// allPointerSingularEdgeFields returns edges where GoType is *Entity.
+func allPointerSingularEdgeFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsPointerSingularEdge {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// allValueSingularEdgeFields returns edges where GoType is a bare Entity value.
+func allValueSingularEdgeFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsValueSingularEdge {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// allSingularViaListFields returns edges where GoType is []*Entity with
+// validate:"max=1" or "len=1".
+func allSingularViaListFields(fields []model.Field) []model.Field {
+	var result []model.Field
+	for _, f := range fields {
+		if f.IsSingularViaList {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// trimPointerPrefix strips leading "*" from a Go type string.
+func trimPointerPrefix(s string) string {
+	return strings.TrimPrefix(s, "*")
+}
+
+// trimSlicePrefix strips leading "[]" from a Go type string.
+func trimSlicePrefix(s string) string {
+	return strings.TrimPrefix(s, "[]")
+}
+
+// trimSliceOfPointerPrefix strips "[]*" prefix and the schema alias dot prefix.
+// "[]*schema.Director" → "Director".
+func trimSliceOfPointerPrefix(s, alias string) string {
+	s = strings.TrimPrefix(s, "[]*")
+	s = strings.TrimPrefix(s, alias+".")
+	return s
+}
+
+// trimSchemaAlias strips the "<alias>." prefix if present.
+// "schema.Director" → "Director"; "Director" → "Director".
+func trimSchemaAlias(s, alias string) string {
+	return strings.TrimPrefix(s, alias+".")
 }
 
 // allMultiEdgeFields returns all edge fields (public and private) where IsSingularEdge is false.

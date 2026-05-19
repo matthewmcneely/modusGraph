@@ -46,4 +46,9 @@ type Field struct {
 	ValidateTag    string // Raw validate tag value, e.g. "required,min=2,max=100"
 	AccessorName   string // Explicit accessor name override from `accessor:"..."` tag; empty = auto
 	RawDgraphTag   string // Raw dgraph struct tag value, e.g. "predicate=tenantName index=hash,term"
+
+	// Subdivisions of IsSingularEdge — exactly one of these is true when IsSingularEdge is true.
+	IsPointerSingularEdge bool // GoType is *Entity (pointer to entity type).
+	IsValueSingularEdge   bool // GoType is a bare entity name (value type, no pointer, no slice).
+	IsSingularViaList     bool // GoType is []*Entity with validate:"max=1" or "len=1".
 }

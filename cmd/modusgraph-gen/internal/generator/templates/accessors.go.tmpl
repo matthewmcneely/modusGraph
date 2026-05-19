@@ -1,143 +1,171 @@
-package {{.PackageName}}
-{{$entity := .Entity}}
-{{$name := .Entity.Name}}
-{{- $privateScalars := privateScalarFields .Entity.Fields}}
-{{- $singularEdges := privateSingularEdgeFields .Entity.Fields}}
-{{- $multiEdges := privateMultiEdgeFields .Entity.Fields}}
-{{- $sliceFields := privateSliceFields .Entity.Fields}}
-{{- $needsSlices := or (gt (len $multiEdges) 0) (gt (len $sliceFields) 0)}}
-{{- $needsTime := false}}
-{{- range $privateScalars}}{{if contains .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
-{{- range $sliceFields}}{{if contains .GoType "time."}}{{$needsTime = true}}{{end}}{{end}}
-{{- $allPrivate := privateFields .Entity.Fields}}
-{{- $extImports := externalImports $allPrivate .Imports}}
-{{if or $needsSlices $needsTime (gt (len $extImports) 0)}}
+package {{ .EntityPackageName }}
+{{- $E := .Entity.Name }}
+{{- $sAlias := .SchemaAlias }}
+
+{{- $scalars := scalarFields .Entity.Fields }}
+{{- $pointerEdges := allPointerSingularEdgeFields .Entity.Fields }}
+{{- $valueEdges := allValueSingularEdgeFields .Entity.Fields }}
+{{- $singularViaList := allSingularViaListFields .Entity.Fields }}
+{{- $multiEdges := allMultiEdgeFields .Entity.Fields }}
+{{- $scalarSlices := allSliceFields .Entity.Fields }}
+
+{{- $needsIter := gt (len $multiEdges) 0 }}
+{{- $needsSlices := or (gt (len $multiEdges) 0) (gt (len $scalarSlices) 0) }}
+{{- $needsSchema := or (gt (len $pointerEdges) 0) (gt (len $valueEdges) 0) (gt (len $singularViaList) 0) (gt (len $multiEdges) 0) }}
+
+{{ if or $needsIter $needsSlices $needsSchema -}}
 import (
-{{- if $needsSlices}}
+{{- if $needsIter }}
+	"iter"
+{{- end }}
+{{- if $needsSlices }}
 	"slices"
-{{- end}}
-{{- if $needsTime}}
-	"time"
-{{- end}}
-{{range $extImports}}
-	{{- if .Alias}}
-	{{.Alias}} "{{.Path}}"
-	{{- else}}
-	"{{.Path}}"
-	{{- end}}
-{{- end}}
+{{- end }}
+{{- if $needsSchema }}
+
+	"{{ .SchemaImportPath }}"
+{{- end }}
 )
-{{end}}
-{{- range $privateScalars}}
-// {{. | accessorName}} returns the {{.Name}} field.
-func (e *{{$name}}) {{. | accessorName}}() {{.GoType}} {
-	return e.{{.Name}}
-}
+{{- end }}
 
-// Set{{. | accessorName}} sets the {{.Name}} field.
-func (e *{{$name}}) Set{{. | accessorName}}(v {{.GoType}}) {
-	e.{{.Name}} = v
-}
-{{end}}
-{{- range $singularEdges}}
-// {{. | accessorName}} returns the {{.Name}} singular edge, or nil if unset.
-func (e *{{$name}}) {{. | accessorName}}() *{{.EdgeEntity}} {
-{{- if hasPrefix .GoType "*"}}
-	return e.{{.Name}}
-{{- else if hasPrefix .GoType "[]*"}}
-	if len(e.{{.Name}}) == 0 {
+{{- range $scalars }}
+{{- if not .IsUID }}{{- if not .IsDType }}
+
+// {{ .Name }} returns the {{ .JSONTag }} field.
+func (e *{{ $E }}) {{ .Name }}() {{ .GoType }} { return e.s.{{ .Name }} }
+
+// Set{{ .Name }} sets the {{ .JSONTag }} field.
+func (e *{{ $E }}) Set{{ .Name }}(v {{ .GoType }}) { e.s.{{ .Name }} = v }
+{{- end }}{{- end }}
+{{- end }}
+
+{{- range $pointerEdges }}
+{{- $et := trimPointerPrefix .GoType }}
+{{- $bare := trimSchemaAlias $et $sAlias }}
+
+// {{ .Name }} returns the wrapped {{ $bare }}, or nil if not set.
+// Shared state: mutations through the returned wrapper write through to e.s.
+func (e *{{ $E }}) {{ .Name }}() *{{ $bare }} {
+	if e.s.{{ .Name }} == nil {
 		return nil
 	}
-	return e.{{.Name}}[0]
-{{- else if hasPrefix .GoType "[]"}}
-	if len(e.{{.Name}}) == 0 {
-		return nil
-	}
-	return &e.{{.Name}}[0]
-{{- else}}
-	return &e.{{.Name}}
-{{- end}}
+	return &{{ $bare }}{s: e.s.{{ .Name }}}
 }
 
-// Set{{. | accessorName}} sets the {{.Name}} singular edge. Pass nil to clear.
-func (e *{{$name}}) Set{{. | accessorName}}(v *{{.EdgeEntity}}) {
-{{- if hasPrefix .GoType "*"}}
-	e.{{.Name}} = v
-{{- else if hasPrefix .GoType "[]*"}}
+// Set{{ .Name }} sets or clears the {{ $bare }} edge.
+func (e *{{ $E }}) Set{{ .Name }}(v *{{ $bare }}) {
 	if v == nil {
-		e.{{.Name}} = nil
-	} else {
-		e.{{.Name}} = []*{{.EdgeEntity}}{v}
+		e.s.{{ .Name }} = nil
+		return
 	}
-{{- else if hasPrefix .GoType "[]"}}
-	if v == nil {
-		e.{{.Name}} = nil
-	} else {
-		e.{{.Name}} = []{{.EdgeEntity}}{*v}
-	}
-{{- else}}
+	e.s.{{ .Name }} = v.s
+}
+{{- end }}
+
+{{- range $valueEdges }}
+{{- $bare := trimSchemaAlias .GoType $sAlias }}
+
+// {{ .Name }} returns a wrapper over the value-typed schema field. The wrapper
+// shares state with e — mutations are visible to e immediately.
+func (e *{{ $E }}) {{ .Name }}() *{{ $bare }} {
+	return &{{ $bare }}{s: &e.s.{{ .Name }}}
+}
+
+// Set{{ .Name }} copies the value from v into the schema field. Note: this is
+// a value copy, so v and e.{{ .Name }}() will not share state after this call.
+func (e *{{ $E }}) Set{{ .Name }}(v *{{ $bare }}) {
 	if v != nil {
-		e.{{.Name}} = *v
+		e.s.{{ .Name }} = *v.s
 	}
-{{- end}}
 }
-{{end}}
-{{- range $multiEdges}}
-// {{. | accessorName}} returns the {{.Name}} edges.
-func (e *{{$name}}) {{. | accessorName}}() {{.GoType}} {
-	return e.{{.Name}}
+{{- end }}
+
+{{- range $singularViaList }}
+{{- $bare := trimSliceOfPointerPrefix .GoType $sAlias }}
+
+// {{ .Name }} returns the wrapped first element of the singular-via-list edge,
+// or nil if the list is empty.
+func (e *{{ $E }}) {{ .Name }}() *{{ $bare }} {
+	if len(e.s.{{ .Name }}) == 0 || e.s.{{ .Name }}[0] == nil {
+		return nil
+	}
+	return &{{ $bare }}{s: e.s.{{ .Name }}[0]}
 }
 
-// Set{{. | accessorName}} replaces the {{.Name}} edges.
-func (e *{{$name}}) Set{{. | accessorName}}(v {{.GoType}}) {
-	e.{{.Name}} = v
+// Set{{ .Name }} replaces the singular-via-list edge with v, or clears it if nil.
+func (e *{{ $E }}) Set{{ .Name }}(v *{{ $bare }}) {
+	if v == nil {
+		e.s.{{ .Name }} = nil
+		return
+	}
+	e.s.{{ .Name }} = []*{{ $sAlias }}.{{ $bare }}{v.s}
+}
+{{- end }}
+
+{{- range $multiEdges }}
+{{- $bare := trimSliceOfPointerPrefix .GoType $sAlias }}
+
+// {{ .Name }} returns a freshly allocated slice of wrappers over each
+// {{ $bare }} in the multi-edge.
+func (e *{{ $E }}) {{ .Name }}() []*{{ $bare }} {
+	out := make([]*{{ $bare }}, len(e.s.{{ .Name }}))
+	for i, x := range e.s.{{ .Name }} {
+		out[i] = &{{ $bare }}{s: x}
+	}
+	return out
 }
 
-// Append{{. | accessorName}} appends one or more {{.EdgeEntity}} edges.
-func (e *{{$name}}) Append{{. | accessorName}}(v ...{{elemType .GoType}}) {
-	e.{{.Name}} = append(e.{{.Name}}, v...)
-}
-
-// Remove{{. | accessorName}} removes the edge with the given UID.
-func (e *{{$name}}) Remove{{. | accessorName}}(uid string) {
-	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, func(v {{elemType .GoType}}) bool {
-	{{- if hasPrefix (elemType .GoType) "*"}} return v != nil && v.UID == uid {{- else}} return v.UID == uid {{- end}}
-	})
-}
-
-// Remove{{. | accessorName}}Func removes edges matching the predicate.
-func (e *{{$name}}) Remove{{. | accessorName}}Func(fn func({{elemType .GoType}}) bool) {
-	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, fn)
-}
-{{end}}
-{{- range $sliceFields}}
-// {{. | accessorName}} returns the {{.Name}} slice.
-func (e *{{$name}}) {{. | accessorName}}() {{.GoType}} {
-	return e.{{.Name}}
-}
-
-// Set{{. | accessorName}} replaces the {{.Name}} slice.
-func (e *{{$name}}) Set{{. | accessorName}}(v {{.GoType}}) {
-	e.{{.Name}} = v
-}
-
-// Append{{. | accessorName}} appends one or more values to {{.Name}}.
-func (e *{{$name}}) Append{{. | accessorName}}(v ...{{elemType .GoType}}) {
-	e.{{.Name}} = append(e.{{.Name}}, v...)
-}
-
-// Remove{{. | accessorName}} removes the first occurrence of v from {{.Name}}.
-func (e *{{$name}}) Remove{{. | accessorName}}(v {{elemType .GoType}}) {
-	for i, item := range e.{{.Name}} {
-		if item == v {
-			e.{{.Name}} = slices.Delete(e.{{.Name}}, i, i+1)
-			return
+// {{ $bare }}Seq returns an iterator over the wrapped {{ $bare }}s, avoiding
+// the allocation in {{ .Name }}().
+func (e *{{ $E }}) {{ $bare }}Seq() iter.Seq[*{{ $bare }}] {
+	return func(yield func(*{{ $bare }}) bool) {
+		for _, x := range e.s.{{ .Name }} {
+			if !yield(&{{ $bare }}{s: x}) {
+				return
+			}
 		}
 	}
 }
 
-// Remove{{. | accessorName}}Func removes values matching the predicate.
-func (e *{{$name}}) Remove{{. | accessorName}}Func(fn func({{elemType .GoType}}) bool) {
-	e.{{.Name}} = slices.DeleteFunc(e.{{.Name}}, fn)
+// Set{{ .Name }} replaces the multi-edge with the given items.
+func (e *{{ $E }}) Set{{ .Name }}(items ...*{{ $bare }}) {
+	e.s.{{ .Name }} = make([]*{{ $sAlias }}.{{ $bare }}, len(items))
+	for i, x := range items {
+		e.s.{{ .Name }}[i] = x.s
+	}
 }
-{{end}}
+
+// Append{{ .Name }} appends items to the multi-edge.
+func (e *{{ $E }}) Append{{ .Name }}(items ...*{{ $bare }}) {
+	for _, x := range items {
+		e.s.{{ .Name }} = append(e.s.{{ .Name }}, x.s)
+	}
+}
+
+// Remove{{ .Name }} removes elements with any of the given UIDs from the multi-edge.
+func (e *{{ $E }}) Remove{{ .Name }}(uids ...string) {
+	e.s.{{ .Name }} = slices.DeleteFunc(e.s.{{ .Name }}, func(x *{{ $sAlias }}.{{ $bare }}) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+{{- end }}
+
+{{- range $scalarSlices }}
+{{- $et := trimSlicePrefix .GoType }}
+
+// {{ .Name }} returns the scalar slice.
+func (e *{{ $E }}) {{ .Name }}() []{{ $et }} { return e.s.{{ .Name }} }
+
+// Set{{ .Name }} sets the scalar slice.
+func (e *{{ $E }}) Set{{ .Name }}(v []{{ $et }}) { e.s.{{ .Name }} = v }
+
+// Append{{ .Name }} appends values to the scalar slice.
+func (e *{{ $E }}) Append{{ .Name }}(v ...{{ $et }}) {
+	e.s.{{ .Name }} = append(e.s.{{ .Name }}, v...)
+}
+
+// Remove{{ .Name }}Func removes all elements for which fn returns true.
+func (e *{{ $E }}) Remove{{ .Name }}Func(fn func({{ $et }}) bool) {
+	e.s.{{ .Name }} = slices.DeleteFunc(e.s.{{ .Name }}, fn)
+}
+{{- end }}
