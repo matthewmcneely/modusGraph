@@ -918,6 +918,48 @@ type Studio struct {
 	}
 }
 
+func TestParse_RejectsReservedAccessorOverride(t *testing.T) {
+	dir := t.TempDir()
+	src := `package schema
+
+type Studio struct {
+	UID       string   ` + "`json:\"uid,omitempty\"`" + `
+	DType     []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Something string   ` + "`json:\"something\" accessor:\"Unwrap\"`" + `
+}
+`
+	mustWriteFile(t, filepath.Join(dir, "studio.go"), src)
+
+	_, err := Parse(dir)
+	if err == nil {
+		t.Fatalf("expected error rejecting accessor tag override that collides with Unwrap, got nil")
+	}
+	if !strings.Contains(err.Error(), "Something") || !strings.Contains(err.Error(), "Unwrap") {
+		t.Fatalf("error must name the field 'Something' and the reserved method 'Unwrap'; got: %v", err)
+	}
+}
+
+func TestParse_RejectsReservedAccessorSetterCollision(t *testing.T) {
+	// accessor:"UID" would generate UID() and SetUID(); both collide with
+	// reserved wrapper methods (UID, SetUID). The guard must catch this
+	// even though the original field name does not collide.
+	dir := t.TempDir()
+	src := `package schema
+
+type Studio struct {
+	UID       string   ` + "`json:\"uid,omitempty\"`" + `
+	DType     []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Something string   ` + "`json:\"something\" accessor:\"UID\"`" + `
+}
+`
+	mustWriteFile(t, filepath.Join(dir, "studio.go"), src)
+
+	_, err := Parse(dir)
+	if err == nil {
+		t.Fatalf("expected error rejecting accessor tag override that collides with UID, got nil")
+	}
+}
+
 // mustWriteFile materializes a source file in a temp dir for parser tests
 // that need to drive Parse() against arbitrary fixtures.
 func mustWriteFile(t *testing.T, path, content string) {

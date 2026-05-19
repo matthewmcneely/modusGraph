@@ -40,22 +40,40 @@ var reservedSchemaMethods = map[string]struct{}{
 }
 
 // checkReservedNames returns an error if any of the entity's exported field
-// names collide with a reserved method name on the wrapper or schema struct.
-// UID and DType are expected fields and are skipped.
+// names — taking into account any accessor:"..." tag override — would
+// generate a method that collides with one reserved on the wrapper or the
+// schema struct. UID and DType are expected fields, identified by the
+// effective accessor name (not the source name); a field whose source
+// name is UID/DType is skipped, but a field that tags itself accessor:"UID"
+// would still need to be checked (it would emit duplicate methods).
+//
+// To match the generator's behavior, the effective accessor name is
+// f.AccessorName when set, otherwise f.Name. The fall-through to f.Name
+// matches what the generator's accessorName() does for already-exported
+// field names, which is every field the parser accepts.
 func checkReservedNames(entityName string, fields []model.Field) error {
 	for _, f := range fields {
-		if f.Name == "UID" || f.Name == "DType" {
+		// Skip the expected UID/DType bookkeeping fields — but only if the
+		// source name AND any explicit accessor tag are themselves UID/DType.
+		// A field that tags itself accessor:"UID" still needs checking.
+		if (f.Name == "UID" || f.Name == "DType") && f.AccessorName == "" {
 			continue
 		}
-		if _, ok := reservedWrapperMethods[f.Name]; ok {
-			return fmt.Errorf("field %q on entity %s collides with reserved wrapper method %q; rename the field", f.Name, entityName, f.Name)
+
+		effective := f.AccessorName
+		if effective == "" {
+			effective = f.Name
 		}
-		setterName := "Set" + f.Name
-		if _, ok := reservedWrapperMethods[setterName]; ok {
-			return fmt.Errorf("field %q on entity %s would generate setter %q, colliding with a reserved wrapper method; rename the field", f.Name, entityName, setterName)
+
+		if _, ok := reservedWrapperMethods[effective]; ok {
+			return fmt.Errorf("field %q on entity %s generates accessor %q, colliding with reserved wrapper method %q; rename the field or remove the accessor tag", f.Name, entityName, effective, effective)
 		}
-		if _, ok := reservedSchemaMethods[f.Name]; ok {
-			return fmt.Errorf("field %q on entity %s collides with reserved schema marker method %q; rename the field", f.Name, entityName, f.Name)
+		setter := "Set" + effective
+		if _, ok := reservedWrapperMethods[setter]; ok {
+			return fmt.Errorf("field %q on entity %s generates setter %q, colliding with reserved wrapper method %q; rename the field or remove the accessor tag", f.Name, entityName, setter, setter)
+		}
+		if _, ok := reservedSchemaMethods[effective]; ok {
+			return fmt.Errorf("field %q on entity %s generates accessor %q, colliding with reserved schema marker method %q; rename the field or remove the accessor tag", f.Name, entityName, effective, effective)
 		}
 	}
 	return nil
