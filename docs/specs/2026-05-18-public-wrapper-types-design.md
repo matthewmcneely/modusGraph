@@ -868,18 +868,18 @@ Templates split into two groups by which package their output lives in.
 | `schema_entity_client.go.tmpl` *(new)* | `<schema-client-dir>/<snake>_client_gen.go` | `-no-schema-clients` | Per-entity `schema.StudioClient` operating on `*schema.Studio` directly. Holds all CRUD logic. |
 | `schema_query.go.tmpl` *(new)* | `<schema-client-dir>/<snake>_query_gen.go` | `-no-schema-clients` | Per-entity `schema.StudioQuery` — returns raw schema slices. |
 
-**Wrapper-side templates** (gated by `-no-wrappers`):
+**Wrapper-side templates** (gated by `-no-entities`):
 
 | Template | Output | Gate flag | Role |
 |---|---|---|---|
-| `entity.go.tmpl` | `<wrapper-dir>/<snake>_gen.go` | `-no-wrappers` | Wrapper struct, `NewStudio`, `WrapStudio`, `Unwrap`, `Validate`, `MarshalJSON`/`UnmarshalJSON`, `UID/DType` methods. |
-| `accessors.go.tmpl` | `<wrapper-dir>/<snake>_accessors_gen.go` | `-no-wrappers` | Per-field/edge methods delegating to `e.s`. Always emitted (no longer gated on private fields). |
-| `options.go.tmpl` | `<wrapper-dir>/<snake>_options_gen.go` | `-no-wrappers` | `StudioOption`, `WithStudio<Field>` family, `ApplyStudioOptions`. (No installer option — `WrapStudio` constructor handles that case.) |
-| `iter.go.tmpl` | `<wrapper-dir>/iter_gen.go` | `-no-wrappers` | `iter.Seq2` helpers used by `<Edge>Seq` accessors. No change. |
-| `page_options.go.tmpl` | `<wrapper-dir>/page_options_gen.go` | `-no-wrappers` | Pagination types. No change. |
-| `wrapper_client.go.tmpl` *(new)* | `<wrapper-client-dir>/client_gen.go` | `-no-wrappers` or `-no-wrapper-clients` | Top-level `movies.Client` factory. |
-| `wrapper_entity_client.go.tmpl` *(new)* | `<wrapper-client-dir>/<snake>_client_gen.go` | `-no-wrappers` or `-no-wrapper-clients` | Per-entity `movies.StudioClient`. Composes over `schema.StudioClient`. |
-| `wrapper_query.go.tmpl` *(new)* | `<wrapper-client-dir>/<snake>_query_gen.go` | `-no-wrappers` or `-no-wrapper-clients` | Per-entity `movies.StudioQuery`. Composes over `schema.StudioQuery`; wraps results. |
+| `entity.go.tmpl` | `<entity-dir>/<snake>_gen.go` | `-no-entities` | Wrapper struct, `NewStudio`, `WrapStudio`, `Unwrap`, `Validate`, `MarshalJSON`/`UnmarshalJSON`, `UID/DType` methods. |
+| `accessors.go.tmpl` | `<entity-dir>/<snake>_accessors_gen.go` | `-no-entities` | Per-field/edge methods delegating to `e.s`. Always emitted (no longer gated on private fields). |
+| `options.go.tmpl` | `<entity-dir>/<snake>_options_gen.go` | `-no-entities` | `StudioOption`, `WithStudio<Field>` family, `ApplyStudioOptions`. (No installer option — `WrapStudio` constructor handles that case.) |
+| `iter.go.tmpl` | `<entity-dir>/iter_gen.go` | `-no-entities` | `iter.Seq2` helpers used by `<Edge>Seq` accessors. No change. |
+| `page_options.go.tmpl` | `<entity-dir>/page_options_gen.go` | `-no-entities` | Pagination types. No change. |
+| `wrapper_client.go.tmpl` *(new)* | `<entity-client-dir>/client_gen.go` | `-no-entities` or `-no-entity-clients` | Top-level `movies.Client` factory. |
+| `wrapper_entity_client.go.tmpl` *(new)* | `<entity-client-dir>/<snake>_client_gen.go` | `-no-entities` or `-no-entity-clients` | Per-entity `movies.StudioClient`. Composes over `schema.StudioClient`. |
+| `wrapper_query.go.tmpl` *(new)* | `<entity-client-dir>/<snake>_query_gen.go` | `-no-entities` or `-no-entity-clients` | Per-entity `movies.StudioQuery`. Composes over `schema.StudioQuery`; wraps results. |
 
 **CLI:**
 
@@ -913,25 +913,25 @@ Three categories: inputs, outputs, toggles.
 | Flag | Default | What it controls |
 |---|---|---|
 | `-schema-client-dir` | same as `-schema-dir` | Where the schema-level CRUD clients (`schema.StudioClient`, etc.) and the schema-level query builders are written. Default puts them alongside the schema types they operate on. |
-| `-wrapper-dir` | `./entity/` when the resolved `-schema-dir` equals CWD (i.e., the schema structs live in the same directory `//go:generate` was invoked from); `.` (CWD) otherwise | Where the wrapper types and accessors are written. The condition is checked against the resolved schema-dir (explicit or default), so explicit `-schema-dir .` triggers `./entity/` exactly the same way the unflagged schema-local case does. |
-| `-wrapper-client-dir` | same as `-wrapper-dir` | Where the wrapper-level CRUD clients (`movies.StudioClient`, etc.) and the wrapper-level query builders are written. Default puts them alongside the wrapper types they operate on. |
+| `-entity-dir` | `./entity/` when the resolved `-schema-dir` equals CWD (i.e., the schema structs live in the same directory `//go:generate` was invoked from); `.` (CWD) otherwise | Where the wrapper types and accessors are written. The condition is checked against the resolved schema-dir (explicit or default), so explicit `-schema-dir .` triggers `./entity/` exactly the same way the unflagged schema-local case does. |
+| `-entity-client-dir` | same as `-entity-dir` | Where the wrapper-level CRUD clients (`movies.StudioClient`, etc.) and the wrapper-level query builders are written. Default puts them alongside the wrapper types they operate on. |
 | `-cli-dir` | `./cmd/<pkg>` | Output directory for the Kong CLI. Unchanged. |
-| `-out` | matches `-wrapper-dir` default | *Deprecated alias* for `-wrapper-dir`. Accepted for backward compatibility with the unflagged default invocation. |
+| `-out` | matches `-entity-dir` default | *Deprecated alias* for `-entity-dir`. Accepted for backward compatibility with the unflagged default invocation. |
 
 **Toggles (turn off entire artifact groups):**
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `-no-schema-clients` | `false` | Skip generating schema-level clients and query builders. Schema types and markers are still generated. **Implies `-no-wrapper-clients`** — the wrapper client composes over the schema client, so it cannot exist without one. |
-| `-no-wrappers` | `false` | Skip generating wrapper types, wrapper accessors, wrapper options, *and* wrapper clients. Implies `-no-wrapper-clients`. Raw-only mode. |
-| `-no-wrapper-clients` | `false` | Skip wrapper-level clients and query builders, but still emit wrapper types and accessors. Useful when you want the wrapper data model but compose your own client over it. |
+| `-no-schema-clients` | `false` | Skip generating schema-level clients and query builders. Schema types and markers are still generated. **Implies `-no-entity-clients`** — the wrapper client composes over the schema client, so it cannot exist without one. |
+| `-no-entities` | `false` | Skip generating wrapper types, wrapper accessors, wrapper options, *and* wrapper clients. Implies `-no-entity-clients`. Raw-only mode. |
+| `-no-entity-clients` | `false` | Skip wrapper-level clients and query builders, but still emit wrapper types and accessors. Useful when you want the wrapper data model but compose your own client over it. |
 | `-no-cli` | `false` | Skip CLI generation entirely. (Was implicit; making it a flag.) |
 
 **Other (unchanged):**
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `-pkg-name` | resolved from existing `.go` files in `-wrapper-dir`, then basename of the absolute `-wrapper-dir` path | Package name to use in generated wrapper files (the `package X` declaration). |
+| `-pkg-name` | resolved from existing `.go` files in `-entity-dir`, then basename of the absolute `-entity-dir` path | Package name to use in generated wrapper files (the `package X` declaration). |
 | `-cli-name` | wrapper package name | Name for the CLI binary. |
 | `-with-validator` | `false` | Enable validation in the generated CLI. |
 
@@ -940,12 +940,12 @@ the unflagged defaults adapt to which one you pick:
 
 - **Wrapper-parent layout** — `generate.go` in the parent of a schema
   subdir. CWD has a `./schema/` subdir; that subdir holds schema files.
-  Unflagged defaults resolve to `-schema-dir ./schema` and `-wrapper-dir .`
+  Unflagged defaults resolve to `-schema-dir ./schema` and `-entity-dir .`
   so wrappers land next to the generate stub.
 - **Schema-local layout** — `generate.go` alongside schema files in the
   schema directory itself. CWD has no `./schema/` subdir, so the unflagged
   default for `-schema-dir` falls back to `.` (CWD). Since the resolved
-  schema-dir now equals CWD, `-wrapper-dir` defaults to `./entity/`
+  schema-dir now equals CWD, `-entity-dir` defaults to `./entity/`
   so wrappers land in a sibling subpackage.
 
 Two separate defaulting steps, applied in order:
@@ -954,14 +954,14 @@ Two separate defaulting steps, applied in order:
    `-schema-dir` to `./schema`. Otherwise default it to `.`. This step
    exists only so the unflagged case finds the schema files in either
    layout; an explicit `-schema-dir` skips this step entirely.
-2. **`-wrapper-dir` default.** Whatever `-schema-dir` resolved to
+2. **`-entity-dir` default.** Whatever `-schema-dir` resolved to
    (explicit or defaulted), compare its absolute path to CWD. If they
-   match (schema files live in CWD), default `-wrapper-dir` to
+   match (schema files live in CWD), default `-entity-dir` to
    `./entity/`. Otherwise default it to `.`. This is the rule that
    actually controls where wrappers land, and it works the same way
    regardless of how schema-dir was supplied.
 
-The wrapper-dir condition is therefore "are the schema structs in the
+The `-entity-dir` condition is therefore "are the schema structs in the
 same directory `//go:generate` was invoked from?" — measured directly on
 the resolved schema-dir, not by inspecting subdirectory names. Explicit
 `-schema-dir .` triggers `./entity/` exactly the same way the unflagged
@@ -1018,7 +1018,7 @@ movies/
 movies/
   schema/                     types + markers + schema.StudioClient
 
-# Flags: -no-wrappers
+# Flags: -no-entities
 ```
 
 ```
@@ -1029,7 +1029,7 @@ movies/
   *_gen.go                    wrappers + accessors (no client)
 
 # Flags: -no-schema-clients
-# (Implies -no-wrapper-clients: wrapper clients compose over schema clients,
+# (Implies -no-entity-clients: wrapper clients compose over schema clients,
 # so disabling schema clients disables wrapper clients automatically.)
 ```
 
@@ -1044,8 +1044,8 @@ project/
 # Flags:
 #   -schema-dir ./internal/types
 #   -schema-client-dir ./internal/clients
-#   -wrapper-dir ./api
-#   -wrapper-client-dir ./api/clients
+#   -entity-dir ./api
+#   -entity-client-dir ./api/clients
 ```
 
 ### Parser changes
@@ -1066,10 +1066,10 @@ project/
     existing package name doesn't match what would be emitted.
   - **Wrapper package name** — for the `package X` declaration in generated
     wrapper files. Resolved in this order: (1) explicit `-pkg-name` flag,
-    (2) `package` declaration in any existing `.go` file in `-wrapper-dir`,
-    (3) basename of the absolute `-wrapper-dir` path.
+    (2) `package` declaration in any existing `.go` file in `-entity-dir`,
+    (3) basename of the absolute `-entity-dir` path.
   - **Wrapper-client package name** — needed only when
-    `-wrapper-client-dir` differs from `-wrapper-dir`. Resolved the same
+    `-entity-client-dir` differs from `-entity-dir`. Resolved the same
     way as schema-client package name.
 - Reject value-element slices for any field whose element type is an entity
   (the [Schema constraints](#schema-constraints) rule). Applies uniformly
