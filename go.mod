@@ -8,11 +8,10 @@ require (
 	github.com/dgraph-io/dgo/v250 v250.0.0
 	github.com/dgraph-io/dgraph/v25 v25.1.1-0.20260202212142-15ef722329b1
 	github.com/dgraph-io/ristretto/v2 v2.3.0
-	github.com/dolan-in/dgman/v2 v2.2.0-preview2
+	github.com/dolan-in/dgman/v2 v2.2.0
 	github.com/go-logr/logr v1.4.3
 	github.com/go-logr/stdr v1.2.2
 	github.com/go-playground/validator/v10 v10.30.1
-	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.19.0
 	google.golang.org/protobuf v1.36.11
@@ -34,6 +33,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.98 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/sergi/go-diff v1.2.0 // indirect
@@ -157,5 +157,3 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/dolan-in/dgman/v2 => github.com/mlwelles/dgman/v2 v2.2.0-preview2.0.20260415160033-bc0b95f26417
