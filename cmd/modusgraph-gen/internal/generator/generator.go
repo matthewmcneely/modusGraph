@@ -133,6 +133,22 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		return err
 	}
 
+	// 6. wrapper_client.go.tmpl → wrapper_client_gen.go (once per package, wrapper-side factory)
+	wrapperClientData := struct {
+		EntityPackageName string
+		SchemaAlias       string
+		SchemaImportPath  string
+		Entities          []model.Entity
+	}{
+		EntityPackageName: "entity",
+		SchemaAlias:       pkg.Name,
+		SchemaImportPath:  pkg.SchemaImportPath,
+		Entities:          pkg.Entities,
+	}
+	if err := executeAndWrite(tmpl, "wrapper_client.go.tmpl", wrapperClientData, filepath.Join(outputDir, "wrapper_client_gen.go")); err != nil {
+		return err
+	}
+
 	// Per-entity templates.
 	type entityData struct {
 		PackageName       string
@@ -186,6 +202,15 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 			return err
 		}
 		if err := executeAndWrite(tmpl, "schema_query.go.tmpl", perEntity, filepath.Join(outputDir, snake+"_schema_query_gen.go")); err != nil {
+			return err
+		}
+
+		// wrapper-side per-entity client + query (will be normalized to <snake>_client_gen.go /
+		// <snake>_query_gen.go in Task 14 once old templates are deleted)
+		if err := executeAndWrite(tmpl, "wrapper_entity_client.go.tmpl", data, filepath.Join(outputDir, snake+"_wrapper_client_gen.go")); err != nil {
+			return err
+		}
+		if err := executeAndWrite(tmpl, "wrapper_query.go.tmpl", data, filepath.Join(outputDir, snake+"_wrapper_query_gen.go")); err != nil {
 			return err
 		}
 	}

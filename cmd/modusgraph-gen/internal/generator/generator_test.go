@@ -1740,3 +1740,94 @@ func TestGenerate_NoMarshalFileEmitted(t *testing.T) {
 		t.Errorf("studio_marshal_gen.go must NOT be emitted; stat err = %v", err)
 	}
 }
+
+func TestGenerate_WrapperClientFactory(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"), []byte("module example.com/test\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+	src := `package schema
+
+type Studio struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Name  string   ` + "`json:\"name\"`" + `
+}
+
+type Film struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Title string   ` + "`json:\"title\"`" + `
+}
+`
+	if err := os.WriteFile(filepath.Join(srcDir, "studio.go"), []byte(src), 0o644); err != nil {
+		t.Fatalf("writing studio.go: %v", err)
+	}
+	pkg, err := parser.Parse(srcDir)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	outDir := t.TempDir()
+	if err := Generate(pkg, outDir); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	data := mustReadGen(t, outDir, "wrapper_client_gen.go")
+	for _, want := range []string{
+		`package entity`,
+		`"example.com/test"`, // schema import path
+		`type Client struct {`,
+		`schemaClient *schema.Client`,
+		`StudioClient`,
+		`FilmClient`,
+		`func NewClient(conn modusgraph.Client) *Client`,
+		`sc := schema.NewClient(conn)`,
+		`c.Studio = &StudioClient{schemaClient: sc.Studio}`,
+		`c.Film = &FilmClient{schemaClient: sc.Film}`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("wrapper_client_gen.go missing: %q\n---file---\n%s", want, data)
+		}
+	}
+}
+
+func TestGenerate_WrapperEntityClient(t *testing.T) {
+	_, outDir := generateFromMinimalSchema(t)
+	data := mustReadGen(t, outDir, "studio_wrapper_client_gen.go")
+	for _, want := range []string{
+		`package entity`,
+		`type StudioClient struct {`,
+		`schemaClient *schema.StudioClient`,
+		`func NewStudioClient(conn modusgraph.Client) *StudioClient`,
+		`return &StudioClient{schemaClient: schema.NewStudioClient(conn)}`,
+		`func (c *StudioClient) Get(ctx context.Context, uid string) (*Studio, error)`,
+		`return WrapStudio(s), nil`,
+		`func (c *StudioClient) Add(ctx context.Context, w *Studio) error`,
+		`return c.schemaClient.Add(ctx, w.s)`,
+		`func (c *StudioClient) Update(ctx context.Context, w *Studio) error`,
+		`func (c *StudioClient) Upsert(ctx context.Context, w *Studio, predicates ...string) error`,
+		`func (c *StudioClient) Delete(ctx context.Context, uid string) error`,
+		`func (c *StudioClient) Query(ctx context.Context) *StudioQuery`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("studio_wrapper_client_gen.go missing: %q", want)
+		}
+	}
+}
+
+func TestGenerate_WrapperQuery(t *testing.T) {
+	_, outDir := generateFromMinimalSchema(t)
+	data := mustReadGen(t, outDir, "studio_wrapper_query_gen.go")
+	for _, want := range []string{
+		`package entity`,
+		`type StudioQuery struct {`,
+		`schemaQuery *schema.StudioQuery`,
+		`func (q *StudioQuery) Nodes() ([]*Studio, error)`,
+		`func (q *StudioQuery) First() (*Studio, error)`,
+		`return WrapStudio(s), nil`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("studio_wrapper_query_gen.go missing: %q", want)
+		}
+	}
+}

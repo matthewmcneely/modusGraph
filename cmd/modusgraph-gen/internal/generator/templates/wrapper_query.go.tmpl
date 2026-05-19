@@ -1,0 +1,37 @@
+package {{ .EntityPackageName }}
+
+import "{{ .SchemaImportPath }}"
+
+{{- $E := .Entity.Name }}
+{{- $sAlias := .SchemaAlias }}
+
+// {{ $E }}Query is the wrapper-side query builder. Composes over
+// {{ $sAlias }}.{{ $E }}Query; terminal methods wrap results before returning.
+type {{ $E }}Query struct {
+	schemaQuery *{{ $sAlias }}.{{ $E }}Query
+}
+
+// Nodes executes the query and returns wrapped {{ $E }} results.
+func (q *{{ $E }}Query) Nodes() ([]*{{ $E }}, error) {
+	var recs []{{ $sAlias }}.{{ $E }}
+	if err := q.schemaQuery.Nodes(&recs); err != nil {
+		return nil, err
+	}
+	out := make([]*{{ $E }}, len(recs))
+	for i := range recs {
+		out[i] = Wrap{{ $E }}(&recs[i])
+	}
+	return out, nil
+}
+
+// First returns the first matching wrapper, or nil if no rows.
+func (q *{{ $E }}Query) First() (*{{ $E }}, error) {
+	s, err := q.schemaQuery.First()
+	if err != nil {
+		return nil, err
+	}
+	if s == nil {
+		return nil, nil
+	}
+	return Wrap{{ $E }}(s), nil
+}

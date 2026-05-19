@@ -1,0 +1,30 @@
+package {{ .EntityPackageName }}
+
+import (
+	"github.com/matthewmcneely/modusgraph"
+
+	"{{ .SchemaImportPath }}"
+)
+
+{{- $sAlias := .SchemaAlias }}
+
+// Client is a top-level wrapper-side client. Holds a {{ $sAlias }}.Client
+// internally and exposes per-entity wrapper sub-clients that compose over
+// the schema-side clients.
+type Client struct {
+	schemaClient *{{ $sAlias }}.Client
+{{- range .Entities }}
+	{{ .Name }} *{{ .Name }}Client
+{{- end }}
+}
+
+// NewClient binds conn to a wrapper-side Client. The internal schema-side
+// Client is constructed once and shared by all per-entity sub-clients.
+func NewClient(conn modusgraph.Client) *Client {
+	sc := {{ $sAlias }}.NewClient(conn)
+	c := &Client{schemaClient: sc}
+{{- range .Entities }}
+	c.{{ .Name }} = &{{ .Name }}Client{schemaClient: sc.{{ .Name }}}
+{{- end }}
+	return c
+}

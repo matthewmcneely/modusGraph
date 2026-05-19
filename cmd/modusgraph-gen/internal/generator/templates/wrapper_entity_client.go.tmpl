@@ -1,0 +1,61 @@
+package {{ .EntityPackageName }}
+
+import (
+	"context"
+
+	"github.com/matthewmcneely/modusgraph"
+
+	"{{ .SchemaImportPath }}"
+)
+
+{{- $E := .Entity.Name }}
+{{- $sAlias := .SchemaAlias }}
+
+// {{ $E }}Client wraps a {{ $sAlias }}.{{ $E }}Client and exposes the same
+// operations over wrapper types. Reads allocate a wrapper around the schema
+// result; writes deref the wrapper's backing schema struct (w.s) and forward.
+type {{ $E }}Client struct {
+	schemaClient *{{ $sAlias }}.{{ $E }}Client
+}
+
+// New{{ $E }}Client binds a wrapper-side {{ $E }}Client to conn. Internally
+// constructs a fresh {{ $sAlias }}.{{ $E }}Client on the same conn.
+func New{{ $E }}Client(conn modusgraph.Client) *{{ $E }}Client {
+	return &{{ $E }}Client{schemaClient: {{ $sAlias }}.New{{ $E }}Client(conn)}
+}
+
+// Get loads the {{ $E }} with the given UID and returns it wrapped.
+func (c *{{ $E }}Client) Get(ctx context.Context, uid string) (*{{ $E }}, error) {
+	s, err := c.schemaClient.Get(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	return Wrap{{ $E }}(s), nil
+}
+
+// Add inserts the underlying schema struct from w.
+func (c *{{ $E }}Client) Add(ctx context.Context, w *{{ $E }}) error {
+	return c.schemaClient.Add(ctx, w.s)
+}
+
+// Update modifies the underlying schema struct from w (must have UID set).
+func (c *{{ $E }}Client) Update(ctx context.Context, w *{{ $E }}) error {
+	return c.schemaClient.Update(ctx, w.s)
+}
+
+// Upsert inserts or updates the underlying schema struct from w, matching
+// against predicates. If no predicates are provided, the first field tagged
+// dgraph:"upsert" wins.
+func (c *{{ $E }}Client) Upsert(ctx context.Context, w *{{ $E }}, predicates ...string) error {
+	return c.schemaClient.Upsert(ctx, w.s, predicates...)
+}
+
+// Delete removes the {{ $E }} with the given UID.
+func (c *{{ $E }}Client) Delete(ctx context.Context, uid string) error {
+	return c.schemaClient.Delete(ctx, uid)
+}
+
+// Query returns a wrapper-side query builder for {{ $E }}.
+func (c *{{ $E }}Client) Query(ctx context.Context) *{{ $E }}Query {
+	return &{{ $E }}Query{schemaQuery: c.schemaClient.Query(ctx)}
+}
