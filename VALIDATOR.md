@@ -158,22 +158,86 @@ list.
 
 The `validate` tag is also used by the `modusgraph-gen` code generator to detect edge cardinality.
 When an edge field has `validate:"max=1"` or `validate:"len=1"`, the generator produces singular
-edge accessors (`*Type` getter/setter) instead of slice accessors:
+edge accessors (`*Type` getter/setter) on the wrapper instead of slice accessors:
 
 ```go
-type Film struct {
-    UID      string     `json:"uid,omitempty"`
-    DType    []string   `json:"dgraph.type,omitempty"`
-    director []Director `json:"director,omitempty" validate:"max=1"`
-}
+package schema
 
-// Generated:
-// func (f *Film) Director() *Director { ... }
-// func (f *Film) SetDirector(v *Director) { ... }
+type Film struct {
+    UID      string      `json:"uid,omitempty"`
+    DType    []string    `json:"dgraph.type,omitempty"`
+    Director []*Director `json:"director,omitempty" validate:"max=1"`
+}
+```
+
+```go
+// Generated on the wrapper:
+// func (f *Film) Director() *Director       { ... }
+// func (f *Film) SetDirector(v *Director)   { ... }
 ```
 
 This provides a cleaner API when a relationship is conceptually one-to-one (or zero-to-one). When
 validation is enabled (via `WithValidator()`), the `validate` tag enforces cardinality at runtime.
 The generated accessors express the cardinality constraint in the API surface regardless of whether
-validation is enabled. See the [Code Generation](README.md#code-generation) section in the README for full
-details on private field support.
+validation is enabled.
+
+Note that slice-of-entity fields must use pointer slices (`[]*Director`, not `[]Director`) when the
+wrapper layer is being generated — see the spec at
+`docs/specs/2026-05-18-public-wrapper-types-design.md` (Slice-of-entity fields must use pointer slices).
+
+## Schema Marker Interface
+
+`modusgraph` exposes a small marker interface that lets `Client` recognize generated schema records:
+
+```go
+type Schema interface {
+    SchemaTypeName() string
+}
+```
+
+Every generated schema struct (emitted by `modusgraph-gen`) implements `Schema` via a generated
+`SchemaTypeName` method that returns the canonical entity name (e.g. `"Studio"`). Plain user
+structs that don't implement `Schema` are unaffected by the routing — they pass through to the
+existing reflection-based dgman pipeline exactly as before.
+
+`Client.Insert`, `InsertRaw`, `Update`, `Upsert`, `Get`, `Query`, and `UpdateSchema` substitute
+wrapper inputs with their inner schema struct via reflection. The helper used for substitution is
+exported as `modusgraph.UnwrapSchema(obj any) any`:
+
+```go
+// Pass a wrapper to Insert; Client.UnwrapSchema substitutes the inner *schema.Studio
+// before dgman processes the value.
+studio := movies.NewStudio(movies.WithStudioName("Pixar"))
+conn.Insert(ctx, studio)
+
+// Equivalent to:
+conn.Insert(ctx, studio.Unwrap())
+
+// Plain schema structs pass through unchanged.
+s := &schema.Studio{Name: "Pixar"}
+conn.Insert(ctx, s)
+```
+
+Callers who want the substitution outside the standard `Client` methods can use `UnwrapSchema`
+directly — it's a pure helper that returns the inner schema record when passed a wrapper, or the
+input unchanged otherwise.
+
+## Two Validation Patterns
+
+After the wrapper-types refactor, two validation patterns are equally supported:
+
+1. **Tag your struct fields and pass `WithValidator(v)`** — recommended for new code. Works for
+   hand-written structs and for `modusgraph-gen`-emitted schema structs alike. The validator's tag
+   processing sees the schema struct's public fields directly. Generated wrappers expose a
+   `Validate(ctx, v)` shim that delegates to `v.StructCtx(ctx, e.s)`.
+
+2. **Implement `SelfValidator`** — preserved as the extension point for validation logic the
+   validator can't express via tags (cross-field rules, asynchronous checks, etc.). Unchanged from
+   before. Modusgraph's `validateOne` dispatch continues to detect and invoke `ValidateWith`.
+
+The `ValidateWith` generation that the OLD code generator emitted is gone (no longer needed since
+public-fielded schemas validate natively). The runtime `SelfValidator` interface and its dispatch
+stay available for users who need them.
+
+See the [Code Generation](README.md#code-generation) section in the README for full details on the
+wrapper layer.
