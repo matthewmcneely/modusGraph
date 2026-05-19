@@ -36,6 +36,27 @@ func goldenDir(t *testing.T) string {
 	return filepath.Join(filepath.Dir(thisFile), "testdata", "golden")
 }
 
+// flatConfig returns a Config that routes all emits into a single dir.
+// Used by legacy tests that don't care about dir separation.
+// CLIDir is set to dir/cmd/<pkg.Name> so the CLI stub ends up in its
+// expected location.
+func flatConfig(pkg *model.Package, dir string) Config {
+	return Config{
+		SchemaDir:               dir,
+		SchemaClientDir:         dir,
+		EntityDir:               dir,
+		EntityClientDir:         dir,
+		CLIDir:                  filepath.Join(dir, "cmd", pkg.Name),
+		EntityPackageName:       "entity",
+		EntityClientPackageName: "entity",
+		SchemaClientPackageName: pkg.Name,
+		SchemaAlias:             pkg.Name,
+		SchemaImportPath:        pkg.SchemaImportPath,
+		CLIName:                 pkg.CLIName,
+		WithValidator:           pkg.WithValidator,
+	}
+}
+
 func TestGenerate(t *testing.T) {
 	dir := moviesDir(t)
 	pkg, err := parser.Parse(dir)
@@ -45,7 +66,7 @@ func TestGenerate(t *testing.T) {
 
 	// Generate to a temp directory.
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -151,7 +172,7 @@ func TestGenerateOutputFiles(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -203,7 +224,7 @@ func TestGenerateHeader(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -345,7 +366,7 @@ func TestCLITemplateUsesModulePath(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -511,7 +532,9 @@ func TestWithCLIDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	customCLIDir := filepath.Join(tmpDir, "custom", "cli")
 
-	if err := Generate(pkg, tmpDir, WithCLIDir(customCLIDir)); err != nil {
+	cfg := flatConfig(pkg, tmpDir)
+	cfg.CLIDir = customCLIDir
+	if err := Generate(pkg, cfg); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -536,8 +559,8 @@ func TestDefaultCLIDir(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	// No WithCLIDir option — should use the default.
-	if err := Generate(pkg, tmpDir); err != nil {
+	// flatConfig sets CLIDir = tmpDir/cmd/movies — the default layout.
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -555,7 +578,7 @@ func TestCLINameDefault(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -582,7 +605,7 @@ func TestCLINameCustom(t *testing.T) {
 	pkg.CLIName = "film-db"
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -617,7 +640,7 @@ func TestWithValidatorEnabled(t *testing.T) {
 	pkg.WithValidator = true
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -648,7 +671,7 @@ func TestWithValidatorDisabled(t *testing.T) {
 
 	// WithValidator defaults to false.
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -679,7 +702,10 @@ func TestWithValidatorAndCustomCLI(t *testing.T) {
 	tmpDir := t.TempDir()
 	customCLIDir := filepath.Join(tmpDir, "cmd", "registry")
 
-	if err := Generate(pkg, tmpDir, WithCLIDir(customCLIDir)); err != nil {
+	cfg := flatConfig(pkg, tmpDir)
+	cfg.CLIDir = customCLIDir
+	cfg.WithValidator = true
+	if err := Generate(pkg, cfg); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -714,7 +740,9 @@ func TestWithCLIDirAndCLIName(t *testing.T) {
 	tmpDir := t.TempDir()
 	customCLIDir := filepath.Join(tmpDir, "cmd", "registry")
 
-	if err := Generate(pkg, tmpDir, WithCLIDir(customCLIDir)); err != nil {
+	cfg := flatConfig(pkg, tmpDir)
+	cfg.CLIDir = customCLIDir
+	if err := Generate(pkg, cfg); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -745,7 +773,7 @@ func TestGeneratedClientHasQueryRaw(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -771,7 +799,7 @@ func TestGeneratedCLIHasQuerySubcommand(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -807,7 +835,7 @@ func TestGeneratedCLIDirAndAddrMutuallyExclusive(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -832,7 +860,7 @@ func TestGeneratedAccessorsForEdgeVariants(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -1137,7 +1165,7 @@ func TestGeneratedMarshalForEdgeVariants(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -1197,7 +1225,7 @@ func TestGeneratedValidateWithMethod(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -1293,7 +1321,7 @@ func TestGeneratedAccessorsNotForExportedOnlyEntities(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	if err := Generate(pkg, tmpDir); err != nil {
+	if err := Generate(pkg, flatConfig(pkg, tmpDir)); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -1304,8 +1332,9 @@ func TestGeneratedAccessorsNotForExportedOnlyEntities(t *testing.T) {
 		t.Error("film_accessors_gen.go should NOT be generated (Film has no private fields)")
 	}
 
-	// Studio has private fields — it SHOULD get accessor and marshal files.
-	for _, f := range []string{"studio_accessors_gen.go", "studio_marshal_gen.go"} {
+	// Studio has private fields — it SHOULD get an accessors file.
+	// (studio_marshal_gen.go no longer emitted; that template was deleted in Task 12)
+	for _, f := range []string{"studio_accessors_gen.go"} {
 		info, err := os.Stat(filepath.Join(tmpDir, f))
 		if err != nil {
 			t.Errorf("%s should exist: %v", f, err)
@@ -1339,7 +1368,17 @@ type Studio struct {
 	}
 
 	outDir := t.TempDir()
-	if err := Generate(pkg, outDir); err != nil {
+	cfg := Config{
+		SchemaDir:               outDir,
+		SchemaClientDir:         outDir,
+		EntityDir:               outDir,
+		EntityClientDir:         outDir,
+		SchemaClientPackageName: pkg.Name,
+		SchemaAlias:             pkg.Name,
+		SchemaImportPath:        pkg.SchemaImportPath,
+		NoCLI:                   true,
+	}
+	if err := Generate(pkg, cfg); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 
@@ -1392,7 +1431,17 @@ type Plain struct {
 		t.Fatalf("parse: %v", err)
 	}
 	outDir := t.TempDir()
-	if err := Generate(pkg, outDir); err != nil {
+	cfg := Config{
+		SchemaDir:               outDir,
+		SchemaClientDir:         outDir,
+		EntityDir:               outDir,
+		EntityClientDir:         outDir,
+		SchemaClientPackageName: pkg.Name,
+		SchemaAlias:             pkg.Name,
+		SchemaImportPath:        pkg.SchemaImportPath,
+		NoCLI:                   true,
+	}
+	if err := Generate(pkg, cfg); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(outDir, "marker_gen.go"))
@@ -1431,12 +1480,24 @@ type Film struct {
 		t.Fatalf("parse: %v", err)
 	}
 
-	outDir := t.TempDir()
-	if err := Generate(pkg, outDir); err != nil {
+	schemaClientDir := t.TempDir()
+	entityDir := t.TempDir()
+	cfg := Config{
+		SchemaDir:               srcDir,
+		SchemaClientDir:         schemaClientDir,
+		EntityDir:               entityDir,
+		EntityClientDir:         entityDir,
+		SchemaClientPackageName: pkg.Name,
+		SchemaAlias:             pkg.Name,
+		SchemaImportPath:        pkg.SchemaImportPath,
+		NoCLI:                   true,
+	}
+	if err := Generate(pkg, cfg); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 
-	data := mustReadGen(t, outDir, "schema_client_gen.go")
+	// schema-side client factory lands in SchemaClientDir as client_gen.go.
+	data := mustReadGen(t, schemaClientDir, "client_gen.go")
 	for _, want := range []string{
 		`package schema`,
 		`type Client struct {`,
@@ -1448,16 +1509,15 @@ type Film struct {
 		`c.Film = NewFilmClient(conn)`,
 	} {
 		if !strings.Contains(data, want) {
-			t.Errorf("schema_client_gen.go missing: %q\n---file---\n%s", want, data)
+			t.Errorf("client_gen.go missing: %q\n---file---\n%s", want, data)
 		}
 	}
 }
 
 func TestGenerate_EmitsSchemaEntityClient(t *testing.T) {
-	srcDir, outDir := generateFromMinimalSchema(t)
-	_ = srcDir
+	_, schemaDir, _ := generateFromMinimalSchema(t)
 
-	data := mustReadGen(t, outDir, "studio_schema_client_gen.go")
+	data := mustReadGen(t, schemaDir, "studio_client_gen.go")
 	for _, want := range []string{
 		`package schema`,
 		`type StudioClient struct {`,
@@ -1470,14 +1530,14 @@ func TestGenerate_EmitsSchemaEntityClient(t *testing.T) {
 		`func (c *StudioClient) Query(ctx context.Context) *StudioQuery`,
 	} {
 		if !strings.Contains(data, want) {
-			t.Errorf("studio_schema_client_gen.go missing: %q", want)
+			t.Errorf("studio_client_gen.go missing: %q", want)
 		}
 	}
 }
 
 func TestGenerate_EmitsSchemaEntityQuery(t *testing.T) {
-	_, outDir := generateFromMinimalSchema(t)
-	data := mustReadGen(t, outDir, "studio_schema_query_gen.go")
+	_, schemaDir, _ := generateFromMinimalSchema(t)
+	data := mustReadGen(t, schemaDir, "studio_query_gen.go")
 	for _, want := range []string{
 		`package schema`,
 		`type StudioQuery struct {`,
@@ -1486,15 +1546,15 @@ func TestGenerate_EmitsSchemaEntityQuery(t *testing.T) {
 		`func (q *StudioQuery) First() (*Studio, error)`,
 	} {
 		if !strings.Contains(data, want) {
-			t.Errorf("studio_schema_query_gen.go missing: %q", want)
+			t.Errorf("studio_query_gen.go missing: %q", want)
 		}
 	}
 }
 
 // generateFromMinimalSchema creates a temp schema with a single Studio entity
-// and runs Generate against it, returning the temp source and output dirs.
+// and runs Generate against it, returning the temp source dir, schemaDir, and entityDir.
 // Used by multiple per-entity emit tests.
-func generateFromMinimalSchema(t *testing.T) (srcDir, outDir string) {
+func generateFromMinimalSchema(t *testing.T) (srcDir, schemaDir, entityDir string) {
 	t.Helper()
 	srcDir = t.TempDir()
 	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"), []byte("module example.com/test\n\ngo 1.25\n"), 0o644); err != nil {
@@ -1515,11 +1575,27 @@ type Studio struct {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	outDir = t.TempDir()
-	if err := Generate(pkg, outDir); err != nil {
+	schemaDir = srcDir // schema files live in srcDir; emit schema-side artifacts here too
+	entityDir = filepath.Join(t.TempDir(), "entity")
+	if err := os.MkdirAll(entityDir, 0o755); err != nil {
+		t.Fatalf("mkdir entityDir: %v", err)
+	}
+	cfg := Config{
+		SchemaDir:               schemaDir,
+		SchemaClientDir:         schemaDir,
+		EntityDir:               entityDir,
+		EntityClientDir:         entityDir,
+		EntityPackageName:       "entity",
+		EntityClientPackageName: "entity",
+		SchemaClientPackageName: "schema",
+		SchemaAlias:             "schema",
+		SchemaImportPath:        "example.com/test",
+		CLIName:                 "test",
+	}
+	if err := Generate(pkg, cfg); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
-	return srcDir, outDir
+	return srcDir, schemaDir, entityDir
 }
 
 // mustReadGen reads a generated file from outDir, failing the test on error.
@@ -1577,7 +1653,19 @@ type Studio struct {
 		t.Fatalf("parse: %v", err)
 	}
 	outDir := t.TempDir()
-	if err := Generate(pkg, outDir); err != nil {
+	cfg := Config{
+		SchemaDir:               outDir,
+		SchemaClientDir:         outDir,
+		EntityDir:               outDir,
+		EntityClientDir:         outDir,
+		EntityPackageName:       "entity",
+		EntityClientPackageName: "entity",
+		SchemaClientPackageName: pkg.Name,
+		SchemaAlias:             pkg.Name,
+		SchemaImportPath:        pkg.SchemaImportPath,
+		NoCLI:                   true,
+	}
+	if err := Generate(pkg, cfg); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 	data := mustReadGen(t, outDir, "studio_accessors_gen.go")
@@ -1671,8 +1759,8 @@ type Studio struct {
 }
 
 func TestGenerate_EntityWrapperStruct(t *testing.T) {
-	_, outDir := generateFromMinimalSchema(t)
-	data := mustReadGen(t, outDir, "studio_gen.go")
+	_, _, entityDir := generateFromMinimalSchema(t)
+	data := mustReadGen(t, entityDir, "studio_gen.go")
 	for _, want := range []string{
 		`package entity`,     // placeholder package name from EntityPackageName="entity"
 		`"example.com/test"`, // schema import path resolved from go.mod (module is example.com/test; schema dir IS the module root in the minimal fixture, so import path == module path)
@@ -1706,8 +1794,8 @@ func TestGenerate_EntityWrapperStruct(t *testing.T) {
 }
 
 func TestGenerate_OptionsScalarOnly(t *testing.T) {
-	_, outDir := generateFromMinimalSchema(t)
-	data := mustReadGen(t, outDir, "studio_options_gen.go")
+	_, _, entityDir := generateFromMinimalSchema(t)
+	data := mustReadGen(t, entityDir, "studio_options_gen.go")
 
 	for _, want := range []string{
 		`package entity`,
@@ -1733,10 +1821,10 @@ func TestGenerate_OptionsScalarOnly(t *testing.T) {
 }
 
 func TestGenerate_NoMarshalFileEmitted(t *testing.T) {
-	_, outDir := generateFromMinimalSchema(t)
+	_, _, entityDir := generateFromMinimalSchema(t)
 	// The marshal template was deleted; no <snake>_marshal_gen.go should exist
 	// in the output regardless of which entities are present.
-	if _, err := os.Stat(filepath.Join(outDir, "studio_marshal_gen.go")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(entityDir, "studio_marshal_gen.go")); !os.IsNotExist(err) {
 		t.Errorf("studio_marshal_gen.go must NOT be emitted; stat err = %v", err)
 	}
 }
@@ -1768,11 +1856,26 @@ type Film struct {
 		t.Fatalf("parse: %v", err)
 	}
 	outDir := t.TempDir()
-	if err := Generate(pkg, outDir); err != nil {
+	cfg := Config{
+		SchemaDir:               outDir,
+		SchemaClientDir:         outDir,
+		EntityDir:               outDir,
+		EntityClientDir:         outDir,
+		EntityPackageName:       "entity",
+		EntityClientPackageName: "entity",
+		SchemaClientPackageName: pkg.Name,
+		SchemaAlias:             pkg.Name,
+		SchemaImportPath:        "example.com/test",
+		NoCLI:                   true,
+	}
+	if err := Generate(pkg, cfg); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 
-	data := mustReadGen(t, outDir, "wrapper_client_gen.go")
+	data := mustReadGen(t, outDir, "client_gen.go")
+	// The wrapper-side client_gen.go and schema-side client_gen.go go to the
+	// SAME dir here (flat config). The last write wins — which is the entity
+	// client (wrapper_client.go.tmpl). Check for wrapper-specific content.
 	for _, want := range []string{
 		`package entity`,
 		`"example.com/test"`, // schema import path
@@ -1786,14 +1889,14 @@ type Film struct {
 		`c.Film = &FilmClient{schemaClient: sc.Film}`,
 	} {
 		if !strings.Contains(data, want) {
-			t.Errorf("wrapper_client_gen.go missing: %q\n---file---\n%s", want, data)
+			t.Errorf("client_gen.go (wrapper side) missing: %q\n---file---\n%s", want, data)
 		}
 	}
 }
 
 func TestGenerate_WrapperEntityClient(t *testing.T) {
-	_, outDir := generateFromMinimalSchema(t)
-	data := mustReadGen(t, outDir, "studio_wrapper_client_gen.go")
+	_, _, entityDir := generateFromMinimalSchema(t)
+	data := mustReadGen(t, entityDir, "studio_client_gen.go")
 	for _, want := range []string{
 		`package entity`,
 		`type StudioClient struct {`,
@@ -1810,14 +1913,14 @@ func TestGenerate_WrapperEntityClient(t *testing.T) {
 		`func (c *StudioClient) Query(ctx context.Context) *StudioQuery`,
 	} {
 		if !strings.Contains(data, want) {
-			t.Errorf("studio_wrapper_client_gen.go missing: %q", want)
+			t.Errorf("studio_client_gen.go missing: %q", want)
 		}
 	}
 }
 
 func TestGenerate_WrapperQuery(t *testing.T) {
-	_, outDir := generateFromMinimalSchema(t)
-	data := mustReadGen(t, outDir, "studio_wrapper_query_gen.go")
+	_, _, entityDir := generateFromMinimalSchema(t)
+	data := mustReadGen(t, entityDir, "studio_query_gen.go")
 	for _, want := range []string{
 		`package entity`,
 		`type StudioQuery struct {`,
@@ -1827,7 +1930,7 @@ func TestGenerate_WrapperQuery(t *testing.T) {
 		`return WrapStudio(s), nil`,
 	} {
 		if !strings.Contains(data, want) {
-			t.Errorf("studio_wrapper_query_gen.go missing: %q", want)
+			t.Errorf("studio_query_gen.go missing: %q", want)
 		}
 	}
 }

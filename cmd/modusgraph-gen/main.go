@@ -22,42 +22,78 @@ import (
 )
 
 func main() {
-	pkgDir := flag.String("pkg", ".", "path to the target Go package directory")
-	outputDir := flag.String("output", "", "output directory (default: same as -pkg)")
-	cliDir := flag.String("cli-dir", "", "output directory for CLI main.go (default: {output}/cmd/{package})")
-	cliName := flag.String("cli-name", "", "name for CLI binary and kong.Name (default: package name)")
-	withValidator := flag.Bool("with-validator", false, "enable struct validation via modusgraph.WithValidator in the generated CLI")
+	schemaDir := flag.String("schema-dir", "", "schema source directory (default: ./schema if exists, else CWD)")
+	schemaAlias := flag.String("schema-alias", "", "import alias for schema pkg (default: basename of -schema-dir)")
+	schemaClientDir := flag.String("schema-client-dir", "", "output dir for schema-level clients (default: -schema-dir)")
+	entityDir := flag.String("entity-dir", "", "output dir for wrapper types (default: ./entity if schema-dir==CWD, else CWD)")
+	entityClientDir := flag.String("entity-client-dir", "", "output dir for wrapper-level clients (default: -entity-dir)")
+	cliDir := flag.String("cli-dir", "", "output dir for the CLI (default: ./cmd/<pkg>)")
+	pkgName := flag.String("pkg-name", "", "package name for wrapper files (default: basename of -entity-dir)")
+	cliName := flag.String("cli-name", "", "name for CLI binary (default: wrapper pkg name)")
+	out := flag.String("out", "", "[deprecated] alias for -entity-dir")
+
+	noSchemaClients := flag.Bool("no-schema-clients", false, "skip schema-level clients/queries (implies -no-entity-clients)")
+	noEntities := flag.Bool("no-entities", false, "skip wrapper types/accessors/options/clients (raw-only mode)")
+	noEntityClients := flag.Bool("no-entity-clients", false, "skip wrapper-level clients/queries only")
+	noCLI := flag.Bool("no-cli", false, "skip CLI generation")
+	withValidator := flag.Bool("with-validator", false, "enable validation in the generated CLI")
 	flag.Parse()
 
-	// Resolve the package directory.
-	dir := *pkgDir
-	if dir == "." {
-		var err error
-		dir, err = os.Getwd()
-		if err != nil {
-			log.Fatalf("failed to get working directory: %v", err)
-		}
+	// Apply the deprecated -out alias.
+	if *out != "" && *entityDir == "" {
+		fmt.Fprintln(os.Stderr, "warning: -out is deprecated; use -entity-dir instead")
+		*entityDir = *out
 	}
 
-	// Resolve the output directory.
-	outDir := *outputDir
-	if outDir == "" {
-		outDir = dir
+	// Resolve the current working directory.
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("getwd: %v", err)
+	}
+
+	// Resolve path defaults via the Task 6 helper.
+	resolved := resolveDefaults(cwd, defaults{
+		schemaDirExplicit:       *schemaDir,
+		schemaClientDirExplicit: *schemaClientDir,
+		entityDirExplicit:       *entityDir,
+		entityClientDirExplicit: *entityClientDir,
+	})
+
+	// Apply toggle implication rules.
+	if *noSchemaClients {
+		*noEntityClients = true
+	}
+	if *noEntities {
+		*noEntityClients = true
 	}
 
 	// Parse phase: extract the model from Go source files.
-	pkg, err := parser.Parse(dir)
+	// When -no-entities is set, relax the pointer-slice rule so schemas with
+	// []Entity value slices work in raw-only mode (Option B).
+	var parseOpts []parser.ParseOption
+	if *noEntities {
+		parseOpts = append(parseOpts, parser.WithAllowValueElementEntitySlices())
+	}
+	pkg, err := parser.Parse(resolved.SchemaDir, parseOpts...)
 	if err != nil {
 		log.Fatalf("parse error: %v", err)
 	}
 
-	// Apply CLI name override if provided.
-	if *cliName != "" {
-		pkg.CLIName = *cliName
+	// Derive package name defaults.
+	entityPackageName := *pkgName
+	if entityPackageName == "" {
+		entityPackageName = filepath.Base(resolved.EntityDir)
+	}
+	schemaAliasResolved := *schemaAlias
+	if schemaAliasResolved == "" {
+		schemaAliasResolved = filepath.Base(resolved.SchemaDir)
 	}
 
-	// Apply validator flag.
-	pkg.WithValidator = *withValidator
+	// Resolve CLI dir default.
+	cliDirResolved := *cliDir
+	if cliDirResolved == "" {
+		cliDirResolved = filepath.Join(cwd, "cmd", entityPackageName)
+	}
 
 	fmt.Printf("Package: %s\n", pkg.Name)
 	fmt.Printf("Entities: %d\n", len(pkg.Entities))
@@ -70,12 +106,27 @@ func main() {
 	}
 
 	// Generate phase: execute templates and write output files.
-	fmt.Printf("\nGenerating code into %s ...\n", outDir)
-	var genOpts []generator.GenerateOption
-	if *cliDir != "" {
-		genOpts = append(genOpts, generator.WithCLIDir(*cliDir))
+	fmt.Printf("\nGenerating code ...\n")
+	cfg := generator.Config{
+		SchemaDir:               resolved.SchemaDir,
+		SchemaClientDir:         resolved.SchemaClientDir,
+		EntityDir:               resolved.EntityDir,
+		EntityClientDir:         resolved.EntityClientDir,
+		CLIDir:                  cliDirResolved,
+		EntityPackageName:       entityPackageName,
+		EntityClientPackageName: entityPackageName, // same as EntityDir basename for default layout
+		SchemaClientPackageName: pkg.Name,          // schema package name from parse
+		SchemaAlias:             schemaAliasResolved,
+		SchemaImportPath:        pkg.SchemaImportPath,
+		NoSchemaClients:         *noSchemaClients,
+		NoEntities:              *noEntities,
+		NoEntityClients:         *noEntityClients,
+		NoCLI:                   *noCLI,
+		CLIName:                 *cliName,
+		WithValidator:           *withValidator,
 	}
-	if err := generator.Generate(pkg, outDir, genOpts...); err != nil {
+
+	if err := generator.Generate(pkg, cfg); err != nil {
 		log.Fatalf("generation error: %v", err)
 	}
 	fmt.Println("Done.")
