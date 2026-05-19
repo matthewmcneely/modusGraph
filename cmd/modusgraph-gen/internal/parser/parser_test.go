@@ -672,7 +672,7 @@ type MultiName struct {
 				continue
 			}
 			var parseErr error
-			entity, found, parseErr = parseStruct(typeSpec.Name.Name, st, map[string]bool{})
+			entity, found, parseErr = parseStruct(typeSpec.Name.Name, st, map[string]bool{}, false)
 			if parseErr != nil {
 				t.Fatalf("parseStruct returned unexpected error: %v", parseErr)
 			}
@@ -1133,5 +1133,63 @@ type Studio struct {
 	}
 	if pkg.SchemaImportPath != "example.com/root" {
 		t.Fatalf("expected SchemaImportPath = %q, got %q", "example.com/root", pkg.SchemaImportPath)
+	}
+}
+
+func TestParse_AllowsValueElementMultiEdgeWithOption(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "film.go"), `package schema
+
+type Film struct {
+	UID   string   `+"`json:\"uid,omitempty\"`"+`
+	DType []string `+"`json:\"dgraph.type,omitempty\"`"+`
+	Title string   `+"`json:\"title\"`"+`
+}
+`)
+	mustWriteFile(t, filepath.Join(dir, "studio.go"), `package schema
+
+type Studio struct {
+	UID   string   `+"`json:\"uid,omitempty\"`"+`
+	DType []string `+"`json:\"dgraph.type,omitempty\"`"+`
+	Films []Film   `+"`json:\"films,omitempty\"`"+`
+}
+`)
+
+	// Without the option: rejected (existing behavior).
+	if _, err := Parse(dir); err == nil {
+		t.Fatalf("Parse(dir) without option must reject value-element entity slice; got nil error")
+	}
+
+	// With the option: accepted.
+	pkg, err := Parse(dir, WithAllowValueElementEntitySlices())
+	if err != nil {
+		t.Fatalf("Parse(dir, WithAllowValueElementEntitySlices()) must accept value-element entity slice; got: %v", err)
+	}
+	if len(pkg.Entities) != 2 {
+		t.Fatalf("expected 2 entities (Studio, Film), got %d", len(pkg.Entities))
+	}
+}
+
+func TestParse_AllowsValueElementSingularViaListWithOption(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "director.go"), `package schema
+
+type Director struct {
+	UID   string   `+"`json:\"uid,omitempty\"`"+`
+	DType []string `+"`json:\"dgraph.type,omitempty\"`"+`
+	Name  string   `+"`json:\"name\"`"+`
+}
+`)
+	mustWriteFile(t, filepath.Join(dir, "studio.go"), `package schema
+
+type Studio struct {
+	UID         string     `+"`json:\"uid,omitempty\"`"+`
+	DType       []string   `+"`json:\"dgraph.type,omitempty\"`"+`
+	CurrentHead []Director `+"`json:\"current_head,omitempty\" validate:\"max=1\"`"+`
+}
+`)
+
+	if _, err := Parse(dir, WithAllowValueElementEntitySlices()); err != nil {
+		t.Fatalf("expected acceptance of value-element singular-via-list with option; got: %v", err)
 	}
 }

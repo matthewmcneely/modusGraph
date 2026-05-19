@@ -8,10 +8,10 @@ type Film struct {
 	Name               string          `json:"name,omitempty" dgraph:"index=hash,term,trigram,fulltext"`
 	InitialReleaseDate time.Time       `json:"initialReleaseDate,omitempty" dgraph:"predicate=initial_release_date index=year"`
 	Tagline            string          `json:"tagline,omitempty"`
-	Genres             []Genre         `json:"genres,omitempty" dgraph:"predicate=genre reverse count"`
-	Countries          []Country       `json:"countries,omitempty" dgraph:"predicate=country reverse"`
-	Ratings            []Rating        `json:"ratings,omitempty" dgraph:"predicate=rating reverse"`
-	ContentRatings     []ContentRating `json:"contentRatings,omitempty" dgraph:"predicate=rated reverse"`
-	Starring           []Performance   `json:"starring,omitempty" dgraph:"count"`
+	Genres             []*Genre         `json:"genres,omitempty" dgraph:"predicate=genre reverse count"`
+	Countries          []*Country       `json:"countries,omitempty" dgraph:"predicate=country reverse"`
+	Ratings            []*Rating        `json:"ratings,omitempty" dgraph:"predicate=rating reverse"`
+	ContentRatings     []*ContentRating `json:"contentRatings,omitempty" dgraph:"predicate=rated reverse"`
+	Starring           []*Performance   `json:"starring,omitempty" dgraph:"count"`
 	Directors          []*Director     `json:"directors,omitempty"` // Tests []*Entity edge detection (exported)
 }

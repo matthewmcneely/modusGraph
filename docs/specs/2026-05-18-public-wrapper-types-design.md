@@ -677,6 +677,20 @@ every entity-slice field with a single rule.
 (Scalar slices like `Tags []string` are unaffected — there are no wrappers
 to invalidate.)
 
+**The rule is wrapper-specific.** Upstream `dgman` supports both value-element
+and pointer-element entity slices natively (its own test schema declares both
+side by side). The pointer-slice requirement exists because the generated
+wrapper layer needs stable heap addresses to point at — a wrapper returned
+by `Get<Edge>()` captures a pointer that must remain valid after subsequent
+`Set<Edge>` calls reassign the underlying slice. Value-element slices can't
+provide stable per-element addresses; pointer-element slices can.
+
+When wrappers are not being generated (e.g., the user runs with
+`-no-entities` for raw-only schema-side clients), the rule does not apply.
+The parser's `Parse` function accepts a `WithAllowValueElementEntitySlices()`
+option that the generator's main entry point sets automatically when the
+`-no-entities` flag is in effect.
+
 ### Schema field exports
 
 All fields the generator cares about must be exported (public). The

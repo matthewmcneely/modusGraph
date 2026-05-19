@@ -17,6 +17,30 @@ import (
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/model"
 )
 
+// ParseOption configures a Parse call.
+type ParseOption func(*parseConfig)
+
+// parseConfig holds optional flags consumed by Parse and its helpers.
+type parseConfig struct {
+	allowValueElementEntitySlices bool
+}
+
+// WithAllowValueElementEntitySlices permits schema fields declared as
+// value-element entity slices (e.g., Films []Film, NOT Films []*Film).
+// Without this option, Parse rejects such fields because the generated
+// wrapper layer cannot safely return stable pointers to slice elements:
+// any setter that reassigns the slice (SetFilms, AppendFilms) silently
+// invalidates wrappers previously returned by accessors that captured
+// &slice[i].
+//
+// Pass this option only when the wrapper layer is NOT being generated
+// (e.g., main.go's -no-entities flag is set). Upstream dgman handles
+// both value-element and pointer-element entity slices natively for
+// raw schema-struct use; the restriction is wrapper-specific.
+func WithAllowValueElementEntitySlices() ParseOption {
+	return func(c *parseConfig) { c.allowValueElementEntitySlices = true }
+}
+
 // reservedWrapperMethods lists method names the generator emits on the
 // wrapper type. A schema field whose Set<Field>/<Field>() name collides
 // with one of these creates a compile-time shadow; the parser rejects it.
@@ -84,7 +108,12 @@ func checkReservedNames(entityName string, fields []model.Field) error {
 // to all entity-element slices (true multi-edges and singular-via-list)
 // because both can have wrapper-pointer-into-slice invalidation hazards.
 // Scalar slices (e.g., []string) and pointer-element slices ([]*X) are fine.
-func checkSliceOfEntityIsPointer(entityName, fieldName string, fieldType ast.Expr, structNames map[string]bool) error {
+// When allowValueElement is true the check is skipped entirely, permitting
+// value-element entity slices for callers that do not generate wrappers.
+func checkSliceOfEntityIsPointer(entityName, fieldName string, fieldType ast.Expr, structNames map[string]bool, allowValueElement bool) error {
+	if allowValueElement {
+		return nil
+	}
 	arrType, ok := fieldType.(*ast.ArrayType)
 	if !ok {
 		return nil // not a slice/array
@@ -109,7 +138,12 @@ func checkSliceOfEntityIsPointer(entityName, fieldName string, fieldType ast.Exp
 
 // Parse loads all Go source files in the directory at pkgDir, extracts exported
 // structs, and returns a model.Package with fully resolved entities and fields.
-func Parse(pkgDir string) (*model.Package, error) {
+func Parse(pkgDir string, opts ...ParseOption) (*model.Package, error) {
+	cfg := parseConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, pkgDir, nil, parser.ParseComments)
 	if err != nil {
@@ -167,7 +201,7 @@ func Parse(pkgDir string) (*model.Package, error) {
 					continue
 				}
 
-				entity, isEntity, err := parseStruct(typeSpec.Name.Name, structType, structNames)
+				entity, isEntity, err := parseStruct(typeSpec.Name.Name, structType, structNames, cfg.allowValueElementEntitySlices)
 				if err != nil {
 					return nil, err
 				}
@@ -226,7 +260,7 @@ func collectStructNames(pkg *ast.Package) map[string]bool {
 // true if the struct qualifies as an entity (has both UID and DType fields),
 // or a zero Entity and false otherwise. An error is returned if a field
 // violates a structural constraint (e.g., value-element entity slice).
-func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (model.Entity, bool, error) {
+func parseStruct(name string, st *ast.StructType, structNames map[string]bool, allowValueElement bool) (model.Entity, bool, error) {
 	var fields []model.Field
 	hasUID := false
 	hasDType := false
@@ -352,7 +386,7 @@ func parseStruct(name string, st *ast.StructType, structNames map[string]bool) (
 				field.IsReverse = true
 			}
 
-			if err := checkSliceOfEntityIsPointer(name, fieldName, f.Type, structNames); err != nil {
+			if err := checkSliceOfEntityIsPointer(name, fieldName, f.Type, structNames, allowValueElement); err != nil {
 				return model.Entity{}, false, err
 			}
 
