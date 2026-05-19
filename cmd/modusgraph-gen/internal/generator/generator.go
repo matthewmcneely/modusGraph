@@ -118,6 +118,9 @@ func Generate(pkg *model.Package, cfg Config) error {
 		"hasValidateTags":              hasValidateTags,
 		"fieldsWithValidation":         fieldsWithValidation,
 		"lcFirst":                      lcFirst,
+		"concat": func(a, b []model.Field) []model.Field {
+			return append(append([]model.Field{}, a...), b...)
+		},
 	}
 
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.tmpl")

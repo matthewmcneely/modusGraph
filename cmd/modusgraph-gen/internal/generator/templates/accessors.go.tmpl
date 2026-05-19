@@ -13,7 +13,13 @@ package {{ .EntityPackageName }}
 {{- $needsSlices := or (gt (len $multiEdges) 0) (gt (len $scalarSlices) 0) }}
 {{- $needsSchema := or (gt (len $pointerEdges) 0) (gt (len $valueEdges) 0) (gt (len $singularViaList) 0) (gt (len $multiEdges) 0) }}
 
-{{ if or $needsIter $needsSlices $needsSchema -}}
+{{- $needsTime := false }}
+{{- range $scalars }}{{ if contains .GoType "time." }}{{ $needsTime = true }}{{ end }}{{ end }}
+{{- range $scalarSlices }}{{ if contains .GoType "time." }}{{ $needsTime = true }}{{ end }}{{ end }}
+{{- $allScalarFields := concat $scalars $scalarSlices }}
+{{- $extImports := externalImports $allScalarFields .Imports }}
+
+{{ if or $needsIter $needsSlices $needsSchema $needsTime (gt (len $extImports) 0) -}}
 import (
 {{- if $needsIter }}
 	"iter"
@@ -21,9 +27,19 @@ import (
 {{- if $needsSlices }}
 	"slices"
 {{- end }}
+{{- if $needsTime }}
+	"time"
+{{- end }}
 {{- if $needsSchema }}
 
 	"{{ .SchemaImportPath }}"
+{{- end }}
+{{- range $extImports }}
+	{{- if .Alias }}
+	{{ .Alias }} "{{ .Path }}"
+	{{- else }}
+	"{{ .Path }}"
+	{{- end }}
 {{- end }}
 )
 {{- end }}
