@@ -5,7 +5,7 @@ package movies
 import (
 	"github.com/matthewmcneely/modusgraph"
 
-	"github.com/mlwelles/modusGraphMoviesProject/schema"
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // Client is a top-level wrapper-side client. Holds a schema.Client

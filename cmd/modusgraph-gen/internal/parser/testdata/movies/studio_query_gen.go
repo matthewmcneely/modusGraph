@@ -2,7 +2,7 @@
 
 package movies
 
-import "github.com/mlwelles/modusGraphMoviesProject/schema"
+import "github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 
 // StudioQuery is the wrapper-side query builder. Composes over
 // schema.StudioQuery; terminal methods wrap results before returning.

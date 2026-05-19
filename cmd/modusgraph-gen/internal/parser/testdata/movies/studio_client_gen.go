@@ -7,7 +7,7 @@ import (
 
 	"github.com/matthewmcneely/modusgraph"
 
-	"github.com/mlwelles/modusGraphMoviesProject/schema"
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // StudioClient wraps a schema.StudioClient and exposes the same

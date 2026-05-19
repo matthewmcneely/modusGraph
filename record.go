@@ -15,7 +15,7 @@ type Schema interface {
 	SchemaTypeName() string
 }
 
-// unwrapSchema returns the schema-defining record contained in obj. If obj
+// UnwrapSchema returns the schema-defining record contained in obj. If obj
 // is nil, it is returned as-is. If obj is already a Schema, it is returned
 // as-is. If obj exposes an Unwrap() method whose return value satisfies
 // Schema, that return is substituted. Otherwise obj is returned unchanged.
@@ -26,12 +26,12 @@ type Schema interface {
 // modusgraph users' plain structs) pass through untouched.
 //
 // Note on errors.Unwrap overlap: Go's errors package uses Unwrap() error
-// as the standard "give me the wrapped thing" method. unwrapSchema's
+// as the standard "give me the wrapped thing" method. UnwrapSchema's
 // secondary check (the returned value must itself implement Schema) means
 // an error wrapper is not mistaken for a modusgraph wrapper — the
 // reflection probe finds Unwrap(), calls it, gets an error, fails the
 // Schema check, and returns the original obj.
-func unwrapSchema(obj any) any {
+func UnwrapSchema(obj any) any {
 	if obj == nil {
 		return obj
 	}

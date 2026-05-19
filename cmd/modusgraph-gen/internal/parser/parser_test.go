@@ -683,7 +683,7 @@ func TestReadModulePath(t *testing.T) {
 	t.Run("FromMoviesProject", func(t *testing.T) {
 		dir := moviesDir(t)
 		got := readModulePath(dir)
-		want := "github.com/mlwelles/modusGraphMoviesProject"
+		want := "github.com/matthewmcneely/modusgraph"
 		if got != want {
 			t.Errorf("readModulePath(%s) = %q, want %q", dir, got, want)
 		}
@@ -760,8 +760,8 @@ func TestModulePathPopulated(t *testing.T) {
 		t.Fatalf("Parse(%s) failed: %v", dir, err)
 	}
 
-	if pkg.ModulePath != "github.com/mlwelles/modusGraphMoviesProject" {
-		t.Errorf("ModulePath = %q, want %q", pkg.ModulePath, "github.com/mlwelles/modusGraphMoviesProject")
+	if pkg.ModulePath != "github.com/matthewmcneely/modusgraph" {
+		t.Errorf("ModulePath = %q, want %q", pkg.ModulePath, "github.com/matthewmcneely/modusgraph")
 	}
 }
 

@@ -2,7 +2,7 @@
 
 package movies
 
-import "github.com/mlwelles/modusGraphMoviesProject/schema"
+import "github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 
 // FilmQuery is the wrapper-side query builder. Composes over
 // schema.FilmQuery; terminal methods wrap results before returning.

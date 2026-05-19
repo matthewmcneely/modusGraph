@@ -8,7 +8,7 @@ import (
 	"time"
 
 	dg "github.com/dolan-in/dgman/v2"
-	"github.com/mlwelles/modusGraphMoviesProject/schema"
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // Name returns the name field.

@@ -17,7 +17,7 @@ type fakeNonSchema struct{ X string }
 
 func TestUnwrapSchema_PassthroughForPlainStruct(t *testing.T) {
 	in := &fakeNonSchema{X: "hi"}
-	out := unwrapSchema(in)
+	out := UnwrapSchema(in)
 	if out != any(in) {
 		t.Fatalf("expected passthrough, got %T", out)
 	}
@@ -25,7 +25,7 @@ func TestUnwrapSchema_PassthroughForPlainStruct(t *testing.T) {
 
 func TestUnwrapSchema_PassthroughForSchemaStruct(t *testing.T) {
 	in := &fakeRecord{name: "Studio"}
-	out := unwrapSchema(in)
+	out := UnwrapSchema(in)
 	if out != any(in) {
 		t.Fatalf("expected passthrough for direct Schema, got %T", out)
 	}
@@ -34,7 +34,7 @@ func TestUnwrapSchema_PassthroughForSchemaStruct(t *testing.T) {
 func TestUnwrapSchema_UnwrapsWrapper(t *testing.T) {
 	inner := &fakeRecord{name: "Studio"}
 	w := &fakeWrapper{inner: inner}
-	out := unwrapSchema(w)
+	out := UnwrapSchema(w)
 	if out != any(inner) {
 		t.Fatalf("expected unwrapped inner, got %T (%v)", out, out)
 	}
@@ -44,7 +44,7 @@ func TestUnwrapSchema_IgnoresErrorsUnwrap(t *testing.T) {
 	// errors.New("x") has no Unwrap; wrap one to get something with Unwrap() error.
 	inner := errors.New("inner")
 	outer := &wrappedErr{err: inner}
-	out := unwrapSchema(outer)
+	out := UnwrapSchema(outer)
 	if out != any(outer) {
 		t.Fatalf("expected passthrough for error wrapper, got %T", out)
 	}
@@ -56,7 +56,7 @@ func (w *wrappedErr) Error() string { return w.err.Error() }
 func (w *wrappedErr) Unwrap() error { return w.err }
 
 func TestUnwrapSchema_NilInput(t *testing.T) {
-	if out := unwrapSchema(nil); out != nil {
+	if out := UnwrapSchema(nil); out != nil {
 		t.Fatalf("expected nil for nil input, got %v", out)
 	}
 }
@@ -64,14 +64,14 @@ func TestUnwrapSchema_NilInput(t *testing.T) {
 // recordingClient is the minimal surface needed to verify that wrappers
 // passed to the Client interface get unwrapped before reaching internal
 // reflection. It records whatever it received and returns nil. Each method
-// applies obj = unwrapSchema(obj) at the top, mirroring the patch landing
+// applies obj = UnwrapSchema(obj) at the top, mirroring the patch landing
 // in this task.
 type recordingClient struct {
 	seen []any
 }
 
 func (c *recordingClient) capture(obj any) any {
-	obj = unwrapSchema(obj)
+	obj = UnwrapSchema(obj)
 	c.seen = append(c.seen, obj)
 	return obj
 }
@@ -106,7 +106,7 @@ func TestUnwrapSchema_VariadicUnwrapsEachElement(t *testing.T) {
 		innerB, // already a Schema; passthrough
 	}
 	for i, obj := range templates {
-		templates[i] = unwrapSchema(obj)
+		templates[i] = UnwrapSchema(obj)
 	}
 	if templates[0] != any(innerA) {
 		t.Fatalf("template[0]: expected innerA, got %T", templates[0])

@@ -15,7 +15,9 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/matthewmcneely/modusgraph"
-	"github.com/mlwelles/modusGraphMoviesProject/schema"
+	"github.com/matthewmcneely/modusgraph/schema"
+
+	dg "github.com/dolan-in/dgman/v2"
 )
 
 // CLI is the root command parsed by Kong.

@@ -2,7 +2,7 @@
 
 package movies
 
-import "github.com/mlwelles/modusGraphMoviesProject/schema"
+import "github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 
 // DirectorQuery is the wrapper-side query builder. Composes over
 // schema.DirectorQuery; terminal methods wrap results before returning.

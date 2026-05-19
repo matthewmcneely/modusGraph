@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 
-	"github.com/mlwelles/modusGraphMoviesProject/schema"
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // ContentRating wraps a schema.ContentRating and exposes its data through

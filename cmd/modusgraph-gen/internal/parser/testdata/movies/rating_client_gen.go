@@ -7,7 +7,7 @@ import (
 
 	"github.com/matthewmcneely/modusgraph"
 
-	"github.com/mlwelles/modusGraphMoviesProject/schema"
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // RatingClient wraps a schema.RatingClient and exposes the same
