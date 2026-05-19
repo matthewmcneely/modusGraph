@@ -1627,7 +1627,7 @@ type Studio struct {
 	// Multi-edge
 	for _, want := range []string{
 		`func (e *Studio) Films() []*Film {`,
-		`func (e *Studio) FilmSeq() iter.Seq[*Film]`,
+		`func (e *Studio) FilmsSeq() iter.Seq[*Film]`,
 		`func (e *Studio) SetFilms(items ...*Film)`,
 		`func (e *Studio) AppendFilms(items ...*Film)`,
 		`func (e *Studio) RemoveFilms(uids ...string)`,
@@ -1646,6 +1646,15 @@ type Studio struct {
 		if !strings.Contains(data, want) {
 			t.Errorf("scalar-slice accessor missing: %q", want)
 		}
+	}
+
+	// Scalar slice must not also appear in the scalar block — that would
+	// emit duplicate Get/Set declarations and break the build.
+	if n := strings.Count(data, "func (e *Studio) Tags() []string"); n != 1 {
+		t.Errorf("Tags() must appear exactly once; got %d duplicates", n)
+	}
+	if n := strings.Count(data, "func (e *Studio) SetTags(v []string)"); n != 1 {
+		t.Errorf("SetTags() must appear exactly once; got %d duplicates", n)
 	}
 
 	// Negative: NO UID/DType getter/setter (entity.go.tmpl already provides those).

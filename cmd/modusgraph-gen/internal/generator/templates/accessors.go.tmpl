@@ -2,7 +2,7 @@ package {{ .EntityPackageName }}
 {{- $E := .Entity.Name }}
 {{- $sAlias := .SchemaAlias }}
 
-{{- $scalars := scalarFields .Entity.Fields }}
+{{- $scalars := nonSliceScalarFields .Entity.Fields }}
 {{- $pointerEdges := allPointerSingularEdgeFields .Entity.Fields }}
 {{- $valueEdges := allValueSingularEdgeFields .Entity.Fields }}
 {{- $singularViaList := allSingularViaListFields .Entity.Fields }}
@@ -115,9 +115,9 @@ func (e *{{ $E }}) {{ .Name }}() []*{{ $bare }} {
 	return out
 }
 
-// {{ $bare }}Seq returns an iterator over the wrapped {{ $bare }}s, avoiding
+// {{ .Name }}Seq returns an iterator over the wrapped {{ $bare }}s, avoiding
 // the allocation in {{ .Name }}().
-func (e *{{ $E }}) {{ $bare }}Seq() iter.Seq[*{{ $bare }}] {
+func (e *{{ $E }}) {{ .Name }}Seq() iter.Seq[*{{ $bare }}] {
 	return func(yield func(*{{ $bare }}) bool) {
 		for _, x := range e.s.{{ .Name }} {
 			if !yield(&{{ $bare }}{s: x}) {

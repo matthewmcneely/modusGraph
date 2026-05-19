@@ -366,13 +366,14 @@ func (e *Studio) Films() []*Film {
     return out
 }
 
-func (e *Studio) FilmSeq() iter.Seq[*Film] {
+func (e *Studio) FilmsSeq() iter.Seq[*Film] {
     return func(yield func(*Film) bool) {
         for _, f := range e.s.Films {
             if !yield(&Film{s: f}) { return }
         }
     }
 }
+// The Seq method takes the field name as its prefix (not the entity name), so multiple multi-edges to the same entity don't collide.
 
 func (e *Studio) SetFilms(films ...*Film) {
     e.s.Films = make([]*schema.Film, len(films))
