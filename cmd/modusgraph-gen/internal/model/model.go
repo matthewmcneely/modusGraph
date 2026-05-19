@@ -5,12 +5,13 @@ package model
 
 // Package represents the fully parsed target package and all its entities.
 type Package struct {
-	Name          string            // Go package name, e.g. "movies"
-	ModulePath    string            // Full module path, e.g. "github.com/mlwelles/modusGraphMoviesProject"
-	Imports       map[string]string // Package alias → import path, e.g. "enums" → "github.com/.../enums"
-	Entities      []Entity          // All detected entities (structs with UID + DType)
-	CLIName       string            // Name for CLI binary (kong.Name), defaults to Name if empty
-	WithValidator bool              // Whether the generated CLI enables struct validation
+	Name             string            // Go package name, e.g. "movies"
+	ModulePath       string            // Full module path, e.g. "github.com/mlwelles/modusGraphMoviesProject"
+	SchemaImportPath string            // Full Go import path for the schema pkg, e.g. "example.com/proj/movies/schema"
+	Imports          map[string]string // Package alias → import path, e.g. "enums" → "github.com/.../enums"
+	Entities         []Entity          // All detected entities (structs with UID + DType)
+	CLIName          string            // Name for CLI binary (kong.Name), defaults to Name if empty
+	WithValidator    bool              // Whether the generated CLI enables struct validation
 }
 
 // Entity represents a single Dgraph type derived from a Go struct.

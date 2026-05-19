@@ -189,10 +189,11 @@ func Parse(pkgDir string) (*model.Package, error) {
 	modulePath := readModulePath(pkgDir)
 
 	return &model.Package{
-		Name:       pkgName,
-		ModulePath: modulePath,
-		Imports:    imports,
-		Entities:   entities,
+		Name:             pkgName,
+		ModulePath:       modulePath,
+		SchemaImportPath: resolveSchemaImportPath(pkgDir),
+		Imports:          imports,
+		Entities:         entities,
 	}, nil
 }
 
@@ -430,6 +431,54 @@ func readModulePath(pkgDir string) string {
 		dir = parent
 	}
 	return ""
+}
+
+// resolveModuleInfo walks up from absDir looking for a go.mod file. When
+// found, it returns the module path declared inside and the absolute
+// directory where go.mod lives. If no go.mod is found within 10 ancestor
+// directories, returns empty strings (no error — matches readModulePath's
+// silent-empty contract).
+func resolveModuleInfo(absDir string) (modulePath, modRoot string) {
+	dir := absDir
+	for i := 0; i < 10; i++ {
+		modPath := filepath.Join(dir, "go.mod")
+		if data, err := os.ReadFile(modPath); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "module ") {
+					return strings.TrimSpace(strings.TrimPrefix(line, "module ")), dir
+				}
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", ""
+}
+
+// resolveSchemaImportPath returns the full Go import path for pkgDir by
+// composing the enclosing module's path with the directory's path relative
+// to the module root. Returns an empty string if no go.mod was found.
+func resolveSchemaImportPath(pkgDir string) string {
+	abs, err := filepath.Abs(pkgDir)
+	if err != nil {
+		return ""
+	}
+	modulePath, modRoot := resolveModuleInfo(abs)
+	if modulePath == "" {
+		return ""
+	}
+	rel, err := filepath.Rel(modRoot, abs)
+	if err != nil {
+		return ""
+	}
+	if rel == "." {
+		return modulePath
+	}
+	return modulePath + "/" + filepath.ToSlash(rel)
 }
 
 // parseDgraphTag parses a dgraph struct tag value into its component parts and

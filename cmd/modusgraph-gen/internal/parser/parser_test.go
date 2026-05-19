@@ -1081,3 +1081,57 @@ type Studio struct {
 		t.Fatalf("expected 1 entity, got %d", len(pkg.Entities))
 	}
 }
+
+func TestParse_ResolvesSchemaImportPath(t *testing.T) {
+	// Lay out a temp module to verify import-path resolution.
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "go.mod"), "module example.com/proj\n\ngo 1.25\n")
+	schemaDir := filepath.Join(root, "movies", "schema")
+	if err := os.MkdirAll(schemaDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	mustWriteFile(t, filepath.Join(schemaDir, "studio.go"), `package schema
+
+type Studio struct {
+	UID   string   `+"`json:\"uid,omitempty\"`"+`
+	DType []string `+"`json:\"dgraph.type,omitempty\"`"+`
+	Name  string   `+"`json:\"name\"`"+`
+}
+`)
+
+	pkg, err := Parse(schemaDir)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	want := "example.com/proj/movies/schema"
+	if pkg.SchemaImportPath != want {
+		t.Fatalf("expected SchemaImportPath = %q, got %q", want, pkg.SchemaImportPath)
+	}
+	// The schema package's Go-source `package` clause is "schema"; the
+	// existing Name field captures it, so we also verify that didn't drift.
+	if pkg.Name != "schema" {
+		t.Fatalf("expected pkg.Name = %q, got %q", "schema", pkg.Name)
+	}
+}
+
+func TestParse_SchemaImportPathAtModuleRoot(t *testing.T) {
+	// When the schema dir IS the module root, the import path equals the
+	// module path with no suffix.
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "go.mod"), "module example.com/root\n\ngo 1.25\n")
+	mustWriteFile(t, filepath.Join(root, "studio.go"), `package schema
+
+type Studio struct {
+	UID   string   `+"`json:\"uid,omitempty\"`"+`
+	DType []string `+"`json:\"dgraph.type,omitempty\"`"+`
+}
+`)
+
+	pkg, err := Parse(root)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if pkg.SchemaImportPath != "example.com/root" {
+		t.Fatalf("expected SchemaImportPath = %q, got %q", "example.com/root", pkg.SchemaImportPath)
+	}
+}
