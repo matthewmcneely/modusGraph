@@ -1531,3 +1531,38 @@ func mustReadGen(t *testing.T, outDir, name string) string {
 	}
 	return string(data)
 }
+
+func TestGenerate_EntityWrapperStruct(t *testing.T) {
+	_, outDir := generateFromMinimalSchema(t)
+	data := mustReadGen(t, outDir, "studio_gen.go")
+	for _, want := range []string{
+		`package entity`,     // placeholder package name from EntityPackageName="entity"
+		`"example.com/test"`, // schema import path resolved from go.mod (module is example.com/test; schema dir IS the module root in the minimal fixture, so import path == module path)
+		`type Studio struct {`,
+		`s *schema.Studio`, // SchemaAlias="schema" (the package name of the parsed dir)
+		`func NewStudio(opts ...StudioOption) *Studio {`,
+		`func WrapStudio(s *schema.Studio, opts ...StudioOption) *Studio {`,
+		`func (e *Studio) Unwrap() *schema.Studio { return e.s }`,
+		`func (e *Studio) UID() string { return e.s.UID }`,
+		`func (e *Studio) SetUID(v string)`,
+		`func (e *Studio) DType() []string { return e.s.DType }`,
+		`func (e *Studio) SetDType(v []string)`,
+		`func (e *Studio) Validate(ctx context.Context, v *validator.Validate) error`,
+		`func (e *Studio) MarshalJSON() ([]byte, error)`,
+		`func (e *Studio) UnmarshalJSON(data []byte) error`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Errorf("studio_gen.go missing expected content: %q\n---file---\n%s", want, data)
+		}
+	}
+
+	// Negative: the rewritten template MUST NOT emit a <E>Client (that's now in schema_entity_client.go.tmpl).
+	for _, notWant := range []string{
+		`type StudioClient struct {`,
+		`func (c *StudioClient) Get(`,
+	} {
+		if strings.Contains(data, notWant) {
+			t.Errorf("studio_gen.go must NOT include Client (now in schema-side template); found: %q", notWant)
+		}
+	}
+}

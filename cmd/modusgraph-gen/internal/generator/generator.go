@@ -129,18 +129,24 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 
 	// Per-entity templates.
 	type entityData struct {
-		PackageName string
-		Entity      model.Entity
-		Entities    []model.Entity
-		Imports     map[string]string // Package alias → import path
+		PackageName       string
+		Entity            model.Entity
+		Entities          []model.Entity
+		Imports           map[string]string // Package alias → import path
+		EntityPackageName string            // Go package name for wrapper files; placeholder "entity" until Task 15 wires flag-based resolution.
+		SchemaAlias       string            // Import alias for the schema package, used in references like "<alias>.Studio".
+		SchemaImportPath  string            // Full Go import path for the schema package.
 	}
 
 	for _, entity := range pkg.Entities {
 		data := entityData{
-			PackageName: pkg.Name,
-			Entity:      entity,
-			Entities:    pkg.Entities,
-			Imports:     pkg.Imports,
+			PackageName:       pkg.Name,
+			Entity:            entity,
+			Entities:          pkg.Entities,
+			Imports:           pkg.Imports,
+			EntityPackageName: "entity",             // PLACEHOLDER for intermediate state; Task 15 replaces with real flag-derived value.
+			SchemaAlias:       pkg.Name,             // schema package's declared name
+			SchemaImportPath:  pkg.SchemaImportPath, // resolved by parser (Task 7)
 		}
 		snake := toSnakeCase(entity.Name)
 

@@ -1,85 +1,80 @@
-package {{.PackageName}}
-{{$name := .Entity.Name}}
-{{$hasPrivate := hasPrivateFields .Entity.Fields}}
+package {{ .EntityPackageName }}
+
 import (
 	"context"
+	"encoding/json"
 
-	"github.com/matthewmcneely/modusgraph"
+	"github.com/go-playground/validator/v10"
+
+	"{{ .SchemaImportPath }}"
 )
 
-// {{$name}}Client provides typed CRUD operations for {{$name}} entities.
-type {{$name}}Client struct {
-	conn modusgraph.Client
+{{- $E := .Entity.Name }}
+{{- $sAlias := .SchemaAlias }}
+
+// {{ $E }} wraps a {{ $sAlias }}.{{ $E }} and exposes its data through
+// methods. The backing schema struct is held in s; the only way to obtain
+// it is via Unwrap(). All mutation goes through generated setters that
+// write to s, so the wrapper has no state of its own.
+type {{ $E }} struct {
+	s *{{ $sAlias }}.{{ $E }}
 }
 
-// Get retrieves a single {{$name}} by its UID.
-func (c *{{$name}}Client) Get(ctx context.Context, uid string) (*{{$name}}, error) {
-	var result {{$name}}
-	err := c.conn.Get(ctx, &result, uid)
-	if err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// Add inserts a new {{$name}} into the database.
-func (c *{{$name}}Client) Add(ctx context.Context, v *{{$name}}) error {
-	return c.conn.Insert(ctx, v)
-}
-
-// Update modifies an existing {{$name}} in the database. The UID field must be set.
-func (c *{{$name}}Client) Update(ctx context.Context, v *{{$name}}) error {
-	return c.conn.Update(ctx, v)
-}
-
-// Delete removes the {{$name}} with the given UID from the database.
-func (c *{{$name}}Client) Delete(ctx context.Context, uid string) error {
-	return c.conn.Delete(ctx, []string{uid})
-}
-{{if .Entity.Searchable}}
-// Search finds {{$name}} entities whose {{.Entity.SearchField}} matches term using fulltext search.
-func (c *{{$name}}Client) Search(ctx context.Context, term string, opts ...PageOption) ([]{{$name}}, error) {
-	cfg := pageConfig{first: defaultPageSize}
+// New{{ $E }} constructs a {{ $E }} with a fresh, empty schema struct inside,
+// then applies the given options.
+func New{{ $E }}(opts ...{{ $E }}Option) *{{ $E }} {
+	e := &{{ $E }}{s: &{{ $sAlias }}.{{ $E }}{}}
 	for _, opt := range opts {
-		opt.applyPage(&cfg)
+		opt(e)
 	}
-	var results []{{$name}}
-{{- if $hasPrivate}}
-	q := c.conn.Query(ctx, &{{$name}}{}).
-{{- else}}
-	q := c.conn.Query(ctx, {{$name}}{}).
-{{- end}}
-		Filter(`alloftext({{searchPredicate .Entity}}, "` + term + `")`).
-		First(cfg.first)
-	if cfg.offset > 0 {
-		q = q.Offset(cfg.offset)
-	}
-	err := q.Nodes(&results)
-	if err != nil {
-		return nil, err
-	}
-	return results, nil
+	return e
 }
-{{end}}
-// List retrieves {{$name}} entities with optional pagination.
-func (c *{{$name}}Client) List(ctx context.Context, opts ...PageOption) ([]{{$name}}, error) {
-	cfg := pageConfig{first: defaultPageSize}
+
+// Wrap{{ $E }} constructs a {{ $E }} backed by the given schema struct, then
+// applies the given options. The wrapper holds s directly — no defensive copy.
+// Mutations through {{ $E }}'s setters write to s.
+func Wrap{{ $E }}(s *{{ $sAlias }}.{{ $E }}, opts ...{{ $E }}Option) *{{ $E }} {
+	e := &{{ $E }}{s: s}
 	for _, opt := range opts {
-		opt.applyPage(&cfg)
+		opt(e)
 	}
-	var results []{{$name}}
-{{- if $hasPrivate}}
-	q := c.conn.Query(ctx, &{{$name}}{}).
-{{- else}}
-	q := c.conn.Query(ctx, {{$name}}{}).
-{{- end}}
-		First(cfg.first)
-	if cfg.offset > 0 {
-		q = q.Offset(cfg.offset)
+	return e
+}
+
+// Unwrap returns the backing schema struct. modusgraph.Client uses this
+// (via reflection) to substitute the schema struct when a wrapper is
+// passed across the boundary.
+func (e *{{ $E }}) Unwrap() *{{ $sAlias }}.{{ $E }} { return e.s }
+
+// UID returns the entity's UID bookkeeping field.
+func (e *{{ $E }}) UID() string { return e.s.UID }
+
+// SetUID sets the entity's UID bookkeeping field.
+func (e *{{ $E }}) SetUID(v string) { e.s.UID = v }
+
+// DType returns the entity's dgraph type list.
+func (e *{{ $E }}) DType() []string { return e.s.DType }
+
+// SetDType sets the entity's dgraph type list.
+func (e *{{ $E }}) SetDType(v []string) { e.s.DType = v }
+
+// Validate runs v against the backing schema struct. The validator's tag
+// processing sees the schema struct's public fields directly.
+func (e *{{ $E }}) Validate(ctx context.Context, v *validator.Validate) error {
+	return v.StructCtx(ctx, e.s)
+}
+
+// MarshalJSON delegates to the schema struct, whose public fields and
+// json tags produce the correct serialization.
+func (e *{{ $E }}) MarshalJSON() ([]byte, error) {
+	return json.Marshal(e.s)
+}
+
+// UnmarshalJSON lazily initializes the backing schema struct if needed,
+// then delegates. Safe to call on a zero-value *{{ $E }}.
+func (e *{{ $E }}) UnmarshalJSON(data []byte) error {
+	if e.s == nil {
+		e.s = &{{ $sAlias }}.{{ $E }}{}
 	}
-	err := q.Nodes(&results)
-	if err != nil {
-		return nil, err
-	}
-	return results, nil
+	return json.Unmarshal(data, e.s)
 }
