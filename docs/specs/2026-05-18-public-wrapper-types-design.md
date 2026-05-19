@@ -913,7 +913,7 @@ Three categories: inputs, outputs, toggles.
 | Flag | Default | What it controls |
 |---|---|---|
 | `-schema-client-dir` | same as `-schema-dir` | Where the schema-level CRUD clients (`schema.StudioClient`, etc.) and the schema-level query builders are written. Default puts them alongside the schema types they operate on. |
-| `-wrapper-dir` | `.` (CWD) when `-schema-dir` resolved to `./schema/`; `./entity/` (sibling of the schema files) when `-schema-dir` resolved to `.` | Where the wrapper types and accessors are written. The default depends on whether the `//go:generate` stub lives in the schema directory itself (→ `./entity/`) or in the parent of a `./schema/` subdir (→ `.`). |
+| `-wrapper-dir` | `./entity/` when the resolved `-schema-dir` equals CWD (i.e., the schema structs live in the same directory `//go:generate` was invoked from); `.` (CWD) otherwise | Where the wrapper types and accessors are written. The condition is checked against the resolved schema-dir (explicit or default), so explicit `-schema-dir .` triggers `./entity/` exactly the same way the unflagged schema-local case does. |
 | `-wrapper-client-dir` | same as `-wrapper-dir` | Where the wrapper-level CRUD clients (`movies.StudioClient`, etc.) and the wrapper-level query builders are written. Default puts them alongside the wrapper types they operate on. |
 | `-cli-dir` | `./cmd/<pkg>` | Output directory for the Kong CLI. Unchanged. |
 | `-out` | matches `-wrapper-dir` default | *Deprecated alias* for `-wrapper-dir`. Accepted for backward compatibility with the unflagged default invocation. |
@@ -938,18 +938,35 @@ Three categories: inputs, outputs, toggles.
 The `//go:generate` directive can live in either of two natural places, and
 the unflagged defaults adapt to which one you pick:
 
-- **Wrapper-parent layout** — `generate.go` in the parent of `./schema/`.
-  CWD has a `./schema/` subdir; that subdir holds schema files. Defaults
-  resolve to `-schema-dir ./schema` and `-wrapper-dir .` so wrappers land
-  next to the generate stub.
+- **Wrapper-parent layout** — `generate.go` in the parent of a schema
+  subdir. CWD has a `./schema/` subdir; that subdir holds schema files.
+  Unflagged defaults resolve to `-schema-dir ./schema` and `-wrapper-dir .`
+  so wrappers land next to the generate stub.
 - **Schema-local layout** — `generate.go` alongside schema files in the
-  schema directory itself. CWD has no `./schema/` subdir; the schema files
-  are CWD. Defaults resolve to `-schema-dir .` and `-wrapper-dir ./entity/`
-  so wrappers land in a sibling `entity/` subpackage.
+  schema directory itself. CWD has no `./schema/` subdir, so the unflagged
+  default for `-schema-dir` falls back to `.` (CWD). Since the resolved
+  schema-dir now equals CWD, `-wrapper-dir` defaults to `./entity/`
+  so wrappers land in a sibling subpackage.
 
-The probe is "does CWD contain a directory named `schema`?" — no inspection
-of file contents, no guessing. Users who want different paths can override
-any flag explicitly.
+Two separate defaulting steps, applied in order:
+
+1. **`-schema-dir` default.** If `./schema/` exists in CWD, default
+   `-schema-dir` to `./schema`. Otherwise default it to `.`. This step
+   exists only so the unflagged case finds the schema files in either
+   layout; an explicit `-schema-dir` skips this step entirely.
+2. **`-wrapper-dir` default.** Whatever `-schema-dir` resolved to
+   (explicit or defaulted), compare its absolute path to CWD. If they
+   match (schema files live in CWD), default `-wrapper-dir` to
+   `./entity/`. Otherwise default it to `.`. This is the rule that
+   actually controls where wrappers land, and it works the same way
+   regardless of how schema-dir was supplied.
+
+The wrapper-dir condition is therefore "are the schema structs in the
+same directory `//go:generate` was invoked from?" — measured directly on
+the resolved schema-dir, not by inspecting subdirectory names. Explicit
+`-schema-dir .` triggers `./entity/` exactly the same way the unflagged
+schema-local case does. Users who want different paths can override any
+flag explicitly.
 
 **Common layouts and the flags that produce them:**
 
@@ -960,7 +977,9 @@ movies/
   schema/                     types + markers + schema.StudioClient
   *_gen.go                    wrappers + accessors + movies.StudioClient
 
-# CWD when generate runs: movies/   (./schema/ exists, so wrapper default is .)
+# CWD when generate runs: movies/
+# Resolved -schema-dir: movies/schema/ (not equal to CWD)
+# → wrapper default: . (CWD)
 # Flags: (none — defaults are sufficient)
 ```
 
@@ -975,7 +994,9 @@ movies/
     entity/
       studio_gen.go           wrappers + accessors + entity.StudioClient
 
-# CWD when generate runs: movies/schema/   (no ./schema/ subdir, so wrapper default is ./entity/)
+# CWD when generate runs: movies/schema/
+# Resolved -schema-dir: . → movies/schema/ (equal to CWD)
+# → wrapper default: ./entity/
 # Flags: (none — defaults are sufficient)
 # Wrapper package name defaults to "entity" — consumers do
 #   import "example.com/proj/movies/schema/entity"
