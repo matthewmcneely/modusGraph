@@ -33,6 +33,15 @@ func applyInference(entity *model.Entity) {
 		if isStringType(f.GoType) && hasIndex(f.Indexes, "fulltext") {
 			entity.Searchable = true
 			entity.SearchField = f.Name
+			// Mirror SearchField as the JSON predicate name for the template marker.
+			if entity.SearchField != "" {
+				for _, sf := range entity.Fields {
+					if sf.Name == entity.SearchField {
+						entity.SearchPredicate = sf.JSONTag
+						break
+					}
+				}
+			}
 			break // Use the first one found.
 		}
 	}

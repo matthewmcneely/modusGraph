@@ -16,10 +16,11 @@ type Package struct {
 
 // Entity represents a single Dgraph type derived from a Go struct.
 type Entity struct {
-	Name        string  // Go struct name, e.g. "Film"
-	Fields      []Field // All mapped fields from the struct (exported and private, excluding skipped)
-	Searchable  bool    // True if the entity has a string field with index=fulltext
-	SearchField string  // Name of the field with fulltext index (empty if not searchable)
+	Name            string  // Go struct name, e.g. "Film"
+	Fields          []Field // All mapped fields from the struct (exported and private, excluding skipped)
+	Searchable      bool    // True if the entity has a string field with index=fulltext
+	SearchField     string  // Name of the field with fulltext index (empty if not searchable)
+	SearchPredicate string  // Predicate name (json tag value) of the SearchField, empty if Searchable is false.
 }
 
 // Field represents a single mapped field within an entity struct.

@@ -115,6 +115,13 @@ func Generate(pkg *model.Package, outputDir string, opts ...GenerateOption) erro
 		return err
 	}
 
+	// 4. schema_marker.go.tmpl → marker_gen.go (once per package)
+	// Always emitted — the marker is needed for unwrap dispatch regardless of
+	// which clients are generated.
+	if err := executeAndWrite(tmpl, "schema_marker.go.tmpl", pkg, filepath.Join(outputDir, "marker_gen.go")); err != nil {
+		return err
+	}
+
 	// Per-entity templates.
 	type entityData struct {
 		PackageName string

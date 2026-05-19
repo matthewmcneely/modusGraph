@@ -1314,3 +1314,92 @@ func TestGeneratedAccessorsNotForExportedOnlyEntities(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerate_EmitsSchemaMarkerFile(t *testing.T) {
+	// Lay out a temp schema package and run the generator against it.
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"), []byte("module example.com/test\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+	studio := `package schema
+
+type Studio struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Name  string   ` + "`json:\"name\" dgraph:\"index=fulltext\"`" + `
+}
+`
+	if err := os.WriteFile(filepath.Join(srcDir, "studio.go"), []byte(studio), 0o644); err != nil {
+		t.Fatalf("writing studio.go: %v", err)
+	}
+
+	pkg, err := parser.Parse(srcDir)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	outDir := t.TempDir()
+	if err := Generate(pkg, outDir); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(outDir, "marker_gen.go"))
+	if err != nil {
+		t.Fatalf("reading marker_gen.go: %v", err)
+	}
+	out := string(data)
+
+	for _, want := range []string{
+		`package schema`,
+		`func (*Studio) SchemaTypeName() string { return "Studio" }`,
+		`func (*Studio) SchemaPredicates() []string`,
+		`"name"`,
+		`func (*Studio) SchemaSearchPredicate() string { return "name" }`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("marker_gen.go missing expected content: %q\n---file---\n%s", want, out)
+		}
+	}
+
+	// Negative: uid and dgraph.type must NOT appear inside the predicates list.
+	for _, notWant := range []string{`"uid"`, `"dgraph.type"`} {
+		if strings.Contains(out, notWant) {
+			t.Errorf("marker_gen.go must not include bookkeeping predicate %q in SchemaPredicates", notWant)
+		}
+	}
+}
+
+func TestGenerate_SchemaMarkerNoSearchPredicate(t *testing.T) {
+	// An entity with no fulltext-indexed field should emit `return ""`.
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"), []byte("module example.com/test\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+	src := `package schema
+
+type Plain struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Label string   ` + "`json:\"label\"`" + `
+}
+`
+	if err := os.WriteFile(filepath.Join(srcDir, "plain.go"), []byte(src), 0o644); err != nil {
+		t.Fatalf("writing plain.go: %v", err)
+	}
+
+	pkg, err := parser.Parse(srcDir)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	outDir := t.TempDir()
+	if err := Generate(pkg, outDir); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(outDir, "marker_gen.go"))
+	if err != nil {
+		t.Fatalf("reading marker_gen.go: %v", err)
+	}
+	if !strings.Contains(string(data), `func (*Plain) SchemaSearchPredicate() string { return "" }`) {
+		t.Errorf("expected SchemaSearchPredicate to return \"\" for entity with no search field; got:\n%s", string(data))
+	}
+}
