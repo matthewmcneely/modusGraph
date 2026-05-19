@@ -21,9 +21,9 @@ func moviesDir(t *testing.T) string {
 		t.Fatal("runtime.Caller failed")
 	}
 	// thisFile = .../generator/generator_test.go
-	// testdata is at .../parser/testdata/movies/
+	// testdata is at .../parser/testdata/movies/schema/
 	genDir := filepath.Dir(thisFile)
-	return filepath.Join(filepath.Dir(genDir), "parser", "testdata", "movies")
+	return filepath.Join(filepath.Dir(genDir), "parser", "testdata", "movies", "schema")
 }
 
 // goldenDir returns the path to the golden test data directory.

@@ -1,4 +1,4 @@
-package movies
+package schema
 
 type Country struct {
 	UID   string   `json:"uid,omitempty"`

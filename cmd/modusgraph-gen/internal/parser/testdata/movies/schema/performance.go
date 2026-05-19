@@ -1,4 +1,4 @@
-package movies
+package schema
 
 type Performance struct {
 	UID           string   `json:"uid,omitempty"`

@@ -1,4 +1,4 @@
-package movies
+package schema
 
 type Location struct {
 	UID   string    `json:"uid,omitempty"`
