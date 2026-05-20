@@ -637,10 +637,10 @@ type Film struct {
 	for _, want := range []string{
 		`package schema`,
 		`type Client struct {`,
-		`conn`,
 		`StudioClient`,
 		`FilmClient`,
 		`func NewClient(conn modusgraph.Client) *Client {`,
+		`&Client{Conn: conn}`,
 		`c.Studio = NewStudioClient(conn)`,
 		`c.Film = NewFilmClient(conn)`,
 	} {
@@ -1023,6 +1023,8 @@ type Film struct {
 		`sc := schema.NewClient(conn)`,
 		`c.Studio = &StudioClient{schemaClient: sc.Studio}`,
 		`c.Film = &FilmClient{schemaClient: sc.Film}`,
+		`func (c *Client) Conn() modusgraph.Client`,
+		`return c.schemaClient.Conn`,
 	} {
 		if !strings.Contains(data, want) {
 			t.Errorf("client_gen.go (wrapper side) missing: %q\n---file---\n%s", want, data)
