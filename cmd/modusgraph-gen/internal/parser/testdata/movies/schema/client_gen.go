@@ -10,10 +10,10 @@ import (
 // a single modusgraph.Client connection. It is a convenience layer over the
 // per-entity New<Entity>Client(conn) constructors.
 type Client struct {
-	// Conn is the shared modusgraph.Client connection. It is exported so
-	// callers can reach operations the typed clients do not wrap — for
+	// GraphClient is the shared modusgraph.Client connection. It is exported
+	// so callers can reach operations the typed clients do not wrap — for
 	// example QueryRaw, DropAll, WithRetry, and Close.
-	Conn          modusgraph.Client
+	GraphClient   modusgraph.Client
 	Actor         *ActorClient
 	ContentRating *ContentRatingClient
 	Country       *CountryClient
@@ -29,7 +29,7 @@ type Client struct {
 // NewClient binds conn to a Client whose per-entity sub-clients all share
 // the same connection.
 func NewClient(conn modusgraph.Client) *Client {
-	c := &Client{Conn: conn}
+	c := &Client{GraphClient: conn}
 	c.Actor = NewActorClient(conn)
 	c.ContentRating = NewContentRatingClient(conn)
 	c.Country = NewCountryClient(conn)

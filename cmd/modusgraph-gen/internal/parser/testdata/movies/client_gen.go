@@ -43,9 +43,9 @@ func NewClient(conn modusgraph.Client) *Client {
 	return c
 }
 
-// Conn returns the underlying modusgraph.Client connection, shared with the
-// internal schema-side Client. Use it for operations the typed clients do
-// not wrap — for example QueryRaw, DropAll, WithRetry, and Close.
-func (c *Client) Conn() modusgraph.Client {
-	return c.schemaClient.Conn
+// GraphClient returns the underlying modusgraph.Client connection, shared
+// with the internal schema-side Client. Use it for operations the typed
+// clients do not wrap — for example QueryRaw, DropAll, WithRetry, and Close.
+func (c *Client) GraphClient() modusgraph.Client {
+	return c.schemaClient.GraphClient
 }
