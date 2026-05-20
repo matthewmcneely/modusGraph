@@ -148,12 +148,9 @@ func TestGenerate(t *testing.T) {
 				// Show a diff summary.
 				goldenLines := strings.Split(string(goldenData), "\n")
 				generatedLines := strings.Split(string(generatedData), "\n")
-				maxLines := len(goldenLines)
-				if len(generatedLines) > maxLines {
-					maxLines = len(generatedLines)
-				}
+				maxLines := max(len(goldenLines), len(generatedLines))
 				diffCount := 0
-				for i := 0; i < maxLines; i++ {
+				for i := range maxLines {
 					var gl, genl string
 					if i < len(goldenLines) {
 						gl = goldenLines[i]
