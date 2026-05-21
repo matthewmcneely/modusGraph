@@ -3,14 +3,16 @@
 package movies
 
 import (
+	"iter"
+
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // ContentRatingQuery is the wrapper-side fluent query builder for ContentRating. Builder
-// methods return *ContentRatingQuery for chaining; terminal methods (Nodes, First)
-// execute the query and wrap results.
+// methods return *ContentRatingQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
 type ContentRatingQuery struct {
 	typed *typed.Query[schema.ContentRating]
 }
@@ -78,4 +80,20 @@ func (q *ContentRatingQuery) First() (*ContentRating, error) {
 		return nil, err
 	}
 	return WrapContentRating(s), nil
+}
+
+// IterNodes streams the query's results as wrapped ContentRating values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *ContentRatingQuery) IterNodes() iter.Seq2[*ContentRating, error] {
+	return func(yield func(*ContentRating, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapContentRating(s), nil) {
+				return
+			}
+		}
+	}
 }

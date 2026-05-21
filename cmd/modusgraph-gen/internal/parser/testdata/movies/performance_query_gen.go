@@ -3,14 +3,16 @@
 package movies
 
 import (
+	"iter"
+
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // PerformanceQuery is the wrapper-side fluent query builder for Performance. Builder
-// methods return *PerformanceQuery for chaining; terminal methods (Nodes, First)
-// execute the query and wrap results.
+// methods return *PerformanceQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
 type PerformanceQuery struct {
 	typed *typed.Query[schema.Performance]
 }
@@ -78,4 +80,20 @@ func (q *PerformanceQuery) First() (*Performance, error) {
 		return nil, err
 	}
 	return WrapPerformance(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Performance values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *PerformanceQuery) IterNodes() iter.Seq2[*Performance, error] {
+	return func(yield func(*Performance, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapPerformance(s), nil) {
+				return
+			}
+		}
+	}
 }

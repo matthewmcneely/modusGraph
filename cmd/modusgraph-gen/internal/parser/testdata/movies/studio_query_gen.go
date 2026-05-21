@@ -3,14 +3,16 @@
 package movies
 
 import (
+	"iter"
+
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // StudioQuery is the wrapper-side fluent query builder for Studio. Builder
-// methods return *StudioQuery for chaining; terminal methods (Nodes, First)
-// execute the query and wrap results.
+// methods return *StudioQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
 type StudioQuery struct {
 	typed *typed.Query[schema.Studio]
 }
@@ -78,4 +80,20 @@ func (q *StudioQuery) First() (*Studio, error) {
 		return nil, err
 	}
 	return WrapStudio(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Studio values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *StudioQuery) IterNodes() iter.Seq2[*Studio, error] {
+	return func(yield func(*Studio, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapStudio(s), nil) {
+				return
+			}
+		}
+	}
 }

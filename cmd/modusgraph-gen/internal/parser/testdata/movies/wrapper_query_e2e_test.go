@@ -262,3 +262,31 @@ func TestWrapperQuery_SingleQuery(t *testing.T) {
 		t.Fatalf("wrapper First executed %d queries, want exactly 1", got)
 	}
 }
+
+// TestWrapperQuery_IterNodes inserts more films than the page size and
+// verifies FilmQuery.IterNodes streams every one as a non-nil wrapped
+// *movies.Film across multiple pages. Distinct release years give the
+// initial_release_date order a total order, so paging is stable.
+func TestWrapperQuery_IterNodes(t *testing.T) {
+	ctx := context.Background()
+	client := movies.NewClient(newConn(t))
+
+	const n = 125 // > the 50-record page size: forces multiple pages
+	for i := range n {
+		addFilm(ctx, t, client, "w", 1900+i)
+	}
+
+	seen := 0
+	for f, err := range client.Film.Query(ctx).OrderAsc("initial_release_date").IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		if f == nil {
+			t.Fatal("IterNodes yielded a nil *movies.Film")
+		}
+		seen++
+	}
+	if seen != n {
+		t.Fatalf("wrapper IterNodes streamed %d films, want %d", seen, n)
+	}
+}

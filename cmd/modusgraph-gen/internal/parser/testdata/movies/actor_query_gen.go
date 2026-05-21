@@ -3,14 +3,16 @@
 package movies
 
 import (
+	"iter"
+
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // ActorQuery is the wrapper-side fluent query builder for Actor. Builder
-// methods return *ActorQuery for chaining; terminal methods (Nodes, First)
-// execute the query and wrap results.
+// methods return *ActorQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
 type ActorQuery struct {
 	typed *typed.Query[schema.Actor]
 }
@@ -78,4 +80,20 @@ func (q *ActorQuery) First() (*Actor, error) {
 		return nil, err
 	}
 	return WrapActor(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Actor values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *ActorQuery) IterNodes() iter.Seq2[*Actor, error] {
+	return func(yield func(*Actor, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapActor(s), nil) {
+				return
+			}
+		}
+	}
 }

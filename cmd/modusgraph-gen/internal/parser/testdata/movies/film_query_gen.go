@@ -3,14 +3,16 @@
 package movies
 
 import (
+	"iter"
+
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // FilmQuery is the wrapper-side fluent query builder for Film. Builder
-// methods return *FilmQuery for chaining; terminal methods (Nodes, First)
-// execute the query and wrap results.
+// methods return *FilmQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
 type FilmQuery struct {
 	typed *typed.Query[schema.Film]
 }
@@ -78,4 +80,20 @@ func (q *FilmQuery) First() (*Film, error) {
 		return nil, err
 	}
 	return WrapFilm(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Film values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *FilmQuery) IterNodes() iter.Seq2[*Film, error] {
+	return func(yield func(*Film, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapFilm(s), nil) {
+				return
+			}
+		}
+	}
 }
