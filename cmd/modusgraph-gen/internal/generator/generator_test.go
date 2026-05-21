@@ -647,43 +647,6 @@ type Film struct {
 	}
 }
 
-func TestGenerate_EmitsSchemaEntityClient(t *testing.T) {
-	_, schemaDir, _ := generateFromMinimalSchema(t)
-
-	data := mustReadGen(t, schemaDir, "studio_client_gen.go")
-	for _, want := range []string{
-		`package schema`,
-		`type StudioClient struct {`,
-		`func NewStudioClient(conn modusgraph.Client) *StudioClient {`,
-		`func (c *StudioClient) Get(ctx context.Context, uid string) (*Studio, error)`,
-		`func (c *StudioClient) Add(ctx context.Context, s *Studio) error`,
-		`func (c *StudioClient) Update(ctx context.Context, s *Studio) error`,
-		`func (c *StudioClient) Upsert(ctx context.Context, s *Studio, predicates ...string) error`,
-		`func (c *StudioClient) Delete(ctx context.Context, uid string) error`,
-		`func (c *StudioClient) Query(ctx context.Context) *StudioQuery`,
-	} {
-		if !strings.Contains(data, want) {
-			t.Errorf("studio_client_gen.go missing: %q", want)
-		}
-	}
-}
-
-func TestGenerate_EmitsSchemaEntityQuery(t *testing.T) {
-	_, schemaDir, _ := generateFromMinimalSchema(t)
-	data := mustReadGen(t, schemaDir, "studio_query_gen.go")
-	for _, want := range []string{
-		`package schema`,
-		`type StudioQuery struct {`,
-		`func NewStudioQuery(ctx context.Context, conn modusgraph.Client) *StudioQuery`,
-		`func (q *StudioQuery) Nodes(recs any) error`,
-		`func (q *StudioQuery) First() (*Studio, error)`,
-	} {
-		if !strings.Contains(data, want) {
-			t.Errorf("studio_query_gen.go missing: %q", want)
-		}
-	}
-}
-
 // generateFromMinimalSchema creates a temp schema with a single Studio entity
 // and runs Generate against it, returning the temp source dir, schemaDir, and entityDir.
 // Used by multiple per-entity emit tests.
@@ -915,7 +878,7 @@ func TestGenerate_EntityWrapperStruct(t *testing.T) {
 		}
 	}
 
-	// Negative: the rewritten template MUST NOT emit a <E>Client (that's now in schema_entity_client.go.tmpl).
+	// Negative: per-entity <E>Client types are no longer generated; CRUD now lives in the handwritten generic typed.Client[T].
 	for _, notWant := range []string{
 		`type StudioClient struct {`,
 		`func (c *StudioClient) Get(`,
