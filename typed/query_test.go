@@ -526,3 +526,245 @@ func TestQuery_SingleQueryPerTerminal(t *testing.T) {
 		t.Fatalf("First executed %d queries, want exactly 1", got)
 	}
 }
+
+func TestIterNodes_StreamsAll(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	const n = 125 // > defaultPageSize (50): forces multiple pages
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	seen := 0
+	for w, err := range c.Query(ctx).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		if w == nil {
+			t.Fatal("IterNodes yielded a nil widget")
+		}
+		seen++
+	}
+	if seen != n {
+		t.Fatalf("IterNodes streamed %d records, want %d", seen, n)
+	}
+}
+
+func TestIterNodes_StopsOnConsumerBreak(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	const n = 125
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	seen := 0
+	for _, err := range c.Query(ctx).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		seen++
+		if seen == 10 {
+			break
+		}
+	}
+	if seen != 10 {
+		t.Fatalf("IterNodes yielded %d records after break at 10, want 10", seen)
+	}
+}
+
+func TestIterNodes_EmptyResult(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	seen := 0
+	for _, err := range c.Query(ctx).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes over empty set yielded error: %v", err)
+		}
+		seen++
+	}
+	if seen != 0 {
+		t.Fatalf("IterNodes over empty set yielded %d records, want 0", seen)
+	}
+}
+
+func TestIterNodes_RespectsLimit(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	const n = 100
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	seen := 0
+	for _, err := range c.Query(ctx).Limit(30).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		seen++
+	}
+	if seen != 30 {
+		t.Fatalf("Limit(30).IterNodes() streamed %d records, want 30", seen)
+	}
+}
+
+func TestIterNodes_LimitExceedsResultSet(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	const n = 30
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	seen := 0
+	for _, err := range c.Query(ctx).Limit(500).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		seen++
+	}
+	if seen != n {
+		t.Fatalf("Limit(500).IterNodes() over %d records streamed %d, want %d", n, seen, n)
+	}
+}
+
+func TestIterNodes_RespectsOffset(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Qty values start at 1 (not 0) so omitempty never suppresses the field,
+	// keeping OrderAsc("qty") a true total order over all records.
+	const n = 10
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i + 1}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	var got []int
+	for w, err := range c.Query(ctx).OrderAsc("qty").Offset(3).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		got = append(got, w.Qty)
+	}
+	if len(got) != 7 {
+		t.Fatalf("Offset(3).IterNodes() streamed %d records, want 7", len(got))
+	}
+	for i, q := range got {
+		if q != i+4 { // Qty=1..10; offset 3 skips 1,2,3 → starts at 4
+			t.Fatalf("Offset(3).IterNodes()[%d] Qty = %d, want %d", i, q, i+4)
+		}
+	}
+}
+
+func TestIterNodes_RespectsOffsetAndLimit(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Qty values start at 1 so omitempty never suppresses the field and
+	// OrderAsc("qty") is a strict total order across all 200 records.
+	const n = 200
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i + 1}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	var got []int
+	for w, err := range c.Query(ctx).OrderAsc("qty").Offset(60).Limit(120).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		got = append(got, w.Qty)
+	}
+	if len(got) != 120 {
+		t.Fatalf("Offset(60).Limit(120).IterNodes() streamed %d records, want 120", len(got))
+	}
+	for i, q := range got {
+		if q != i+61 { // Qty=1..200; offset 60 skips 1..60 → starts at 61
+			t.Fatalf("result[%d] Qty = %d, want %d", i, q, i+61)
+		}
+	}
+}
+
+func TestIterNodes_OneQueryPerPage(t *testing.T) {
+	ctx := context.Background()
+	var queriesExecuted int
+	c := typed.NewClient[widget](newCountingConn(t, &queriesExecuted))
+	const n = 125 // ceil(125/50) = 3 page queries
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	// Obtaining the iterator runs no query — IterNodes is lazy.
+	seq := c.Query(ctx).IterNodes()
+	if queriesExecuted != 0 {
+		t.Fatalf("building the IterNodes iterator executed %d queries, want 0", queriesExecuted)
+	}
+	seen := 0
+	for _, err := range seq {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		seen++
+	}
+	if seen != n {
+		t.Fatalf("IterNodes streamed %d records, want %d", seen, n)
+	}
+	if queriesExecuted != 3 {
+		t.Fatalf("IterNodes over %d records ran %d queries, want 3", n, queriesExecuted)
+	}
+}
+
+func TestIterNodes_YieldsErrorAndStops(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	if err := c.Add(ctx, &widget{Name: "w", Qty: 1}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	// A syntactically invalid @filter (unbalanced parenthesis) makes the page
+	// query fail at execution; IterNodes must yield one (nil, err) and stop.
+	gotErr := false
+	for w, err := range c.Query(ctx).Filter(`eq(name, "w"`).IterNodes() {
+		if err != nil {
+			gotErr = true
+			if w != nil {
+				t.Fatalf("error yield carried a non-nil widget: %+v", w)
+			}
+			break
+		}
+		t.Fatal("IterNodes over a malformed query yielded a record before erroring")
+	}
+	if !gotErr {
+		t.Fatal("IterNodes over a malformed query did not yield an error")
+	}
+}
+
+func TestQuery_LimitOffsetStillDriveNodes(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Qty values start at 1 so omitempty never suppresses the field and
+	// OrderAsc("qty") is a strict total order across all records.
+	const n = 10
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i + 1}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	// Regression: Limit/Offset now also set Query struct fields; confirm they
+	// still drive the Nodes terminal.
+	got, err := c.Query(ctx).OrderAsc("qty").Offset(2).Limit(3).Nodes()
+	if err != nil {
+		t.Fatalf("Nodes: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("Offset(2).Limit(3).Nodes() returned %d records, want 3", len(got))
+	}
+	for i, w := range got {
+		if w.Qty != i+3 { // Qty=1..10; offset 2 skips 1,2 → starts at 3
+			t.Fatalf("Nodes()[%d] Qty = %d, want %d", i, w.Qty, i+3)
+		}
+	}
+}

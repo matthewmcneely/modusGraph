@@ -6,12 +6,14 @@
 package typed
 
 import (
+	"iter"
+
 	dg "github.com/dolan-in/dgman/v2"
 )
 
 // Query is a fluent, type-safe query builder over records of type T. Builder
-// methods return *Query[T] for chaining; terminal methods (Nodes, First)
-// execute the query and decode typed results.
+// methods return *Query[T] for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and decode typed results.
 //
 // A Query is single-use. Builder methods mutate the underlying query in place
 // and return the same *Query, so a Query value should be built as one chain
@@ -23,7 +25,9 @@ import (
 // Offset, After, and Cascade overwrite: the last call wins. OrderAsc and
 // OrderDesc accumulate: each call adds to the query.
 type Query[T any] struct {
-	q *dg.Query
+	q      *dg.Query
+	limit  int // caller-set row cap; 0 = unbounded
+	offset int // caller-set starting offset; 0 = none
 }
 
 // Filter adds a dgraph @filter expression. params bind to placeholders.
@@ -47,12 +51,14 @@ func (qb *Query[T]) OrderDesc(clause string) *Query[T] {
 // Limit caps the number of results. dgman names this First; it is renamed
 // here so it does not collide with the First terminal.
 func (qb *Query[T]) Limit(n int) *Query[T] {
+	qb.limit = n
 	qb.q.First(n)
 	return qb
 }
 
 // Offset skips the first n results.
 func (qb *Query[T]) Offset(n int) *Query[T] {
+	qb.offset = n
 	qb.q.Offset(n)
 	return qb
 }
@@ -89,6 +95,47 @@ func (qb *Query[T]) First() (*T, error) {
 		return nil, nil
 	}
 	return &out[0], nil
+}
+
+// IterNodes executes the query and returns an iterator over matching records,
+// paging transparently so a large result set is never materialized at once.
+//
+// IterNodes is a terminal operation: it drives Offset/Limit internally as it
+// pages and leaves the builder spent — do not call another terminal on the
+// same Query afterward. A Limit set on the query caps the total number of
+// rows streamed; an Offset is the starting point.
+//
+// All pages execute against one read-only transaction, so the iteration reads
+// a single consistent snapshot: a concurrent writer cannot make it skip or
+// repeat rows. On error it yields a final (nil, err) and stops.
+func (qb *Query[T]) IterNodes() iter.Seq2[*T, error] {
+	return func(yield func(*T, error) bool) {
+		remaining := qb.limit // 0 = unbounded
+		for off := qb.offset; ; off += defaultPageSize {
+			size := defaultPageSize
+			if remaining > 0 && remaining < size {
+				size = remaining // shrink the last page so it can't overshoot the cap
+			}
+			var page []T
+			if err := qb.q.Offset(off).First(size).Nodes(&page); err != nil {
+				yield(nil, err)
+				return
+			}
+			for i := range page {
+				if !yield(&page[i], nil) {
+					return // consumer broke out
+				}
+			}
+			if remaining > 0 {
+				if remaining -= len(page); remaining <= 0 {
+					return // hit the caller's Limit
+				}
+			}
+			if len(page) < size {
+				return // result set exhausted
+			}
+		}
+	}
 }
 
 // Raw returns the underlying dgman query for operations Query does not wrap
