@@ -3,41 +3,34 @@ package {{ .EntityPackageName }}
 {{- $E := .Entity.Name }}
 {{- $fields := nonSliceScalarFields .Entity.Fields }}
 
+{{- $hasOpts := false }}
+{{- range $fields }}{{ if and (not .IsUID) (not .IsDType) }}{{ $hasOpts = true }}{{ end }}{{ end }}
+
 {{- $needsTime := false }}
 {{- range $fields }}{{ if contains .GoType "time." }}{{ $needsTime = true }}{{ end }}{{ end }}
 {{- $extImports := externalImports $fields .Imports }}
 
-{{ if or $needsTime (gt (len $extImports) 0) -}}
+{{ if $hasOpts -}}
 import (
+	"github.com/matthewmcneely/modusgraph/typed"
 {{- if $needsTime }}
+
 	"time"
 {{- end }}
-{{ range $extImports }}
+{{- range $extImports }}
 	{{- if .Alias }}
 	{{ .Alias }} "{{ .Path }}"
 	{{- else }}
 	"{{ .Path }}"
 	{{- end }}
-{{ end }}
+{{- end }}
 )
 {{ end }}
-
-// {{ $E }}Option configures a *{{ $E }}. Applied at construction time via
-// New{{ $E }} or Wrap{{ $E }}, or in bulk later via Apply{{ $E }}Options.
-type {{ $E }}Option func(*{{ $E }})
-
-// Apply{{ $E }}Options applies a sequence of options to e in order.
-func Apply{{ $E }}Options(e *{{ $E }}, opts ...{{ $E }}Option) {
-	for _, opt := range opts {
-		opt(e)
-	}
-}
-
 {{- range $fields }}
   {{- if and (not .IsUID) (not .IsDType) }}
 
 // With{{ $E }}{{ . | accessorName }} sets the {{ .JSONTag }} field on a *{{ $E }}.
-func With{{ $E }}{{ . | accessorName }}(v {{ .GoType }}) {{ $E }}Option {
+func With{{ $E }}{{ . | accessorName }}(v {{ .GoType }}) typed.Option[{{ $E }}] {
 	return func(e *{{ $E }}) { e.Set{{ . | accessorName }}(v) }
 }
   {{- end }}

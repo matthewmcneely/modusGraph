@@ -902,9 +902,8 @@ func TestGenerate_OptionsScalarOnly(t *testing.T) {
 
 	for _, want := range []string{
 		`package entity`,
-		`type StudioOption func(*Studio)`,
-		`func ApplyStudioOptions(e *Studio, opts ...StudioOption)`,
-		`func WithStudioName(v string) StudioOption {`,
+		`"github.com/matthewmcneely/modusgraph/typed"`,
+		`func WithStudioName(v string) typed.Option[Studio] {`,
 		`return func(e *Studio) { e.SetName(v) }`,
 	} {
 		if !strings.Contains(data, want) {
@@ -912,13 +911,16 @@ func TestGenerate_OptionsScalarOnly(t *testing.T) {
 		}
 	}
 
-	// Negative: UID/DType have direct method pairs on the wrapper, NOT With options.
+	// Negative: the per-entity option type and apply loop are replaced by the
+	// generic typed.Option / typed.Apply; UID/DType get no With option.
 	for _, notWant := range []string{
+		`type StudioOption func(*Studio)`,
+		`func ApplyStudioOptions(`,
 		`func WithStudioUID(`,
 		`func WithStudioDType(`,
 	} {
 		if strings.Contains(data, notWant) {
-			t.Errorf("studio_options_gen.go must NOT emit With options for UID/DType; found: %q", notWant)
+			t.Errorf("studio_options_gen.go must NOT emit %q", notWant)
 		}
 	}
 }
