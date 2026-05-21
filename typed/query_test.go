@@ -491,8 +491,10 @@ func TestQuery_RawRoundTrips(t *testing.T) {
 func TestQuery_SingleQueryPerTerminal(t *testing.T) {
 	// Uses the global dgman logger; must not run in parallel.
 	ctx := context.Background()
-	var queries int
-	c := typed.NewClient[widget](newCountingConn(t, &queries))
+	// queriesExecuted is incremented by newCountingConn's logger each time
+	// dgman runs a query, so it reflects real database round-trips.
+	var queriesExecuted int
+	c := typed.NewClient[widget](newCountingConn(t, &queriesExecuted))
 
 	for i := range 2 {
 		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
@@ -500,27 +502,27 @@ func TestQuery_SingleQueryPerTerminal(t *testing.T) {
 		}
 	}
 
-	// Building a chain executes nothing: builder methods only mutate the AST.
-	before := queries
+	// Building the chain runs no queries: builder methods only mutate the AST.
+	before := queriesExecuted
 	q := c.Query(ctx).Filter(`eq(name, "w")`).OrderAsc("qty").Limit(10)
-	if queries != before {
-		t.Fatalf("builder methods executed %d queries, want 0", queries-before)
+	if queriesExecuted != before {
+		t.Fatalf("builder methods executed %d queries, want 0", queriesExecuted-before)
 	}
 
 	// The Nodes terminal runs exactly one query.
 	if _, err := q.Nodes(); err != nil {
 		t.Fatalf("Nodes: %v", err)
 	}
-	if got := queries - before; got != 1 {
+	if got := queriesExecuted - before; got != 1 {
 		t.Fatalf("Nodes executed %d queries, want exactly 1", got)
 	}
 
 	// A fresh builder's First terminal also runs exactly one query.
-	before = queries
+	before = queriesExecuted
 	if _, err := c.Query(ctx).First(); err != nil {
 		t.Fatalf("First: %v", err)
 	}
-	if got := queries - before; got != 1 {
+	if got := queriesExecuted - before; got != 1 {
 		t.Fatalf("First executed %d queries, want exactly 1", got)
 	}
 }
