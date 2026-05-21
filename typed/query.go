@@ -12,6 +12,16 @@ import (
 // Query is a fluent, type-safe query builder over records of type T. Builder
 // methods return *Query[T] for chaining; terminal methods (Nodes, First)
 // execute the query and decode typed results.
+//
+// A Query is single-use. Builder methods mutate the underlying query in place
+// and return the same *Query, so a Query value should be built as one chain
+// and handed to a single terminal. It is not safe to save a Query to a
+// variable and branch it into independent queries: every branch shares — and
+// keeps mutating — the same underlying query.
+//
+// Repeated builder calls do not all behave the same way. Filter, Limit,
+// Offset, After, and Cascade overwrite: the last call wins. OrderAsc and
+// OrderDesc accumulate: each call adds to the query.
 type Query[T any] struct {
 	q *dg.Query
 }
