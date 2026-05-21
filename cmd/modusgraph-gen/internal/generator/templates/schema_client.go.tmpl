@@ -2,27 +2,30 @@ package {{ .Name }}
 
 import (
 	"github.com/matthewmcneely/modusgraph"
+{{- if .Entities }}
+	"github.com/matthewmcneely/modusgraph/typed"
+{{- end }}
 )
 
-// Client is a top-level holder for per-entity schema-side clients bound to
-// a single modusgraph.Client connection. It is a convenience layer over the
-// per-entity New<Entity>Client(conn) constructors.
+// Client is a top-level holder for per-entity typed clients bound to a single
+// modusgraph.Client connection.
 type Client struct {
 	// GraphClient is the shared modusgraph.Client connection. It is exported
 	// so callers can reach operations the typed clients do not wrap — for
 	// example QueryRaw, DropAll, WithRetry, and Close.
 	GraphClient modusgraph.Client
 {{- range .Entities }}
-	{{ .Name }} *{{ .Name }}Client
+	{{ .Name }} *typed.Client[{{ .Name }}]
 {{- end }}
 }
 
-// NewClient binds conn to a Client whose per-entity sub-clients all share
+// NewClient binds conn to a Client whose per-entity typed clients all share
 // the same connection.
 func NewClient(conn modusgraph.Client) *Client {
-	c := &Client{GraphClient: conn}
+	return &Client{
+		GraphClient: conn,
 {{- range .Entities }}
-	c.{{ .Name }} = New{{ .Name }}Client(conn)
+		{{ .Name }}: typed.NewClient[{{ .Name }}](conn),
 {{- end }}
-	return c
+	}
 }

@@ -633,13 +633,16 @@ type Film struct {
 	data := mustReadGen(t, schemaClientDir, "client_gen.go")
 	for _, want := range []string{
 		`package schema`,
+		`"github.com/matthewmcneely/modusgraph"`,
+		`"github.com/matthewmcneely/modusgraph/typed"`,
 		`type Client struct {`,
-		`StudioClient`,
-		`FilmClient`,
+		`GraphClient modusgraph.Client`,
+		`*typed.Client[Studio]`,
+		`*typed.Client[Film]`,
 		`func NewClient(conn modusgraph.Client) *Client {`,
-		`&Client{GraphClient: conn}`,
-		`c.Studio = NewStudioClient(conn)`,
-		`c.Film = NewFilmClient(conn)`,
+		`GraphClient: conn,`,
+		`typed.NewClient[Studio](conn)`,
+		`typed.NewClient[Film](conn)`,
 	} {
 		if !strings.Contains(data, want) {
 			t.Errorf("client_gen.go missing: %q\n---file---\n%s", want, data)
