@@ -6,9 +6,13 @@
 package typed
 
 import (
+	"context"
 	"iter"
+	"strconv"
+	"strings"
 
 	dg "github.com/dolan-in/dgman/v2"
+	"github.com/matthewmcneely/modusgraph"
 )
 
 // Query is a fluent, type-safe query builder over records of type T. Builder
@@ -22,15 +26,26 @@ import (
 // keeps mutating — the same underlying query.
 //
 // Repeated builder calls do not all behave the same way. Filter, Limit,
-// Offset, After, and Cascade overwrite: the last call wins. OrderAsc and
-// OrderDesc accumulate: each call adds to the query.
+// Offset, After, and Cascade overwrite: the last call wins. OrderAsc,
+// OrderDesc, and WhereEdge accumulate: each call adds to the query.
 //
 // Limit and Offset additionally record the bounds that IterNodes pages
 // within — a Limit caps the rows it streams, an Offset is its start.
 type Query[T any] struct {
 	q      *dg.Query
-	limit  int // caller-set row cap; 0 = unbounded
-	offset int // caller-set starting offset; 0 = none
+	conn   modusgraph.Client // runs the WhereEdge pre-pass; set by Client.Query
+	ctx    context.Context   // carried for the WhereEdge pre-pass query
+	limit  int               // caller-set row cap; 0 = unbounded
+	offset int               // caller-set starting offset; 0 = none
+	edges  []edgeFilter      // accumulated WhereEdge constraints; empty = none
+}
+
+// edgeFilter is one accumulated WhereEdge constraint: a dgraph @filter
+// expression scoped to an outbound edge predicate of T.
+type edgeFilter struct {
+	predicate string
+	filter    string
+	params    []any
 }
 
 // Filter adds a dgraph @filter expression. params bind to placeholders.
@@ -78,8 +93,35 @@ func (qb *Query[T]) Cascade(predicates ...string) *Query[T] {
 	return qb
 }
 
+// WhereEdge constrains results to records that have at least one `predicate`
+// edge whose target node satisfies the dgraph @filter expression. params bind
+// to $N placeholders within filter, exactly as Filter binds them.
+//
+// Where Filter constrains T's own scalar predicates, WhereEdge constrains a
+// neighbouring node reached over an edge. dgraph's root @filter cannot express
+// that, so a query carrying WhereEdge constraints executes in two steps: a
+// pre-pass resolves the UIDs of roots that satisfy every constraint, then the
+// main query runs against uid(...) — keeping ordering, pagination, and result
+// projection on the normal path. See
+// docs/specs/2026-05-21-query-edge-filter-design.md.
+//
+// WhereEdge accumulates: multiple calls AND together (a record must satisfy
+// every edge constraint). It is the substrate behind the generated
+// <Entity>Query.Where<Edge> methods.
+func (qb *Query[T]) WhereEdge(predicate, filter string, params ...any) *Query[T] {
+	qb.edges = append(qb.edges, edgeFilter{predicate: predicate, filter: filter, params: params})
+	return qb
+}
+
 // Nodes executes the query and returns all matching records.
 func (qb *Query[T]) Nodes() ([]T, error) {
+	matched, err := qb.resolveRoots()
+	if err != nil {
+		return nil, err
+	}
+	if !matched {
+		return nil, nil
+	}
 	var out []T
 	if err := qb.q.Nodes(&out); err != nil {
 		return nil, err
@@ -90,6 +132,13 @@ func (qb *Query[T]) Nodes() ([]T, error) {
 // First executes the query with an implicit Limit(1) and returns the first
 // record, or (nil, nil) if the query matched no rows.
 func (qb *Query[T]) First() (*T, error) {
+	matched, err := qb.resolveRoots()
+	if err != nil {
+		return nil, err
+	}
+	if !matched {
+		return nil, nil
+	}
 	var out []T
 	if err := qb.q.First(1).Nodes(&out); err != nil {
 		return nil, err
@@ -110,9 +159,19 @@ func (qb *Query[T]) First() (*T, error) {
 //
 // All pages execute against one read-only transaction, so the iteration reads
 // a single consistent snapshot: a concurrent writer cannot make it skip or
-// repeat rows. On error it yields a final (nil, err) and stops.
+// repeat rows. A WhereEdge pre-pass, when present, runs once before paging
+// begins, in its own transaction. On error it yields a final (nil, err) and
+// stops.
 func (qb *Query[T]) IterNodes() iter.Seq2[*T, error] {
 	return func(yield func(*T, error) bool) {
+		matched, err := qb.resolveRoots()
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		if !matched {
+			return // edge constraints present, but no root matched
+		}
 		remaining := qb.limit // 0 = unbounded
 		for off := qb.offset; ; off += defaultPageSize {
 			size := defaultPageSize
@@ -142,7 +201,105 @@ func (qb *Query[T]) IterNodes() iter.Seq2[*T, error] {
 }
 
 // Raw returns the underlying dgman query for operations Query does not wrap
-// (Var, As, Name, RootFunc, GroupBy, Vars).
+// (Var, As, Name, RootFunc, GroupBy, Vars). Raw does not carry WhereEdge
+// constraints — those are resolved only when a terminal runs.
 func (qb *Query[T]) Raw() *dg.Query {
 	return qb.q
+}
+
+// resolveRoots runs the WhereEdge pre-pass when the query carries edge
+// constraints, rewriting the main query's root function to the matching UIDs.
+// It returns matched=false when constraints are present but no root satisfied
+// them — callers then return an empty result without running the main query.
+// With no edge constraints it is a no-op returning matched=true.
+func (qb *Query[T]) resolveRoots() (matched bool, err error) {
+	if len(qb.edges) == 0 {
+		return true, nil
+	}
+	uids, err := qb.matchedUIDs()
+	if err != nil {
+		return false, err
+	}
+	if len(uids) == 0 {
+		return false, nil
+	}
+	qb.q.RootFunc("uid(" + strings.Join(uids, ", ") + ")")
+	return true, nil
+}
+
+// matchedUIDs runs the pre-pass: an @cascade query over T that keeps only
+// nodes whose every WhereEdge predicate has a target matching its filter, and
+// returns those nodes' UIDs.
+func (qb *Query[T]) matchedUIDs() ([]string, error) {
+	var z T
+	pre := qb.conn.Query(qb.ctx, &z)
+	body, params := qb.edgeMatchBody()
+	pre.Cascade().Query(body, params...)
+
+	var rows []struct {
+		UID string `json:"uid"`
+	}
+	if err := pre.Nodes(&rows); err != nil {
+		return nil, err
+	}
+	uids := make([]string, len(rows))
+	for i := range rows {
+		uids[i] = rows[i].UID
+	}
+	return uids, nil
+}
+
+// edgeMatchBody renders the selection set for the pre-pass: uid plus one
+// aliased, filtered block per WhereEdge constraint. The caller adds a bare
+// @cascade, which then drops any node with an empty block — so a survivor
+// satisfies every constraint. Blocks are aliased mg_e0, mg_e1, ... so two
+// constraints on the same predicate do not collide as duplicate fields. Each
+// fragment's $N placeholders are shifted to stay bound to its own params once
+// every fragment's params are concatenated into one slice.
+func (qb *Query[T]) edgeMatchBody() (body string, params []any) {
+	var b strings.Builder
+	b.WriteString("{\n\tuid\n")
+	for i, e := range qb.edges {
+		b.WriteString("\tmg_e")
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString(" : ")
+		b.WriteString(e.predicate)
+		b.WriteString(" @filter(")
+		b.WriteString(shiftPlaceholders(e.filter, len(params)))
+		b.WriteString(") { uid }\n")
+		params = append(params, e.params...)
+	}
+	b.WriteString("}")
+	return b.String(), params
+}
+
+// shiftPlaceholders rewrites dgman ordinal placeholders ($1, $2, ...) in expr,
+// adding delta to each index. WhereEdge filters are written independently, each
+// numbering its params from $1; concatenating them into one pre-pass body
+// needs every fragment renumbered against the combined params slice. A '$' not
+// followed by a digit is left as-is, matching dgman's parseQueryWithParams.
+func shiftPlaceholders(expr string, delta int) string {
+	if delta == 0 || !strings.ContainsRune(expr, '$') {
+		return expr
+	}
+	var b strings.Builder
+	for i := 0; i < len(expr); i++ {
+		if expr[i] != '$' {
+			b.WriteByte(expr[i])
+			continue
+		}
+		j := i + 1
+		for j < len(expr) && expr[j] >= '0' && expr[j] <= '9' {
+			j++
+		}
+		if j == i+1 { // '$' not followed by digits — leave verbatim
+			b.WriteByte('$')
+			continue
+		}
+		n, _ := strconv.Atoi(expr[i+1 : j])
+		b.WriteByte('$')
+		b.WriteString(strconv.Itoa(n + delta))
+		i = j - 1
+	}
+	return b.String()
 }

@@ -1068,6 +1068,73 @@ func TestGenerate_WrapperQuery(t *testing.T) {
 	}
 }
 
+// TestGenerate_WrapperQueryEdgeFilter checks that <Entity>Query gains a
+// Where<Edge> method for each edge field — delegating to typed.WhereEdge — and
+// that an entity with no edges gains none.
+func TestGenerate_WrapperQueryEdgeFilter(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"),
+		[]byte("module example.com/test\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+	src := "package schema\n\n" +
+		"type Owner struct {\n" +
+		"\tUID   string   `json:\"uid,omitempty\"`\n" +
+		"\tDType []string `json:\"dgraph.type,omitempty\"`\n" +
+		"\tName  string   `json:\"name\"`\n" +
+		"\tPets  []*Pet   `json:\"pets,omitempty\"`\n" +
+		"}\n\n" +
+		"type Pet struct {\n" +
+		"\tUID   string   `json:\"uid,omitempty\"`\n" +
+		"\tDType []string `json:\"dgraph.type,omitempty\"`\n" +
+		"\tName  string   `json:\"name\"`\n" +
+		"}\n"
+	if err := os.WriteFile(filepath.Join(srcDir, "schema.go"), []byte(src), 0o644); err != nil {
+		t.Fatalf("writing schema.go: %v", err)
+	}
+	pkg, err := parser.Parse(srcDir)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	entityDir := filepath.Join(t.TempDir(), "entity")
+	if err := os.MkdirAll(entityDir, 0o755); err != nil {
+		t.Fatalf("mkdir entityDir: %v", err)
+	}
+	cfg := Config{
+		SchemaDir:               srcDir,
+		SchemaClientDir:         srcDir,
+		EntityDir:               entityDir,
+		EntityClientDir:         entityDir,
+		EntityPackageName:       "entity",
+		EntityClientPackageName: "entity",
+		SchemaClientPackageName: "schema",
+		SchemaAlias:             "schema",
+		SchemaImportPath:        "example.com/test",
+		CLIName:                 "test",
+	}
+	if err := Generate(pkg, cfg); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	// Owner has a Pets edge → OwnerQuery gains WherePets, delegating to the
+	// typed substrate with the resolved predicate.
+	ownerQuery := mustReadGen(t, entityDir, "owner_query_gen.go")
+	for _, want := range []string{
+		`func (q *OwnerQuery) WherePets(filter string, params ...any) *OwnerQuery`,
+		`q.typed.WhereEdge("pets", filter, params...)`,
+	} {
+		if !strings.Contains(ownerQuery, want) {
+			t.Errorf("owner_query_gen.go missing %q; got:\n%s", want, ownerQuery)
+		}
+	}
+
+	// Pet has no edges → PetQuery must carry no Where* method.
+	petQuery := mustReadGen(t, entityDir, "pet_query_gen.go")
+	if strings.Contains(petQuery, "func (q *PetQuery) Where") {
+		t.Errorf("pet_query_gen.go has a Where* method but Pet has no edges:\n%s", petQuery)
+	}
+}
+
 func TestGenerate_NoIterFileEmitted(t *testing.T) {
 	_, _, entityDir := generateFromMinimalSchema(t)
 	if _, err := os.Stat(filepath.Join(entityDir, "iter_gen.go")); !os.IsNotExist(err) {

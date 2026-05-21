@@ -59,6 +59,14 @@ func (q *RatingQuery) Cascade(predicates ...string) *RatingQuery {
 	return q
 }
 
+// WhereFilms keeps only Rating records that have a ~rating
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *RatingQuery) WhereFilms(filter string, params ...any) *RatingQuery {
+	q.typed.WhereEdge("~rating", filter, params...)
+	return q
+}
+
 // Nodes executes the query and returns wrapped Rating results.
 func (q *RatingQuery) Nodes() ([]*Rating, error) {
 	recs, err := q.typed.Nodes()

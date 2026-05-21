@@ -59,6 +59,14 @@ func (q *ActorQuery) Cascade(predicates ...string) *ActorQuery {
 	return q
 }
 
+// WhereFilms keeps only Actor records that have a actor.film
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *ActorQuery) WhereFilms(filter string, params ...any) *ActorQuery {
+	q.typed.WhereEdge("actor.film", filter, params...)
+	return q
+}
+
 // Nodes executes the query and returns wrapped Actor results.
 func (q *ActorQuery) Nodes() ([]*Actor, error) {
 	recs, err := q.typed.Nodes()

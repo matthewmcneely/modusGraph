@@ -59,6 +59,14 @@ func (q *CountryQuery) Cascade(predicates ...string) *CountryQuery {
 	return q
 }
 
+// WhereFilms keeps only Country records that have a ~country
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *CountryQuery) WhereFilms(filter string, params ...any) *CountryQuery {
+	q.typed.WhereEdge("~country", filter, params...)
+	return q
+}
+
 // Nodes executes the query and returns wrapped Country results.
 func (q *CountryQuery) Nodes() ([]*Country, error) {
 	recs, err := q.typed.Nodes()

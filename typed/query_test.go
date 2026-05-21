@@ -768,3 +768,176 @@ func TestQuery_LimitOffsetStillDriveNodes(t *testing.T) {
 		}
 	}
 }
+
+// seedOwners inserts owner/pet pairs over conn for the WhereEdge tests. Each
+// map entry is one owner owning one pet of the given name; the pet is inserted
+// first so the owner's edge links an already-persisted node. It returns an
+// owner client bound to conn.
+func seedOwners(ctx context.Context, t *testing.T, conn modusgraph.Client, ownerToPet map[string]string) *typed.Client[owner] {
+	t.Helper()
+	pets := typed.NewClient[pet](conn)
+	owners := typed.NewClient[owner](conn)
+	for ownerName, petName := range ownerToPet {
+		p := &pet{Name: petName}
+		if err := pets.Add(ctx, p); err != nil {
+			t.Fatalf("Add pet %q: %v", petName, err)
+		}
+		if err := owners.Add(ctx, &owner{Name: ownerName, Pets: []*pet{p}}); err != nil {
+			t.Fatalf("Add owner %q: %v", ownerName, err)
+		}
+	}
+	return owners
+}
+
+func TestQuery_WhereEdgeFiltersByEdgeTarget(t *testing.T) {
+	ctx := context.Background()
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{
+		"Alice": "Fido",
+		"Bob":   "Rex",
+		"Carol": "Fido",
+	})
+
+	// WhereEdge constrains owners by a scalar of the pet reached over the
+	// "pets" edge — something a root Filter cannot express.
+	got, err := owners.Query(ctx).WhereEdge("pets", `eq(name, "Fido")`).Nodes()
+	if err != nil {
+		t.Fatalf("WhereEdge Nodes: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("WhereEdge(pets, name=Fido) returned %d owners, want 2 (Alice, Carol)", len(got))
+	}
+	for _, o := range got {
+		if o.Name != "Alice" && o.Name != "Carol" {
+			t.Fatalf("WhereEdge returned %q, want only Fido owners (Alice, Carol)", o.Name)
+		}
+	}
+}
+
+func TestQuery_WhereEdgeNoMatchReturnsEmpty(t *testing.T) {
+	ctx := context.Background()
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{"Alice": "Fido", "Bob": "Rex"})
+
+	// No pet is named Nemo: the pre-pass matches zero roots, so Nodes returns
+	// an empty result — not an error — and never runs the main query.
+	got, err := owners.Query(ctx).WhereEdge("pets", `eq(name, "Nemo")`).Nodes()
+	if err != nil {
+		t.Fatalf("WhereEdge Nodes: unexpected error %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("WhereEdge for an unowned pet name returned %d owners, want 0", len(got))
+	}
+}
+
+func TestQuery_WhereEdgeBindsParams(t *testing.T) {
+	ctx := context.Background()
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{"Alice": "Fido", "Bob": "Rex"})
+
+	// The $1 placeholder in a WhereEdge filter binds exactly as it does for Filter.
+	got, err := owners.Query(ctx).WhereEdge("pets", "eq(name, $1)", "Rex").Nodes()
+	if err != nil {
+		t.Fatalf("WhereEdge Nodes: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "Bob" {
+		t.Fatalf("WhereEdge(pets, name=$1, Rex) returned %+v, want [Bob]", got)
+	}
+}
+
+func TestQuery_WhereEdgeCombinesWithFilter(t *testing.T) {
+	ctx := context.Background()
+	// Alice and Carol both own a Fido; a root Filter on name narrows to Alice.
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{
+		"Alice": "Fido",
+		"Bob":   "Rex",
+		"Carol": "Fido",
+	})
+
+	got, err := owners.Query(ctx).
+		Filter(`eq(name, "Alice")`).
+		WhereEdge("pets", `eq(name, "Fido")`).
+		Nodes()
+	if err != nil {
+		t.Fatalf("Filter+WhereEdge Nodes: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "Alice" {
+		t.Fatalf("Filter(name=Alice)+WhereEdge(pets,name=Fido) returned %+v, want [Alice]", got)
+	}
+}
+
+func TestQuery_WhereEdgeMultipleConstraintsAnd(t *testing.T) {
+	ctx := context.Background()
+	conn := newConn(t)
+	pets := typed.NewClient[pet](conn)
+	owners := typed.NewClient[owner](conn)
+
+	// Alice owns both Fido and Rex; Bob owns only Fido.
+	fido, rex := &pet{Name: "Fido"}, &pet{Name: "Rex"}
+	for _, p := range []*pet{fido, rex} {
+		if err := pets.Add(ctx, p); err != nil {
+			t.Fatalf("Add pet %q: %v", p.Name, err)
+		}
+	}
+	if err := owners.Add(ctx, &owner{Name: "Alice", Pets: []*pet{fido, rex}}); err != nil {
+		t.Fatalf("Add Alice: %v", err)
+	}
+	if err := owners.Add(ctx, &owner{Name: "Bob", Pets: []*pet{fido}}); err != nil {
+		t.Fatalf("Add Bob: %v", err)
+	}
+
+	// Two WhereEdge calls AND together: only an owner of BOTH pets survives.
+	got, err := owners.Query(ctx).
+		WhereEdge("pets", `eq(name, "Fido")`).
+		WhereEdge("pets", `eq(name, "Rex")`).
+		Nodes()
+	if err != nil {
+		t.Fatalf("two-WhereEdge Nodes: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "Alice" {
+		t.Fatalf("WhereEdge(Fido) AND WhereEdge(Rex) returned %+v, want [Alice]", got)
+	}
+}
+
+func TestQuery_WhereEdgeFirst(t *testing.T) {
+	ctx := context.Background()
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{"Alice": "Fido", "Bob": "Rex"})
+
+	// First runs the pre-pass too: it returns the Rex owner, never a Fido one.
+	got, err := owners.Query(ctx).WhereEdge("pets", `eq(name, "Rex")`).First()
+	if err != nil {
+		t.Fatalf("WhereEdge First: %v", err)
+	}
+	if got == nil || got.Name != "Bob" {
+		t.Fatalf("WhereEdge(pets,name=Rex).First() = %+v, want Bob", got)
+	}
+
+	// First with an edge constraint nothing satisfies is (nil, nil).
+	none, err := owners.Query(ctx).WhereEdge("pets", `eq(name, "Nemo")`).First()
+	if err != nil {
+		t.Fatalf("WhereEdge First no-match: unexpected error %v", err)
+	}
+	if none != nil {
+		t.Fatalf("WhereEdge First with no match = %+v, want nil", none)
+	}
+}
+
+func TestQuery_WhereEdgeIterNodes(t *testing.T) {
+	ctx := context.Background()
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{
+		"Alice": "Fido",
+		"Bob":   "Rex",
+		"Carol": "Fido",
+	})
+
+	seen := 0
+	for o, err := range owners.Query(ctx).WhereEdge("pets", `eq(name, "Fido")`).IterNodes() {
+		if err != nil {
+			t.Fatalf("WhereEdge IterNodes yielded error: %v", err)
+		}
+		if o.Name != "Alice" && o.Name != "Carol" {
+			t.Fatalf("WhereEdge IterNodes yielded %q, want a Fido owner", o.Name)
+		}
+		seen++
+	}
+	if seen != 2 {
+		t.Fatalf("WhereEdge IterNodes streamed %d owners, want 2", seen)
+	}
+}

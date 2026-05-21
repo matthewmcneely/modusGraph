@@ -59,6 +59,14 @@ func (q *DirectorQuery) Cascade(predicates ...string) *DirectorQuery {
 	return q
 }
 
+// WhereFilms keeps only Director records that have a director.film
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *DirectorQuery) WhereFilms(filter string, params ...any) *DirectorQuery {
+	q.typed.WhereEdge("director.film", filter, params...)
+	return q
+}
+
 // Nodes executes the query and returns wrapped Director results.
 func (q *DirectorQuery) Nodes() ([]*Director, error) {
 	recs, err := q.typed.Nodes()

@@ -59,6 +59,70 @@ func (q *StudioQuery) Cascade(predicates ...string) *StudioQuery {
 	return q
 }
 
+// WhereFounder keeps only Studio records that have a founder
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereFounder(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("founder", filter, params...)
+	return q
+}
+
+// WhereHeadquarters keeps only Studio records that have a headquarters
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereHeadquarters(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("headquarters", filter, params...)
+	return q
+}
+
+// WhereCurrentHead keeps only Studio records that have a currentHead
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereCurrentHead(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("currentHead", filter, params...)
+	return q
+}
+
+// WhereCeo keeps only Studio records that have a ceo
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereCeo(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("ceo", filter, params...)
+	return q
+}
+
+// WhereHomeBase keeps only Studio records that have a homeBase
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereHomeBase(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("homeBase", filter, params...)
+	return q
+}
+
+// WhereParentCompany keeps only Studio records that have a parentCompany
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereParentCompany(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("parentCompany", filter, params...)
+	return q
+}
+
+// WhereFilms keeps only Studio records that have a films
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereFilms(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("films", filter, params...)
+	return q
+}
+
+// WhereAdvisors keeps only Studio records that have a advisors
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereAdvisors(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("advisors", filter, params...)
+	return q
+}
+
 // Nodes executes the query and returns wrapped Studio results.
 func (q *StudioQuery) Nodes() ([]*Studio, error) {
 	recs, err := q.typed.Nodes()

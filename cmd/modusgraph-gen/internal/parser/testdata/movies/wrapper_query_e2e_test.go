@@ -290,3 +290,62 @@ func TestWrapperQuery_IterNodes(t *testing.T) {
 		t.Fatalf("wrapper IterNodes streamed %d films, want %d", seen, n)
 	}
 }
+
+// TestWrapperQuery_WhereEdgeFiltersByEdgeTarget inserts two directors linked to
+// disjoint film sets, then verifies the generated DirectorQuery.WhereFilms
+// filters directors by a scalar of the Film reached over the director.film
+// edge — a constraint the root-only Filter cannot express. This proves the
+// generated Where<Edge> method routes through typed.Query.WhereEdge end to end.
+func TestWrapperQuery_WhereEdgeFiltersByEdgeTarget(t *testing.T) {
+	ctx := context.Background()
+	client := movies.NewClient(newConn(t))
+
+	// Insert four films first so the director edges link persisted nodes.
+	films := map[string]*moviesSchema.Film{
+		"Inception": {Name: "Inception"},
+		"Dunkirk":   {Name: "Dunkirk"},
+		"Jaws":      {Name: "Jaws"},
+		"E.T.":      {Name: "E.T."},
+	}
+	for name, f := range films {
+		if err := client.Film.Add(ctx, movies.WrapFilm(f)); err != nil {
+			t.Fatalf("Film.Add(%q): %v", name, err)
+		}
+	}
+	directors := []*moviesSchema.Director{
+		{Name: "Christopher Nolan", Films: []*moviesSchema.Film{films["Inception"], films["Dunkirk"]}},
+		{Name: "Steven Spielberg", Films: []*moviesSchema.Film{films["Jaws"], films["E.T."]}},
+	}
+	for _, d := range directors {
+		if err := client.Director.Add(ctx, movies.WrapDirector(d)); err != nil {
+			t.Fatalf("Director.Add(%q): %v", d.Name, err)
+		}
+	}
+
+	// Inception was directed only by Nolan.
+	got, err := client.Director.Query(ctx).WhereFilms(`eq(name, "Inception")`).Nodes()
+	if err != nil {
+		t.Fatalf("WhereFilms Nodes: %v", err)
+	}
+	if len(got) != 1 || got[0].Name() != "Christopher Nolan" {
+		t.Fatalf("WhereFilms(name=Inception) returned %d directors, want exactly [Christopher Nolan]", len(got))
+	}
+
+	// Jaws was directed only by Spielberg.
+	got, err = client.Director.Query(ctx).WhereFilms(`eq(name, "Jaws")`).Nodes()
+	if err != nil {
+		t.Fatalf("WhereFilms Nodes: %v", err)
+	}
+	if len(got) != 1 || got[0].Name() != "Steven Spielberg" {
+		t.Fatalf("WhereFilms(name=Jaws) returned %d directors, want exactly [Steven Spielberg]", len(got))
+	}
+
+	// No film is named Solaris → no director matches.
+	got, err = client.Director.Query(ctx).WhereFilms(`eq(name, "Solaris")`).Nodes()
+	if err != nil {
+		t.Fatalf("WhereFilms Nodes: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("WhereFilms(name=Solaris) returned %d directors, want none", len(got))
+	}
+}

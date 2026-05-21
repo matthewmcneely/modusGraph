@@ -58,10 +58,11 @@ func (c *Client[T]) Delete(ctx context.Context, uid string) error {
 	return c.conn.Delete(ctx, []string{uid})
 }
 
-// Query returns a typed query builder for T.
+// Query returns a typed query builder for T. conn and ctx are carried so the
+// builder can run a WhereEdge pre-pass (see Query.WhereEdge) if one is needed.
 func (c *Client[T]) Query(ctx context.Context) *Query[T] {
 	var z T
-	return &Query[T]{q: c.conn.Query(ctx, &z)}
+	return &Query[T]{q: c.conn.Query(ctx, &z), conn: c.conn, ctx: ctx}
 }
 
 // defaultPageSize is the page size IterNodes uses to page through results.
