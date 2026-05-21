@@ -198,27 +198,6 @@ func Generate(pkg *model.Package, cfg Config) error {
 		}
 	}
 
-	// 4. iter.go.tmpl → iter_gen.go (EntityDir, gated by NoEntities)
-	if !cfg.NoEntities {
-		// iter and page_options live in EntityDir and must use entityPkg as the
-		// package name, NOT pkg.Name (which is the schema package name).
-		entityPkgData := struct {
-			Name     string
-			Entities []model.Entity
-		}{
-			Name:     entityPkg,
-			Entities: pkg.Entities,
-		}
-		if err := executeAndWrite(tmpl, "iter.go.tmpl", entityPkgData, filepath.Join(cfg.EntityDir, "iter_gen.go")); err != nil {
-			return err
-		}
-
-		// 5. page_options.go.tmpl → page_options_gen.go (EntityDir, gated by NoEntities)
-		if err := executeAndWrite(tmpl, "page_options.go.tmpl", entityPkgData, filepath.Join(cfg.EntityDir, "page_options_gen.go")); err != nil {
-			return err
-		}
-	}
-
 	// Per-entity data struct used by entity, options, accessors, and wrapper-side templates.
 	type entityData struct {
 		PackageName       string

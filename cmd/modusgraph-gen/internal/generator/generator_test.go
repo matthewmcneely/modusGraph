@@ -1070,6 +1070,20 @@ func TestGenerate_WrapperQuery(t *testing.T) {
 	}
 }
 
+func TestGenerate_NoIterFileEmitted(t *testing.T) {
+	_, _, entityDir := generateFromMinimalSchema(t)
+	if _, err := os.Stat(filepath.Join(entityDir, "iter_gen.go")); !os.IsNotExist(err) {
+		t.Errorf("iter_gen.go must NOT be emitted (replaced by typed.Client.Iter); stat err = %v", err)
+	}
+}
+
+func TestGenerate_NoPageOptionsFileEmitted(t *testing.T) {
+	_, _, entityDir := generateFromMinimalSchema(t)
+	if _, err := os.Stat(filepath.Join(entityDir, "page_options_gen.go")); !os.IsNotExist(err) {
+		t.Errorf("page_options_gen.go must NOT be emitted (dead code); stat err = %v", err)
+	}
+}
+
 func TestGenerate_CLIImportsSchemaByFullPath(t *testing.T) {
 	// A schema package physically nested below the module root must be
 	// imported by its FULL path, not module/<pkgname>.
