@@ -983,20 +983,24 @@ type Film struct {
 	// client (wrapper_client.go.tmpl). Check for wrapper-specific content.
 	for _, want := range []string{
 		`package entity`,
-		`"example.com/test"`, // schema import path
 		`type Client struct {`,
-		`schemaClient *schema.Client`,
-		`StudioClient`,
-		`FilmClient`,
+		`conn modusgraph.Client`,
 		`func NewClient(conn modusgraph.Client) *Client`,
-		`sc := schema.NewClient(conn)`,
-		`c.Studio = &StudioClient{schemaClient: sc.Studio}`,
-		`c.Film = &FilmClient{schemaClient: sc.Film}`,
+		`c.Studio = NewStudioClient(conn)`,
+		`c.Film = NewFilmClient(conn)`,
 		`func (c *Client) GraphClient() modusgraph.Client`,
-		`return c.schemaClient.GraphClient`,
+		`return c.conn`,
 	} {
 		if !strings.Contains(data, want) {
 			t.Errorf("client_gen.go (wrapper side) missing: %q\n---file---\n%s", want, data)
+		}
+	}
+	for _, notWant := range []string{
+		`schemaClient *schema.Client`,
+		`sc := schema.NewClient(conn)`,
+	} {
+		if strings.Contains(data, notWant) {
+			t.Errorf("wrapper client_gen.go must NOT depend on the schema aggregate: %q", notWant)
 		}
 	}
 }

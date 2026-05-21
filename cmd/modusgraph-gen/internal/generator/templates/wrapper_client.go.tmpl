@@ -2,36 +2,29 @@ package {{ .EntityPackageName }}
 
 import (
 	"github.com/matthewmcneely/modusgraph"
-
-	"{{ .SchemaImportPath }}"
 )
 
-{{- $sAlias := .SchemaAlias }}
-
-// Client is a top-level wrapper-side client. Holds a {{ $sAlias }}.Client
-// internally and exposes per-entity wrapper sub-clients that compose over
-// the schema-side clients.
+// Client is a top-level wrapper-side client. It holds a modusgraph.Client
+// connection and exposes per-entity wrapper sub-clients that all share it.
 type Client struct {
-	schemaClient *{{ $sAlias }}.Client
+	conn modusgraph.Client
 {{- range .Entities }}
 	{{ .Name }} *{{ .Name }}Client
 {{- end }}
 }
 
-// NewClient binds conn to a wrapper-side Client. The internal schema-side
-// Client is constructed once and shared by all per-entity sub-clients.
+// NewClient binds conn to a wrapper-side Client.
 func NewClient(conn modusgraph.Client) *Client {
-	sc := {{ $sAlias }}.NewClient(conn)
-	c := &Client{schemaClient: sc}
+	c := &Client{conn: conn}
 {{- range .Entities }}
-	c.{{ .Name }} = &{{ .Name }}Client{schemaClient: sc.{{ .Name }}}
+	c.{{ .Name }} = New{{ .Name }}Client(conn)
 {{- end }}
 	return c
 }
 
-// GraphClient returns the underlying modusgraph.Client connection, shared
-// with the internal schema-side Client. Use it for operations the typed
-// clients do not wrap — for example QueryRaw, DropAll, WithRetry, and Close.
+// GraphClient returns the underlying modusgraph.Client connection. Use it for
+// operations the typed clients do not wrap — for example QueryRaw, DropAll,
+// WithRetry, and Close.
 func (c *Client) GraphClient() modusgraph.Client {
-	return c.schemaClient.GraphClient
+	return c.conn
 }
