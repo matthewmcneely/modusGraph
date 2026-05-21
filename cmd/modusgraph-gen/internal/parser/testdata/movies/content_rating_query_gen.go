@@ -3,14 +3,16 @@
 package movies
 
 import (
+	"iter"
+
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // ContentRatingQuery is the wrapper-side fluent query builder for ContentRating. Builder
-// methods return *ContentRatingQuery for chaining; terminal methods (Nodes, First)
-// execute the query and wrap results.
+// methods return *ContentRatingQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
 type ContentRatingQuery struct {
 	typed *typed.Query[schema.ContentRating]
 }
@@ -57,6 +59,14 @@ func (q *ContentRatingQuery) Cascade(predicates ...string) *ContentRatingQuery {
 	return q
 }
 
+// WhereFilms keeps only ContentRating records that have a ~rated
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *ContentRatingQuery) WhereFilms(filter string, params ...any) *ContentRatingQuery {
+	q.typed.WhereEdge("~rated", filter, params...)
+	return q
+}
+
 // Nodes executes the query and returns wrapped ContentRating results.
 func (q *ContentRatingQuery) Nodes() ([]*ContentRating, error) {
 	recs, err := q.typed.Nodes()
@@ -78,4 +88,20 @@ func (q *ContentRatingQuery) First() (*ContentRating, error) {
 		return nil, err
 	}
 	return WrapContentRating(s), nil
+}
+
+// IterNodes streams the query's results as wrapped ContentRating values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *ContentRatingQuery) IterNodes() iter.Seq2[*ContentRating, error] {
+	return func(yield func(*ContentRating, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapContentRating(s), nil) {
+				return
+			}
+		}
+	}
 }

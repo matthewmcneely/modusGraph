@@ -21,6 +21,23 @@ type widget struct {
 	Qty   int      `json:"qty,omitempty" dgraph:"index=int"`
 }
 
+// owner and pet exercise Query.WhereEdge: owner has an outbound "pets" edge to
+// pet, and pet's Name carries an index so eq(name, ...) resolves inside an edge
+// filter. The pair is the typed-package analogue of the Person/Dog example in
+// docs/specs/2026-05-21-query-edge-filter-design.md.
+type owner struct {
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
+	Name  string   `json:"name,omitempty" dgraph:"index=exact"`
+	Pets  []*pet   `json:"pets,omitempty"`
+}
+
+type pet struct {
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
+	Name  string   `json:"name,omitempty" dgraph:"index=exact"`
+}
+
 // newConn builds a local file-backed modusgraph client for a test.
 func newConn(t *testing.T) modusgraph.Client {
 	t.Helper()

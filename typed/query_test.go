@@ -526,3 +526,418 @@ func TestQuery_SingleQueryPerTerminal(t *testing.T) {
 		t.Fatalf("First executed %d queries, want exactly 1", got)
 	}
 }
+
+func TestIterNodes_StreamsAll(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	const n = 125 // > defaultPageSize (50): forces multiple pages
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	seen := 0
+	for w, err := range c.Query(ctx).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		if w == nil {
+			t.Fatal("IterNodes yielded a nil widget")
+		}
+		seen++
+	}
+	if seen != n {
+		t.Fatalf("IterNodes streamed %d records, want %d", seen, n)
+	}
+}
+
+func TestIterNodes_StopsOnConsumerBreak(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	const n = 125
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	seen := 0
+	for _, err := range c.Query(ctx).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		seen++
+		if seen == 10 {
+			break
+		}
+	}
+	if seen != 10 {
+		t.Fatalf("IterNodes yielded %d records after break at 10, want 10", seen)
+	}
+}
+
+func TestIterNodes_EmptyResult(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	seen := 0
+	for _, err := range c.Query(ctx).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes over empty set yielded error: %v", err)
+		}
+		seen++
+	}
+	if seen != 0 {
+		t.Fatalf("IterNodes over empty set yielded %d records, want 0", seen)
+	}
+}
+
+func TestIterNodes_RespectsLimit(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	const n = 100
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	seen := 0
+	for _, err := range c.Query(ctx).Limit(30).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		seen++
+	}
+	if seen != 30 {
+		t.Fatalf("Limit(30).IterNodes() streamed %d records, want 30", seen)
+	}
+}
+
+func TestIterNodes_LimitExceedsResultSet(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	const n = 30
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	seen := 0
+	for _, err := range c.Query(ctx).Limit(500).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		seen++
+	}
+	if seen != n {
+		t.Fatalf("Limit(500).IterNodes() over %d records streamed %d, want %d", n, seen, n)
+	}
+}
+
+func TestIterNodes_RespectsOffset(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Qty values start at 1 (not 0) so omitempty never suppresses the field,
+	// keeping OrderAsc("qty") a true total order over all records.
+	const n = 10
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i + 1}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	var got []int
+	for w, err := range c.Query(ctx).OrderAsc("qty").Offset(3).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		got = append(got, w.Qty)
+	}
+	if len(got) != 7 {
+		t.Fatalf("Offset(3).IterNodes() streamed %d records, want 7", len(got))
+	}
+	for i, q := range got {
+		if q != i+4 { // Qty=1..10; offset 3 skips 1,2,3 → starts at 4
+			t.Fatalf("Offset(3).IterNodes()[%d] Qty = %d, want %d", i, q, i+4)
+		}
+	}
+}
+
+func TestIterNodes_RespectsOffsetAndLimit(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Qty values start at 1 so omitempty never suppresses the field and
+	// OrderAsc("qty") is a strict total order across all 200 records.
+	const n = 200
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i + 1}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	var got []int
+	for w, err := range c.Query(ctx).OrderAsc("qty").Offset(60).Limit(120).IterNodes() {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		got = append(got, w.Qty)
+	}
+	if len(got) != 120 {
+		t.Fatalf("Offset(60).Limit(120).IterNodes() streamed %d records, want 120", len(got))
+	}
+	for i, q := range got {
+		if q != i+61 { // Qty=1..200; offset 60 skips 1..60 → starts at 61
+			t.Fatalf("result[%d] Qty = %d, want %d", i, q, i+61)
+		}
+	}
+}
+
+func TestIterNodes_OneQueryPerPage(t *testing.T) {
+	ctx := context.Background()
+	var queriesExecuted int
+	c := typed.NewClient[widget](newCountingConn(t, &queriesExecuted))
+	const n = 125 // ceil(125/50) = 3 page queries
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	// Obtaining the iterator runs no query — IterNodes is lazy.
+	seq := c.Query(ctx).IterNodes()
+	if queriesExecuted != 0 {
+		t.Fatalf("building the IterNodes iterator executed %d queries, want 0", queriesExecuted)
+	}
+	seen := 0
+	for _, err := range seq {
+		if err != nil {
+			t.Fatalf("IterNodes yielded error: %v", err)
+		}
+		seen++
+	}
+	if seen != n {
+		t.Fatalf("IterNodes streamed %d records, want %d", seen, n)
+	}
+	if queriesExecuted != 3 {
+		t.Fatalf("IterNodes over %d records ran %d queries, want 3", n, queriesExecuted)
+	}
+}
+
+func TestIterNodes_YieldsErrorAndStops(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	if err := c.Add(ctx, &widget{Name: "w", Qty: 1}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	// A syntactically invalid @filter (unbalanced parenthesis) makes the page
+	// query fail at execution; IterNodes must yield one (nil, err) and stop.
+	gotErr := false
+	for w, err := range c.Query(ctx).Filter(`eq(name, "w"`).IterNodes() {
+		if err != nil {
+			gotErr = true
+			if w != nil {
+				t.Fatalf("error yield carried a non-nil widget: %+v", w)
+			}
+			break
+		}
+		t.Fatal("IterNodes over a malformed query yielded a record before erroring")
+	}
+	if !gotErr {
+		t.Fatal("IterNodes over a malformed query did not yield an error")
+	}
+}
+
+func TestQuery_LimitOffsetStillDriveNodes(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Qty values start at 1 so omitempty never suppresses the field and
+	// OrderAsc("qty") is a strict total order across all records.
+	const n = 10
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i + 1}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+	// Regression: Limit/Offset now also set Query struct fields; confirm they
+	// still drive the Nodes terminal.
+	got, err := c.Query(ctx).OrderAsc("qty").Offset(2).Limit(3).Nodes()
+	if err != nil {
+		t.Fatalf("Nodes: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("Offset(2).Limit(3).Nodes() returned %d records, want 3", len(got))
+	}
+	for i, w := range got {
+		if w.Qty != i+3 { // Qty=1..10; offset 2 skips 1,2 → starts at 3
+			t.Fatalf("Nodes()[%d] Qty = %d, want %d", i, w.Qty, i+3)
+		}
+	}
+}
+
+// seedOwners inserts owner/pet pairs over conn for the WhereEdge tests. Each
+// map entry is one owner owning one pet of the given name; the pet is inserted
+// first so the owner's edge links an already-persisted node. It returns an
+// owner client bound to conn.
+func seedOwners(ctx context.Context, t *testing.T, conn modusgraph.Client, ownerToPet map[string]string) *typed.Client[owner] {
+	t.Helper()
+	pets := typed.NewClient[pet](conn)
+	owners := typed.NewClient[owner](conn)
+	for ownerName, petName := range ownerToPet {
+		p := &pet{Name: petName}
+		if err := pets.Add(ctx, p); err != nil {
+			t.Fatalf("Add pet %q: %v", petName, err)
+		}
+		if err := owners.Add(ctx, &owner{Name: ownerName, Pets: []*pet{p}}); err != nil {
+			t.Fatalf("Add owner %q: %v", ownerName, err)
+		}
+	}
+	return owners
+}
+
+func TestQuery_WhereEdgeFiltersByEdgeTarget(t *testing.T) {
+	ctx := context.Background()
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{
+		"Alice": "Fido",
+		"Bob":   "Rex",
+		"Carol": "Fido",
+	})
+
+	// WhereEdge constrains owners by a scalar of the pet reached over the
+	// "pets" edge — something a root Filter cannot express.
+	got, err := owners.Query(ctx).WhereEdge("pets", `eq(name, "Fido")`).Nodes()
+	if err != nil {
+		t.Fatalf("WhereEdge Nodes: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("WhereEdge(pets, name=Fido) returned %d owners, want 2 (Alice, Carol)", len(got))
+	}
+	for _, o := range got {
+		if o.Name != "Alice" && o.Name != "Carol" {
+			t.Fatalf("WhereEdge returned %q, want only Fido owners (Alice, Carol)", o.Name)
+		}
+	}
+}
+
+func TestQuery_WhereEdgeNoMatchReturnsEmpty(t *testing.T) {
+	ctx := context.Background()
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{"Alice": "Fido", "Bob": "Rex"})
+
+	// No pet is named Nemo: the pre-pass matches zero roots, so Nodes returns
+	// an empty result — not an error — and never runs the main query.
+	got, err := owners.Query(ctx).WhereEdge("pets", `eq(name, "Nemo")`).Nodes()
+	if err != nil {
+		t.Fatalf("WhereEdge Nodes: unexpected error %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("WhereEdge for an unowned pet name returned %d owners, want 0", len(got))
+	}
+}
+
+func TestQuery_WhereEdgeBindsParams(t *testing.T) {
+	ctx := context.Background()
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{"Alice": "Fido", "Bob": "Rex"})
+
+	// The $1 placeholder in a WhereEdge filter binds exactly as it does for Filter.
+	got, err := owners.Query(ctx).WhereEdge("pets", "eq(name, $1)", "Rex").Nodes()
+	if err != nil {
+		t.Fatalf("WhereEdge Nodes: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "Bob" {
+		t.Fatalf("WhereEdge(pets, name=$1, Rex) returned %+v, want [Bob]", got)
+	}
+}
+
+func TestQuery_WhereEdgeCombinesWithFilter(t *testing.T) {
+	ctx := context.Background()
+	// Alice and Carol both own a Fido; a root Filter on name narrows to Alice.
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{
+		"Alice": "Fido",
+		"Bob":   "Rex",
+		"Carol": "Fido",
+	})
+
+	got, err := owners.Query(ctx).
+		Filter(`eq(name, "Alice")`).
+		WhereEdge("pets", `eq(name, "Fido")`).
+		Nodes()
+	if err != nil {
+		t.Fatalf("Filter+WhereEdge Nodes: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "Alice" {
+		t.Fatalf("Filter(name=Alice)+WhereEdge(pets,name=Fido) returned %+v, want [Alice]", got)
+	}
+}
+
+func TestQuery_WhereEdgeMultipleConstraintsAnd(t *testing.T) {
+	ctx := context.Background()
+	conn := newConn(t)
+	pets := typed.NewClient[pet](conn)
+	owners := typed.NewClient[owner](conn)
+
+	// Alice owns both Fido and Rex; Bob owns only Fido.
+	fido, rex := &pet{Name: "Fido"}, &pet{Name: "Rex"}
+	for _, p := range []*pet{fido, rex} {
+		if err := pets.Add(ctx, p); err != nil {
+			t.Fatalf("Add pet %q: %v", p.Name, err)
+		}
+	}
+	if err := owners.Add(ctx, &owner{Name: "Alice", Pets: []*pet{fido, rex}}); err != nil {
+		t.Fatalf("Add Alice: %v", err)
+	}
+	if err := owners.Add(ctx, &owner{Name: "Bob", Pets: []*pet{fido}}); err != nil {
+		t.Fatalf("Add Bob: %v", err)
+	}
+
+	// Two WhereEdge calls AND together: only an owner of BOTH pets survives.
+	got, err := owners.Query(ctx).
+		WhereEdge("pets", `eq(name, "Fido")`).
+		WhereEdge("pets", `eq(name, "Rex")`).
+		Nodes()
+	if err != nil {
+		t.Fatalf("two-WhereEdge Nodes: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "Alice" {
+		t.Fatalf("WhereEdge(Fido) AND WhereEdge(Rex) returned %+v, want [Alice]", got)
+	}
+}
+
+func TestQuery_WhereEdgeFirst(t *testing.T) {
+	ctx := context.Background()
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{"Alice": "Fido", "Bob": "Rex"})
+
+	// First runs the pre-pass too: it returns the Rex owner, never a Fido one.
+	got, err := owners.Query(ctx).WhereEdge("pets", `eq(name, "Rex")`).First()
+	if err != nil {
+		t.Fatalf("WhereEdge First: %v", err)
+	}
+	if got == nil || got.Name != "Bob" {
+		t.Fatalf("WhereEdge(pets,name=Rex).First() = %+v, want Bob", got)
+	}
+
+	// First with an edge constraint nothing satisfies is (nil, nil).
+	none, err := owners.Query(ctx).WhereEdge("pets", `eq(name, "Nemo")`).First()
+	if err != nil {
+		t.Fatalf("WhereEdge First no-match: unexpected error %v", err)
+	}
+	if none != nil {
+		t.Fatalf("WhereEdge First with no match = %+v, want nil", none)
+	}
+}
+
+func TestQuery_WhereEdgeIterNodes(t *testing.T) {
+	ctx := context.Background()
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{
+		"Alice": "Fido",
+		"Bob":   "Rex",
+		"Carol": "Fido",
+	})
+
+	seen := 0
+	for o, err := range owners.Query(ctx).WhereEdge("pets", `eq(name, "Fido")`).IterNodes() {
+		if err != nil {
+			t.Fatalf("WhereEdge IterNodes yielded error: %v", err)
+		}
+		if o.Name != "Alice" && o.Name != "Carol" {
+			t.Fatalf("WhereEdge IterNodes yielded %q, want a Fido owner", o.Name)
+		}
+		seen++
+	}
+	if seen != 2 {
+		t.Fatalf("WhereEdge IterNodes streamed %d owners, want 2", seen)
+	}
+}

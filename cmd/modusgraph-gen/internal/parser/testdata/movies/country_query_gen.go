@@ -3,14 +3,16 @@
 package movies
 
 import (
+	"iter"
+
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // CountryQuery is the wrapper-side fluent query builder for Country. Builder
-// methods return *CountryQuery for chaining; terminal methods (Nodes, First)
-// execute the query and wrap results.
+// methods return *CountryQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
 type CountryQuery struct {
 	typed *typed.Query[schema.Country]
 }
@@ -57,6 +59,14 @@ func (q *CountryQuery) Cascade(predicates ...string) *CountryQuery {
 	return q
 }
 
+// WhereFilms keeps only Country records that have a ~country
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *CountryQuery) WhereFilms(filter string, params ...any) *CountryQuery {
+	q.typed.WhereEdge("~country", filter, params...)
+	return q
+}
+
 // Nodes executes the query and returns wrapped Country results.
 func (q *CountryQuery) Nodes() ([]*Country, error) {
 	recs, err := q.typed.Nodes()
@@ -78,4 +88,20 @@ func (q *CountryQuery) First() (*Country, error) {
 		return nil, err
 	}
 	return WrapCountry(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Country values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *CountryQuery) IterNodes() iter.Seq2[*Country, error] {
+	return func(yield func(*Country, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapCountry(s), nil) {
+				return
+			}
+		}
+	}
 }

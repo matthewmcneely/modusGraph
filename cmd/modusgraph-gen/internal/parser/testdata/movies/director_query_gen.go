@@ -3,14 +3,16 @@
 package movies
 
 import (
+	"iter"
+
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // DirectorQuery is the wrapper-side fluent query builder for Director. Builder
-// methods return *DirectorQuery for chaining; terminal methods (Nodes, First)
-// execute the query and wrap results.
+// methods return *DirectorQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
 type DirectorQuery struct {
 	typed *typed.Query[schema.Director]
 }
@@ -57,6 +59,14 @@ func (q *DirectorQuery) Cascade(predicates ...string) *DirectorQuery {
 	return q
 }
 
+// WhereFilms keeps only Director records that have a director.film
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *DirectorQuery) WhereFilms(filter string, params ...any) *DirectorQuery {
+	q.typed.WhereEdge("director.film", filter, params...)
+	return q
+}
+
 // Nodes executes the query and returns wrapped Director results.
 func (q *DirectorQuery) Nodes() ([]*Director, error) {
 	recs, err := q.typed.Nodes()
@@ -78,4 +88,20 @@ func (q *DirectorQuery) First() (*Director, error) {
 		return nil, err
 	}
 	return WrapDirector(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Director values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *DirectorQuery) IterNodes() iter.Seq2[*Director, error] {
+	return func(yield func(*Director, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapDirector(s), nil) {
+				return
+			}
+		}
+	}
 }

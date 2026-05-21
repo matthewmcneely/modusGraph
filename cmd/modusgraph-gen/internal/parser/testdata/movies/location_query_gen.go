@@ -3,14 +3,16 @@
 package movies
 
 import (
+	"iter"
+
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // LocationQuery is the wrapper-side fluent query builder for Location. Builder
-// methods return *LocationQuery for chaining; terminal methods (Nodes, First)
-// execute the query and wrap results.
+// methods return *LocationQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
 type LocationQuery struct {
 	typed *typed.Query[schema.Location]
 }
@@ -78,4 +80,20 @@ func (q *LocationQuery) First() (*Location, error) {
 		return nil, err
 	}
 	return WrapLocation(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Location values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *LocationQuery) IterNodes() iter.Seq2[*Location, error] {
+	return func(yield func(*Location, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapLocation(s), nil) {
+				return
+			}
+		}
+	}
 }

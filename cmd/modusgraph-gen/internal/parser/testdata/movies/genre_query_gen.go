@@ -3,14 +3,16 @@
 package movies
 
 import (
+	"iter"
+
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // GenreQuery is the wrapper-side fluent query builder for Genre. Builder
-// methods return *GenreQuery for chaining; terminal methods (Nodes, First)
-// execute the query and wrap results.
+// methods return *GenreQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
 type GenreQuery struct {
 	typed *typed.Query[schema.Genre]
 }
@@ -57,6 +59,14 @@ func (q *GenreQuery) Cascade(predicates ...string) *GenreQuery {
 	return q
 }
 
+// WhereFilms keeps only Genre records that have a ~genre
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *GenreQuery) WhereFilms(filter string, params ...any) *GenreQuery {
+	q.typed.WhereEdge("~genre", filter, params...)
+	return q
+}
+
 // Nodes executes the query and returns wrapped Genre results.
 func (q *GenreQuery) Nodes() ([]*Genre, error) {
 	recs, err := q.typed.Nodes()
@@ -78,4 +88,20 @@ func (q *GenreQuery) First() (*Genre, error) {
 		return nil, err
 	}
 	return WrapGenre(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Genre values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *GenreQuery) IterNodes() iter.Seq2[*Genre, error] {
+	return func(yield func(*Genre, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapGenre(s), nil) {
+				return
+			}
+		}
+	}
 }
