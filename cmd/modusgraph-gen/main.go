@@ -32,7 +32,7 @@ func main() {
 	cliName := flag.String("cli-name", "", "name for CLI binary (default: wrapper pkg name)")
 	out := flag.String("out", "", "[deprecated] alias for -entity-dir")
 
-	noSchemaClients := flag.Bool("no-schema-clients", false, "skip schema-level clients/queries (implies -no-entity-clients)")
+	noSchemaClients := flag.Bool("no-schema-clients", false, "skip the schema-level aggregate Client")
 	entities := flag.Bool("entities", false, "generate the wrapper/entity layer (types, accessors, options, clients); off by default")
 	noEntityClients := flag.Bool("no-entity-clients", false, "skip wrapper-level clients/queries only")
 	noCLI := flag.Bool("no-cli", false, "skip CLI generation")
@@ -59,10 +59,9 @@ func main() {
 		entityClientDirExplicit: *entityClientDir,
 	})
 
-	// Apply toggle implication rules.
-	if *noSchemaClients {
-		*noEntityClients = true
-	}
+	// Apply toggle implication rules. The wrapper layer composes over the
+	// typed package, not the schema aggregate, so -no-schema-clients does not
+	// imply -no-entity-clients.
 	if !*entities {
 		*noEntityClients = true
 	}
