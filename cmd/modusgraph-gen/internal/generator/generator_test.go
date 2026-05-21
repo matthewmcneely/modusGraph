@@ -1006,14 +1006,15 @@ func TestGenerate_WrapperEntityClient(t *testing.T) {
 	data := mustReadGen(t, entityDir, "studio_client_gen.go")
 	for _, want := range []string{
 		`package entity`,
+		`"github.com/matthewmcneely/modusgraph/typed"`,
 		`type StudioClient struct {`,
-		`schemaClient *schema.StudioClient`,
+		`typed *typed.Client[schema.Studio]`,
 		`func NewStudioClient(conn modusgraph.Client) *StudioClient`,
-		`return &StudioClient{schemaClient: schema.NewStudioClient(conn)}`,
+		`typed.NewClient[schema.Studio](conn)`,
 		`func (c *StudioClient) Get(ctx context.Context, uid string) (*Studio, error)`,
 		`return WrapStudio(s), nil`,
 		`func (c *StudioClient) Add(ctx context.Context, w *Studio) error`,
-		`return c.schemaClient.Add(ctx, w.s)`,
+		`w.Unwrap()`,
 		`func (c *StudioClient) Update(ctx context.Context, w *Studio) error`,
 		`func (c *StudioClient) Upsert(ctx context.Context, w *Studio, predicates ...string) error`,
 		`func (c *StudioClient) Delete(ctx context.Context, uid string) error`,
@@ -1021,6 +1022,14 @@ func TestGenerate_WrapperEntityClient(t *testing.T) {
 	} {
 		if !strings.Contains(data, want) {
 			t.Errorf("studio_client_gen.go missing: %q", want)
+		}
+	}
+	for _, notWant := range []string{
+		`schema.NewStudioClient(`,
+		`*schema.StudioClient`,
+	} {
+		if strings.Contains(data, notWant) {
+			t.Errorf("studio_client_gen.go must NOT reference the deleted schema client: %q", notWant)
 		}
 	}
 }
