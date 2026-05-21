@@ -12,8 +12,9 @@ import (
 )
 
 // Query is a fluent, type-safe query builder over records of type T. Builder
-// methods return *Query[T] for chaining; terminal methods (Nodes, First,
-// IterNodes) execute the query and decode typed results.
+// methods return *Query[T] for chaining, except Var and GroupBy, which change
+// the result shape and transition to *RawQuery; terminal methods (Nodes,
+// First, IterNodes) execute the query and decode typed results.
 //
 // A Query is single-use. Builder methods mutate the underlying query in place
 // and return the same *Query, so a Query value should be built as one chain
@@ -110,6 +111,22 @@ func (qb *Query[T]) Vars(funcDef string, vars map[string]string) *Query[T] {
 	return qb
 }
 
+// Var marks the query block as a dgraph var block. A var block computes query
+// variables and returns no data of its own, so Var transitions out of the
+// typed query: it returns a *RawQuery, which exposes no node terminal.
+func (qb *Query[T]) Var() *RawQuery {
+	qb.q.Var()
+	return &RawQuery{q: qb.q}
+}
+
+// GroupBy adds an @groupby(predicate) aggregation. A grouped query returns
+// aggregation groups rather than a slice of T, so GroupBy transitions out of
+// the typed query: it returns a *RawQuery, which exposes no node terminal.
+func (qb *Query[T]) GroupBy(predicate string) *RawQuery {
+	qb.q.GroupBy(predicate)
+	return &RawQuery{q: qb.q}
+}
+
 // Nodes executes the query and returns all matching records.
 func (qb *Query[T]) Nodes() ([]T, error) {
 	var out []T
@@ -174,7 +191,37 @@ func (qb *Query[T]) IterNodes() iter.Seq2[*T, error] {
 }
 
 // Raw returns the underlying dgman query for operations Query does not wrap
-// (Var, GroupBy).
+// (for example UID, Query, NodesAndCount).
 func (qb *Query[T]) Raw() *dg.Query {
 	return qb.q
+}
+
+// RawQuery is a query whose result is not a slice of T — produced by the
+// shape-changing builders Query.Var and Query.GroupBy. A RawQuery deliberately
+// exposes no typed node terminal: its result must be decoded by the caller
+// through the underlying dgman query, obtained via Raw.
+type RawQuery struct {
+	q *dg.Query
+}
+
+// Raw returns the underlying dgman query, for the caller to execute and decode.
+func (r *RawQuery) Raw() *dg.Query {
+	return r.q
+}
+
+// String returns the generated DQL.
+func (r *RawQuery) String() string {
+	return r.q.String()
+}
+
+// Var marks the block as a dgraph var block. See Query.Var.
+func (r *RawQuery) Var() *RawQuery {
+	r.q.Var()
+	return r
+}
+
+// GroupBy adds an @groupby(predicate) aggregation. See Query.GroupBy.
+func (r *RawQuery) GroupBy(predicate string) *RawQuery {
+	r.q.GroupBy(predicate)
+	return r
 }

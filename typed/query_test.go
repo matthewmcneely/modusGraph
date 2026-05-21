@@ -885,3 +885,75 @@ func TestQuery_VarsParameterizedQuery(t *testing.T) {
 		t.Fatalf(`Vars parameterized query returned %+v, want one widget named "b"`, got)
 	}
 }
+
+func TestQuery_VarReturnsRawQuery(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Var transitions to *RawQuery and emits a var block: dgman renders the
+	// block name as "var".
+	rq := c.Query(ctx).Var()
+	if rq == nil {
+		t.Fatal("Var() returned nil *RawQuery")
+	}
+	s := rq.String()
+	if !strings.Contains(s, "var(func:") {
+		t.Fatalf("Var() did not render a var block; got:\n%s", s)
+	}
+}
+
+func TestQuery_GroupByReturnsRawQuery(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// GroupBy transitions to *RawQuery and emits an @groupby clause.
+	rq := c.Query(ctx).GroupBy("name")
+	if rq == nil {
+		t.Fatal("GroupBy() returned nil *RawQuery")
+	}
+	s := rq.String()
+	if !strings.Contains(s, "@groupby(name)") {
+		t.Fatalf(`GroupBy("name") did not render an @groupby clause; got:\n%s`, s)
+	}
+}
+
+func TestRawQuery_RawExposesUnderlyingQuery(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	rq := c.Query(ctx).Var()
+	// Raw returns the underlying *dg.Query; String mirrors Raw().String().
+	var raw *dg.Query = rq.Raw()
+	if raw == nil {
+		t.Fatal("RawQuery.Raw() returned nil")
+	}
+	if rq.String() != raw.String() {
+		t.Fatalf("RawQuery.String() and Raw().String() differ:\n%s\n---\n%s",
+			rq.String(), raw.String())
+	}
+}
+
+func TestRawQuery_GroupByThenVarChains(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// RawQuery re-exposes Var and GroupBy so the canonical .GroupBy(...).Var()
+	// composition still chains; both clauses survive.
+	s := c.Query(ctx).GroupBy("name").Var().String()
+	if !strings.Contains(s, "@groupby(name)") {
+		t.Fatalf("@groupby clause missing after GroupBy().Var(); got:\n%s", s)
+	}
+	if !strings.Contains(s, "var(func:") {
+		t.Fatalf("var block missing after GroupBy().Var(); got:\n%s", s)
+	}
+}
+
+func TestRawQuery_CarriesEarlierBuilders(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Builders applied on *Query[T] before the GroupBy transition survive
+	// into the *RawQuery — the two share one underlying *dg.Query.
+	s := c.Query(ctx).Filter(`eq(name, "z")`).GroupBy("name").String()
+	if !strings.Contains(s, `eq(name, "z")`) {
+		t.Fatalf("Filter set before GroupBy did not survive the transition; got:\n%s", s)
+	}
+	if !strings.Contains(s, "@groupby(name)") {
+		t.Fatalf("@groupby clause missing; got:\n%s", s)
+	}
+}
