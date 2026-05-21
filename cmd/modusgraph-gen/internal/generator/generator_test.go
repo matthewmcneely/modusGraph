@@ -861,33 +861,37 @@ func TestGenerate_EntityWrapperStruct(t *testing.T) {
 	_, _, entityDir := generateFromMinimalSchema(t)
 	data := mustReadGen(t, entityDir, "studio_gen.go")
 	for _, want := range []string{
-		`package entity`,     // placeholder package name from EntityPackageName="entity"
-		`"example.com/test"`, // schema import path resolved from go.mod (module is example.com/test; schema dir IS the module root in the minimal fixture, so import path == module path)
+		`package entity`,
+		`"example.com/test"`,
+		`"github.com/matthewmcneely/modusgraph/typed"`,
 		`type Studio struct {`,
-		`s *schema.Studio`, // SchemaAlias="schema" (the package name of the parsed dir)
-		`func NewStudio(opts ...StudioOption) *Studio {`,
-		`func WrapStudio(s *schema.Studio, opts ...StudioOption) *Studio {`,
-		`func (e *Studio) Unwrap() *schema.Studio { return e.s }`,
-		`func (e *Studio) UID() string { return e.s.UID }`,
+		`typed.Wrapper[schema.Studio]`,
+		`func NewStudio(opts ...typed.Option[Studio]) *Studio {`,
+		`func WrapStudio(s *schema.Studio, opts ...typed.Option[Studio]) *Studio {`,
+		`typed.WrapValue(&schema.Studio{})`,
+		`typed.WrapValue(s)`,
+		`typed.Apply(e, opts...)`,
+		`func (e *Studio) UID() string { return e.Unwrap().UID }`,
 		`func (e *Studio) SetUID(v string)`,
-		`func (e *Studio) DType() []string { return e.s.DType }`,
+		`func (e *Studio) DType() []string { return e.Unwrap().DType }`,
 		`func (e *Studio) SetDType(v []string)`,
-		`func (e *Studio) Validate(ctx context.Context, v *validator.Validate) error`,
-		`func (e *Studio) MarshalJSON() ([]byte, error)`,
-		`func (e *Studio) UnmarshalJSON(data []byte) error`,
 	} {
 		if !strings.Contains(data, want) {
 			t.Errorf("studio_gen.go missing expected content: %q\n---file---\n%s", want, data)
 		}
 	}
 
-	// Negative: per-entity <E>Client types are no longer generated; CRUD now lives in the handwritten generic typed.Client[T].
+	// Negative: Unwrap/Marshal/Unmarshal/Validate are inherited from
+	// typed.Wrapper and MUST NOT be re-emitted here; nor any client type.
 	for _, notWant := range []string{
+		`func (e *Studio) Unwrap()`,
+		`func (e *Studio) MarshalJSON(`,
+		`func (e *Studio) UnmarshalJSON(`,
+		`func (e *Studio) Validate(`,
 		`type StudioClient struct {`,
-		`func (c *StudioClient) Get(`,
 	} {
 		if strings.Contains(data, notWant) {
-			t.Errorf("studio_gen.go must NOT include Client (now in schema-side template); found: %q", notWant)
+			t.Errorf("studio_gen.go must NOT include %q (provided by typed.Wrapper or another template)", notWant)
 		}
 	}
 }
