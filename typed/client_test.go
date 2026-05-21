@@ -119,6 +119,49 @@ func TestClient_IterPagesThroughAllRecords(t *testing.T) {
 	}
 }
 
+// gadget is a dedicated upsert struct. It must not be the shared widget, because
+// widget is used in tests that insert many records with duplicate Name values;
+// adding a "upsert" directive to widget.Name would cause those inserts to
+// collide and break unrelated tests.
+type gadget struct {
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
+	Label string   `json:"label,omitempty" dgraph:"index=exact upsert"`
+	Stock int      `json:"stock,omitempty" dgraph:"index=int"`
+}
+
+func TestClient_Upsert(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[gadget](newConn(t))
+
+	// First call — creates the record.
+	g := &gadget{Label: "sprocket", Stock: 10}
+	if err := c.Upsert(ctx, g, "label"); err != nil {
+		t.Fatalf("Upsert (create): %v", err)
+	}
+	if g.UID == "" {
+		t.Fatal("Upsert (create) did not populate UID")
+	}
+
+	// Second call — same Label value, different Stock. Must UPDATE, not insert.
+	g2 := &gadget{Label: "sprocket", Stock: 99}
+	if err := c.Upsert(ctx, g2, "label"); err != nil {
+		t.Fatalf("Upsert (update): %v", err)
+	}
+
+	// Exactly one record must exist and it must carry the updated Stock.
+	nodes, err := c.Query(ctx).Nodes()
+	if err != nil {
+		t.Fatalf("Query after Upsert: %v", err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("got %d gadgets after two upserts on the same label, want 1", len(nodes))
+	}
+	if nodes[0].Stock != 99 {
+		t.Fatalf("upserted gadget Stock = %d, want 99", nodes[0].Stock)
+	}
+}
+
 func TestClient_IterStopsOnConsumerBreak(t *testing.T) {
 	ctx := context.Background()
 	c := typed.NewClient[widget](newConn(t))
