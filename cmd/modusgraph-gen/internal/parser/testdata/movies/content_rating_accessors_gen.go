@@ -6,21 +6,23 @@ import (
 	"iter"
 	"slices"
 
+	"github.com/matthewmcneely/modusgraph/typed"
+
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // Name returns the name field.
-func (e *ContentRating) Name() string { return e.s.Name }
+func (e *ContentRating) Name() string { return e.Unwrap().Name }
 
 // SetName sets the name field.
-func (e *ContentRating) SetName(v string) { e.s.Name = v }
+func (e *ContentRating) SetName(v string) { e.Unwrap().Name = v }
 
 // Films returns a freshly allocated slice of wrappers over each
 // Film in the multi-edge.
 func (e *ContentRating) Films() []*Film {
-	out := make([]*Film, len(e.s.Films))
-	for i, x := range e.s.Films {
-		out[i] = &Film{s: x}
+	out := make([]*Film, len(e.Unwrap().Films))
+	for i, x := range e.Unwrap().Films {
+		out[i] = &Film{Wrapper: typed.WrapValue(x)}
 	}
 	return out
 }
@@ -29,8 +31,8 @@ func (e *ContentRating) Films() []*Film {
 // the allocation in Films().
 func (e *ContentRating) FilmsSeq() iter.Seq[*Film] {
 	return func(yield func(*Film) bool) {
-		for _, x := range e.s.Films {
-			if !yield(&Film{s: x}) {
+		for _, x := range e.Unwrap().Films {
+			if !yield(&Film{Wrapper: typed.WrapValue(x)}) {
 				return
 			}
 		}
@@ -39,22 +41,22 @@ func (e *ContentRating) FilmsSeq() iter.Seq[*Film] {
 
 // SetFilms replaces the multi-edge with the given items.
 func (e *ContentRating) SetFilms(items ...*Film) {
-	e.s.Films = make([]*schema.Film, len(items))
+	e.Unwrap().Films = make([]*schema.Film, len(items))
 	for i, x := range items {
-		e.s.Films[i] = x.s
+		e.Unwrap().Films[i] = x.Unwrap()
 	}
 }
 
 // AppendFilms appends items to the multi-edge.
 func (e *ContentRating) AppendFilms(items ...*Film) {
 	for _, x := range items {
-		e.s.Films = append(e.s.Films, x.s)
+		e.Unwrap().Films = append(e.Unwrap().Films, x.Unwrap())
 	}
 }
 
 // RemoveFilms removes elements with any of the given UIDs from the multi-edge.
 func (e *ContentRating) RemoveFilms(uids ...string) {
-	e.s.Films = slices.DeleteFunc(e.s.Films, func(x *schema.Film) bool {
+	e.Unwrap().Films = slices.DeleteFunc(e.Unwrap().Films, func(x *schema.Film) bool {
 		return x != nil && slices.Contains(uids, x.UID)
 	})
 }

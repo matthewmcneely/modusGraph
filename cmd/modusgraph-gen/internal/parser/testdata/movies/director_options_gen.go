@@ -2,18 +2,11 @@
 
 package movies
 
-// DirectorOption configures a *Director. Applied at construction time via
-// NewDirector or WrapDirector, or in bulk later via ApplyDirectorOptions.
-type DirectorOption func(*Director)
-
-// ApplyDirectorOptions applies a sequence of options to e in order.
-func ApplyDirectorOptions(e *Director, opts ...DirectorOption) {
-	for _, opt := range opts {
-		opt(e)
-	}
-}
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
+)
 
 // WithDirectorName sets the name field on a *Director.
-func WithDirectorName(v string) DirectorOption {
+func WithDirectorName(v string) typed.Option[Director] {
 	return func(e *Director) { e.SetName(v) }
 }

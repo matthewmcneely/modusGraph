@@ -2,18 +2,65 @@
 
 package movies
 
-import "github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
 
-// GenreQuery is the wrapper-side query builder. Composes over
-// schema.GenreQuery; terminal methods wrap results before returning.
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+)
+
+// GenreQuery is the wrapper-side fluent query builder for Genre. Builder
+// methods return *GenreQuery for chaining; terminal methods (Nodes, First)
+// execute the query and wrap results.
 type GenreQuery struct {
-	schemaQuery *schema.GenreQuery
+	typed *typed.Query[schema.Genre]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *GenreQuery) Filter(filter string, params ...any) *GenreQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *GenreQuery) OrderAsc(clause string) *GenreQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *GenreQuery) OrderDesc(clause string) *GenreQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *GenreQuery) Limit(n int) *GenreQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *GenreQuery) Offset(n int) *GenreQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *GenreQuery) After(uid string) *GenreQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *GenreQuery) Cascade(predicates ...string) *GenreQuery {
+	q.typed.Cascade(predicates...)
+	return q
 }
 
 // Nodes executes the query and returns wrapped Genre results.
 func (q *GenreQuery) Nodes() ([]*Genre, error) {
-	var recs []schema.Genre
-	if err := q.schemaQuery.Nodes(&recs); err != nil {
+	recs, err := q.typed.Nodes()
+	if err != nil {
 		return nil, err
 	}
 	out := make([]*Genre, len(recs))
@@ -23,14 +70,12 @@ func (q *GenreQuery) Nodes() ([]*Genre, error) {
 	return out, nil
 }
 
-// First returns the first matching wrapper, or nil if no rows.
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Genre, or nil if no rows matched.
 func (q *GenreQuery) First() (*Genre, error) {
-	s, err := q.schemaQuery.First()
-	if err != nil {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
 		return nil, err
-	}
-	if s == nil {
-		return nil, nil
 	}
 	return WrapGenre(s), nil
 }

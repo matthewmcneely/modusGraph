@@ -6,55 +6,54 @@ import (
 	"context"
 
 	"github.com/matthewmcneely/modusgraph"
+	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
-// FilmClient wraps a schema.FilmClient and exposes the same
-// operations over wrapper types. Reads allocate a wrapper around the schema
-// result; writes deref the wrapper's backing schema struct (w.s) and forward.
+// FilmClient provides CRUD/query operations over Film wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
 type FilmClient struct {
-	schemaClient *schema.FilmClient
+	typed *typed.Client[schema.Film]
 }
 
-// NewFilmClient binds a wrapper-side FilmClient to conn. Internally
-// constructs a fresh schema.FilmClient on the same conn.
+// NewFilmClient binds a FilmClient to conn.
 func NewFilmClient(conn modusgraph.Client) *FilmClient {
-	return &FilmClient{schemaClient: schema.NewFilmClient(conn)}
+	return &FilmClient{typed: typed.NewClient[schema.Film](conn)}
 }
 
 // Get loads the Film with the given UID and returns it wrapped.
 func (c *FilmClient) Get(ctx context.Context, uid string) (*Film, error) {
-	s, err := c.schemaClient.Get(ctx, uid)
+	s, err := c.typed.Get(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
 	return WrapFilm(s), nil
 }
 
-// Add inserts the underlying schema struct from w.
+// Add inserts the schema struct backing w.
 func (c *FilmClient) Add(ctx context.Context, w *Film) error {
-	return c.schemaClient.Add(ctx, w.s)
+	return c.typed.Add(ctx, w.Unwrap())
 }
 
-// Update modifies the underlying schema struct from w (must have UID set).
+// Update modifies the schema struct backing w (must have UID set).
 func (c *FilmClient) Update(ctx context.Context, w *Film) error {
-	return c.schemaClient.Update(ctx, w.s)
+	return c.typed.Update(ctx, w.Unwrap())
 }
 
-// Upsert inserts or updates the underlying schema struct from w, matching
-// against predicates. If no predicates are provided, the first field tagged
-// dgraph:"upsert" wins.
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
 func (c *FilmClient) Upsert(ctx context.Context, w *Film, predicates ...string) error {
-	return c.schemaClient.Upsert(ctx, w.s, predicates...)
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
 }
 
 // Delete removes the Film with the given UID.
 func (c *FilmClient) Delete(ctx context.Context, uid string) error {
-	return c.schemaClient.Delete(ctx, uid)
+	return c.typed.Delete(ctx, uid)
 }
 
 // Query returns a wrapper-side query builder for Film.
 func (c *FilmClient) Query(ctx context.Context) *FilmQuery {
-	return &FilmQuery{schemaQuery: c.schemaClient.Query(ctx)}
+	return &FilmQuery{typed: c.typed.Query(ctx)}
 }

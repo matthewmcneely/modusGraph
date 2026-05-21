@@ -2,23 +2,16 @@
 
 package movies
 
-// LocationOption configures a *Location. Applied at construction time via
-// NewLocation or WrapLocation, or in bulk later via ApplyLocationOptions.
-type LocationOption func(*Location)
-
-// ApplyLocationOptions applies a sequence of options to e in order.
-func ApplyLocationOptions(e *Location, opts ...LocationOption) {
-	for _, opt := range opts {
-		opt(e)
-	}
-}
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
+)
 
 // WithLocationName sets the name field on a *Location.
-func WithLocationName(v string) LocationOption {
+func WithLocationName(v string) typed.Option[Location] {
 	return func(e *Location) { e.SetName(v) }
 }
 
 // WithLocationEmail sets the email field on a *Location.
-func WithLocationEmail(v string) LocationOption {
+func WithLocationEmail(v string) typed.Option[Location] {
 	return func(e *Location) { e.SetEmail(v) }
 }

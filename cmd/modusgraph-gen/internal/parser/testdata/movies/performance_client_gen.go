@@ -6,55 +6,54 @@ import (
 	"context"
 
 	"github.com/matthewmcneely/modusgraph"
+	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
-// PerformanceClient wraps a schema.PerformanceClient and exposes the same
-// operations over wrapper types. Reads allocate a wrapper around the schema
-// result; writes deref the wrapper's backing schema struct (w.s) and forward.
+// PerformanceClient provides CRUD/query operations over Performance wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
 type PerformanceClient struct {
-	schemaClient *schema.PerformanceClient
+	typed *typed.Client[schema.Performance]
 }
 
-// NewPerformanceClient binds a wrapper-side PerformanceClient to conn. Internally
-// constructs a fresh schema.PerformanceClient on the same conn.
+// NewPerformanceClient binds a PerformanceClient to conn.
 func NewPerformanceClient(conn modusgraph.Client) *PerformanceClient {
-	return &PerformanceClient{schemaClient: schema.NewPerformanceClient(conn)}
+	return &PerformanceClient{typed: typed.NewClient[schema.Performance](conn)}
 }
 
 // Get loads the Performance with the given UID and returns it wrapped.
 func (c *PerformanceClient) Get(ctx context.Context, uid string) (*Performance, error) {
-	s, err := c.schemaClient.Get(ctx, uid)
+	s, err := c.typed.Get(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
 	return WrapPerformance(s), nil
 }
 
-// Add inserts the underlying schema struct from w.
+// Add inserts the schema struct backing w.
 func (c *PerformanceClient) Add(ctx context.Context, w *Performance) error {
-	return c.schemaClient.Add(ctx, w.s)
+	return c.typed.Add(ctx, w.Unwrap())
 }
 
-// Update modifies the underlying schema struct from w (must have UID set).
+// Update modifies the schema struct backing w (must have UID set).
 func (c *PerformanceClient) Update(ctx context.Context, w *Performance) error {
-	return c.schemaClient.Update(ctx, w.s)
+	return c.typed.Update(ctx, w.Unwrap())
 }
 
-// Upsert inserts or updates the underlying schema struct from w, matching
-// against predicates. If no predicates are provided, the first field tagged
-// dgraph:"upsert" wins.
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
 func (c *PerformanceClient) Upsert(ctx context.Context, w *Performance, predicates ...string) error {
-	return c.schemaClient.Upsert(ctx, w.s, predicates...)
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
 }
 
 // Delete removes the Performance with the given UID.
 func (c *PerformanceClient) Delete(ctx context.Context, uid string) error {
-	return c.schemaClient.Delete(ctx, uid)
+	return c.typed.Delete(ctx, uid)
 }
 
 // Query returns a wrapper-side query builder for Performance.
 func (c *PerformanceClient) Query(ctx context.Context) *PerformanceQuery {
-	return &PerformanceQuery{schemaQuery: c.schemaClient.Query(ctx)}
+	return &PerformanceQuery{typed: c.typed.Query(ctx)}
 }

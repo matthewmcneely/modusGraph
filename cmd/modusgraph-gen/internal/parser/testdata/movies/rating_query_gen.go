@@ -2,18 +2,65 @@
 
 package movies
 
-import "github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
 
-// RatingQuery is the wrapper-side query builder. Composes over
-// schema.RatingQuery; terminal methods wrap results before returning.
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+)
+
+// RatingQuery is the wrapper-side fluent query builder for Rating. Builder
+// methods return *RatingQuery for chaining; terminal methods (Nodes, First)
+// execute the query and wrap results.
 type RatingQuery struct {
-	schemaQuery *schema.RatingQuery
+	typed *typed.Query[schema.Rating]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *RatingQuery) Filter(filter string, params ...any) *RatingQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *RatingQuery) OrderAsc(clause string) *RatingQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *RatingQuery) OrderDesc(clause string) *RatingQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *RatingQuery) Limit(n int) *RatingQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *RatingQuery) Offset(n int) *RatingQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *RatingQuery) After(uid string) *RatingQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *RatingQuery) Cascade(predicates ...string) *RatingQuery {
+	q.typed.Cascade(predicates...)
+	return q
 }
 
 // Nodes executes the query and returns wrapped Rating results.
 func (q *RatingQuery) Nodes() ([]*Rating, error) {
-	var recs []schema.Rating
-	if err := q.schemaQuery.Nodes(&recs); err != nil {
+	recs, err := q.typed.Nodes()
+	if err != nil {
 		return nil, err
 	}
 	out := make([]*Rating, len(recs))
@@ -23,14 +70,12 @@ func (q *RatingQuery) Nodes() ([]*Rating, error) {
 	return out, nil
 }
 
-// First returns the first matching wrapper, or nil if no rows.
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Rating, or nil if no rows matched.
 func (q *RatingQuery) First() (*Rating, error) {
-	s, err := q.schemaQuery.First()
-	if err != nil {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
 		return nil, err
-	}
-	if s == nil {
-		return nil, nil
 	}
 	return WrapRating(s), nil
 }

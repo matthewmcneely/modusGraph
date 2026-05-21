@@ -7,156 +7,158 @@ import (
 	"slices"
 	"time"
 
+	"github.com/matthewmcneely/modusgraph/typed"
+
 	dg "github.com/dolan-in/dgman/v2"
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // Name returns the name field.
-func (e *Studio) Name() string { return e.s.Name }
+func (e *Studio) Name() string { return e.Unwrap().Name }
 
 // SetName sets the name field.
-func (e *Studio) SetName(v string) { e.s.Name = v }
+func (e *Studio) SetName(v string) { e.Unwrap().Name = v }
 
 // YearFounded returns the yearFounded field.
-func (e *Studio) YearFounded() int { return e.s.YearFounded }
+func (e *Studio) YearFounded() int { return e.Unwrap().YearFounded }
 
 // SetYearFounded sets the yearFounded field.
-func (e *Studio) SetYearFounded(v int) { e.s.YearFounded = v }
+func (e *Studio) SetYearFounded(v int) { e.Unwrap().YearFounded = v }
 
 // Revenue returns the revenue field.
-func (e *Studio) Revenue() float64 { return e.s.Revenue }
+func (e *Studio) Revenue() float64 { return e.Unwrap().Revenue }
 
 // SetRevenue sets the revenue field.
-func (e *Studio) SetRevenue(v float64) { e.s.Revenue = v }
+func (e *Studio) SetRevenue(v float64) { e.Unwrap().Revenue = v }
 
 // Active returns the active field.
-func (e *Studio) Active() bool { return e.s.Active }
+func (e *Studio) Active() bool { return e.Unwrap().Active }
 
 // SetActive sets the active field.
-func (e *Studio) SetActive(v bool) { e.s.Active = v }
+func (e *Studio) SetActive(v bool) { e.Unwrap().Active = v }
 
 // CreatedAt returns the createdAt field.
-func (e *Studio) CreatedAt() time.Time { return e.s.CreatedAt }
+func (e *Studio) CreatedAt() time.Time { return e.Unwrap().CreatedAt }
 
 // SetCreatedAt sets the createdAt field.
-func (e *Studio) SetCreatedAt(v time.Time) { e.s.CreatedAt = v }
+func (e *Studio) SetCreatedAt(v time.Time) { e.Unwrap().CreatedAt = v }
 
 // Embedding returns the embedding field.
-func (e *Studio) Embedding() *dg.VectorFloat32 { return e.s.Embedding }
+func (e *Studio) Embedding() *dg.VectorFloat32 { return e.Unwrap().Embedding }
 
 // SetEmbedding sets the embedding field.
-func (e *Studio) SetEmbedding(v *dg.VectorFloat32) { e.s.Embedding = v }
+func (e *Studio) SetEmbedding(v *dg.VectorFloat32) { e.Unwrap().Embedding = v }
 
 // Founder returns the wrapped Director, or nil if not set.
-// Shared state: mutations through the returned wrapper write through to e.s.
+// Shared state: mutations through the returned wrapper write through to e.
 func (e *Studio) Founder() *Director {
-	if e.s.Founder == nil {
+	if e.Unwrap().Founder == nil {
 		return nil
 	}
-	return &Director{s: e.s.Founder}
+	return &Director{Wrapper: typed.WrapValue(e.Unwrap().Founder)}
 }
 
 // SetFounder sets or clears the Director edge.
 func (e *Studio) SetFounder(v *Director) {
 	if v == nil {
-		e.s.Founder = nil
+		e.Unwrap().Founder = nil
 		return
 	}
-	e.s.Founder = v.s
+	e.Unwrap().Founder = v.Unwrap()
 }
 
 // Headquarters returns a wrapper over the value-typed schema field. The wrapper
 // shares state with e — mutations are visible to e immediately.
 func (e *Studio) Headquarters() *Country {
-	return &Country{s: &e.s.Headquarters}
+	return &Country{Wrapper: typed.WrapValue(&e.Unwrap().Headquarters)}
 }
 
 // SetHeadquarters copies the value from v into the schema field. Note: this is
 // a value copy, so v and e.Headquarters() will not share state after this call.
 func (e *Studio) SetHeadquarters(v *Country) {
 	if v != nil {
-		e.s.Headquarters = *v.s
+		e.Unwrap().Headquarters = *v.Unwrap()
 	}
 }
 
 // CurrentHead returns the wrapped first element of the singular-via-list edge,
 // or nil if the list is empty.
 func (e *Studio) CurrentHead() *Director {
-	if len(e.s.CurrentHead) == 0 || e.s.CurrentHead[0] == nil {
+	if len(e.Unwrap().CurrentHead) == 0 || e.Unwrap().CurrentHead[0] == nil {
 		return nil
 	}
-	return &Director{s: e.s.CurrentHead[0]}
+	return &Director{Wrapper: typed.WrapValue(e.Unwrap().CurrentHead[0])}
 }
 
 // SetCurrentHead replaces the singular-via-list edge with v, or clears it if nil.
 func (e *Studio) SetCurrentHead(v *Director) {
 	if v == nil {
-		e.s.CurrentHead = nil
+		e.Unwrap().CurrentHead = nil
 		return
 	}
-	e.s.CurrentHead = []*schema.Director{v.s}
+	e.Unwrap().CurrentHead = []*schema.Director{v.Unwrap()}
 }
 
 // Ceo returns the wrapped first element of the singular-via-list edge,
 // or nil if the list is empty.
 func (e *Studio) Ceo() *Director {
-	if len(e.s.Ceo) == 0 || e.s.Ceo[0] == nil {
+	if len(e.Unwrap().Ceo) == 0 || e.Unwrap().Ceo[0] == nil {
 		return nil
 	}
-	return &Director{s: e.s.Ceo[0]}
+	return &Director{Wrapper: typed.WrapValue(e.Unwrap().Ceo[0])}
 }
 
 // SetCeo replaces the singular-via-list edge with v, or clears it if nil.
 func (e *Studio) SetCeo(v *Director) {
 	if v == nil {
-		e.s.Ceo = nil
+		e.Unwrap().Ceo = nil
 		return
 	}
-	e.s.Ceo = []*schema.Director{v.s}
+	e.Unwrap().Ceo = []*schema.Director{v.Unwrap()}
 }
 
 // HomeBase returns the wrapped first element of the singular-via-list edge,
 // or nil if the list is empty.
 func (e *Studio) HomeBase() *Country {
-	if len(e.s.HomeBase) == 0 || e.s.HomeBase[0] == nil {
+	if len(e.Unwrap().HomeBase) == 0 || e.Unwrap().HomeBase[0] == nil {
 		return nil
 	}
-	return &Country{s: e.s.HomeBase[0]}
+	return &Country{Wrapper: typed.WrapValue(e.Unwrap().HomeBase[0])}
 }
 
 // SetHomeBase replaces the singular-via-list edge with v, or clears it if nil.
 func (e *Studio) SetHomeBase(v *Country) {
 	if v == nil {
-		e.s.HomeBase = nil
+		e.Unwrap().HomeBase = nil
 		return
 	}
-	e.s.HomeBase = []*schema.Country{v.s}
+	e.Unwrap().HomeBase = []*schema.Country{v.Unwrap()}
 }
 
 // ParentCompany returns the wrapped first element of the singular-via-list edge,
 // or nil if the list is empty.
 func (e *Studio) ParentCompany() *Country {
-	if len(e.s.ParentCompany) == 0 || e.s.ParentCompany[0] == nil {
+	if len(e.Unwrap().ParentCompany) == 0 || e.Unwrap().ParentCompany[0] == nil {
 		return nil
 	}
-	return &Country{s: e.s.ParentCompany[0]}
+	return &Country{Wrapper: typed.WrapValue(e.Unwrap().ParentCompany[0])}
 }
 
 // SetParentCompany replaces the singular-via-list edge with v, or clears it if nil.
 func (e *Studio) SetParentCompany(v *Country) {
 	if v == nil {
-		e.s.ParentCompany = nil
+		e.Unwrap().ParentCompany = nil
 		return
 	}
-	e.s.ParentCompany = []*schema.Country{v.s}
+	e.Unwrap().ParentCompany = []*schema.Country{v.Unwrap()}
 }
 
 // Films returns a freshly allocated slice of wrappers over each
 // Film in the multi-edge.
 func (e *Studio) Films() []*Film {
-	out := make([]*Film, len(e.s.Films))
-	for i, x := range e.s.Films {
-		out[i] = &Film{s: x}
+	out := make([]*Film, len(e.Unwrap().Films))
+	for i, x := range e.Unwrap().Films {
+		out[i] = &Film{Wrapper: typed.WrapValue(x)}
 	}
 	return out
 }
@@ -165,8 +167,8 @@ func (e *Studio) Films() []*Film {
 // the allocation in Films().
 func (e *Studio) FilmsSeq() iter.Seq[*Film] {
 	return func(yield func(*Film) bool) {
-		for _, x := range e.s.Films {
-			if !yield(&Film{s: x}) {
+		for _, x := range e.Unwrap().Films {
+			if !yield(&Film{Wrapper: typed.WrapValue(x)}) {
 				return
 			}
 		}
@@ -175,22 +177,22 @@ func (e *Studio) FilmsSeq() iter.Seq[*Film] {
 
 // SetFilms replaces the multi-edge with the given items.
 func (e *Studio) SetFilms(items ...*Film) {
-	e.s.Films = make([]*schema.Film, len(items))
+	e.Unwrap().Films = make([]*schema.Film, len(items))
 	for i, x := range items {
-		e.s.Films[i] = x.s
+		e.Unwrap().Films[i] = x.Unwrap()
 	}
 }
 
 // AppendFilms appends items to the multi-edge.
 func (e *Studio) AppendFilms(items ...*Film) {
 	for _, x := range items {
-		e.s.Films = append(e.s.Films, x.s)
+		e.Unwrap().Films = append(e.Unwrap().Films, x.Unwrap())
 	}
 }
 
 // RemoveFilms removes elements with any of the given UIDs from the multi-edge.
 func (e *Studio) RemoveFilms(uids ...string) {
-	e.s.Films = slices.DeleteFunc(e.s.Films, func(x *schema.Film) bool {
+	e.Unwrap().Films = slices.DeleteFunc(e.Unwrap().Films, func(x *schema.Film) bool {
 		return x != nil && slices.Contains(uids, x.UID)
 	})
 }
@@ -198,9 +200,9 @@ func (e *Studio) RemoveFilms(uids ...string) {
 // Advisors returns a freshly allocated slice of wrappers over each
 // Director in the multi-edge.
 func (e *Studio) Advisors() []*Director {
-	out := make([]*Director, len(e.s.Advisors))
-	for i, x := range e.s.Advisors {
-		out[i] = &Director{s: x}
+	out := make([]*Director, len(e.Unwrap().Advisors))
+	for i, x := range e.Unwrap().Advisors {
+		out[i] = &Director{Wrapper: typed.WrapValue(x)}
 	}
 	return out
 }
@@ -209,8 +211,8 @@ func (e *Studio) Advisors() []*Director {
 // the allocation in Advisors().
 func (e *Studio) AdvisorsSeq() iter.Seq[*Director] {
 	return func(yield func(*Director) bool) {
-		for _, x := range e.s.Advisors {
-			if !yield(&Director{s: x}) {
+		for _, x := range e.Unwrap().Advisors {
+			if !yield(&Director{Wrapper: typed.WrapValue(x)}) {
 				return
 			}
 		}
@@ -219,102 +221,102 @@ func (e *Studio) AdvisorsSeq() iter.Seq[*Director] {
 
 // SetAdvisors replaces the multi-edge with the given items.
 func (e *Studio) SetAdvisors(items ...*Director) {
-	e.s.Advisors = make([]*schema.Director, len(items))
+	e.Unwrap().Advisors = make([]*schema.Director, len(items))
 	for i, x := range items {
-		e.s.Advisors[i] = x.s
+		e.Unwrap().Advisors[i] = x.Unwrap()
 	}
 }
 
 // AppendAdvisors appends items to the multi-edge.
 func (e *Studio) AppendAdvisors(items ...*Director) {
 	for _, x := range items {
-		e.s.Advisors = append(e.s.Advisors, x.s)
+		e.Unwrap().Advisors = append(e.Unwrap().Advisors, x.Unwrap())
 	}
 }
 
 // RemoveAdvisors removes elements with any of the given UIDs from the multi-edge.
 func (e *Studio) RemoveAdvisors(uids ...string) {
-	e.s.Advisors = slices.DeleteFunc(e.s.Advisors, func(x *schema.Director) bool {
+	e.Unwrap().Advisors = slices.DeleteFunc(e.Unwrap().Advisors, func(x *schema.Director) bool {
 		return x != nil && slices.Contains(uids, x.UID)
 	})
 }
 
 // Tags returns the scalar slice.
-func (e *Studio) Tags() []string { return e.s.Tags }
+func (e *Studio) Tags() []string { return e.Unwrap().Tags }
 
 // SetTags sets the scalar slice.
-func (e *Studio) SetTags(v []string) { e.s.Tags = v }
+func (e *Studio) SetTags(v []string) { e.Unwrap().Tags = v }
 
 // AppendTags appends values to the scalar slice.
 func (e *Studio) AppendTags(v ...string) {
-	e.s.Tags = append(e.s.Tags, v...)
+	e.Unwrap().Tags = append(e.Unwrap().Tags, v...)
 }
 
 // RemoveTagsFunc removes all elements for which fn returns true.
 func (e *Studio) RemoveTagsFunc(fn func(string) bool) {
-	e.s.Tags = slices.DeleteFunc(e.s.Tags, fn)
+	e.Unwrap().Tags = slices.DeleteFunc(e.Unwrap().Tags, fn)
 }
 
 // Scores returns the scalar slice.
-func (e *Studio) Scores() []int { return e.s.Scores }
+func (e *Studio) Scores() []int { return e.Unwrap().Scores }
 
 // SetScores sets the scalar slice.
-func (e *Studio) SetScores(v []int) { e.s.Scores = v }
+func (e *Studio) SetScores(v []int) { e.Unwrap().Scores = v }
 
 // AppendScores appends values to the scalar slice.
 func (e *Studio) AppendScores(v ...int) {
-	e.s.Scores = append(e.s.Scores, v...)
+	e.Unwrap().Scores = append(e.Unwrap().Scores, v...)
 }
 
 // RemoveScoresFunc removes all elements for which fn returns true.
 func (e *Studio) RemoveScoresFunc(fn func(int) bool) {
-	e.s.Scores = slices.DeleteFunc(e.s.Scores, fn)
+	e.Unwrap().Scores = slices.DeleteFunc(e.Unwrap().Scores, fn)
 }
 
 // Weights returns the scalar slice.
-func (e *Studio) Weights() []float64 { return e.s.Weights }
+func (e *Studio) Weights() []float64 { return e.Unwrap().Weights }
 
 // SetWeights sets the scalar slice.
-func (e *Studio) SetWeights(v []float64) { e.s.Weights = v }
+func (e *Studio) SetWeights(v []float64) { e.Unwrap().Weights = v }
 
 // AppendWeights appends values to the scalar slice.
 func (e *Studio) AppendWeights(v ...float64) {
-	e.s.Weights = append(e.s.Weights, v...)
+	e.Unwrap().Weights = append(e.Unwrap().Weights, v...)
 }
 
 // RemoveWeightsFunc removes all elements for which fn returns true.
 func (e *Studio) RemoveWeightsFunc(fn func(float64) bool) {
-	e.s.Weights = slices.DeleteFunc(e.s.Weights, fn)
+	e.Unwrap().Weights = slices.DeleteFunc(e.Unwrap().Weights, fn)
 }
 
 // Flags returns the scalar slice.
-func (e *Studio) Flags() []bool { return e.s.Flags }
+func (e *Studio) Flags() []bool { return e.Unwrap().Flags }
 
 // SetFlags sets the scalar slice.
-func (e *Studio) SetFlags(v []bool) { e.s.Flags = v }
+func (e *Studio) SetFlags(v []bool) { e.Unwrap().Flags = v }
 
 // AppendFlags appends values to the scalar slice.
 func (e *Studio) AppendFlags(v ...bool) {
-	e.s.Flags = append(e.s.Flags, v...)
+	e.Unwrap().Flags = append(e.Unwrap().Flags, v...)
 }
 
 // RemoveFlagsFunc removes all elements for which fn returns true.
 func (e *Studio) RemoveFlagsFunc(fn func(bool) bool) {
-	e.s.Flags = slices.DeleteFunc(e.s.Flags, fn)
+	e.Unwrap().Flags = slices.DeleteFunc(e.Unwrap().Flags, fn)
 }
 
 // Milestones returns the scalar slice.
-func (e *Studio) Milestones() []time.Time { return e.s.Milestones }
+func (e *Studio) Milestones() []time.Time { return e.Unwrap().Milestones }
 
 // SetMilestones sets the scalar slice.
-func (e *Studio) SetMilestones(v []time.Time) { e.s.Milestones = v }
+func (e *Studio) SetMilestones(v []time.Time) { e.Unwrap().Milestones = v }
 
 // AppendMilestones appends values to the scalar slice.
 func (e *Studio) AppendMilestones(v ...time.Time) {
-	e.s.Milestones = append(e.s.Milestones, v...)
+	e.Unwrap().Milestones = append(e.Unwrap().Milestones, v...)
 }
 
 // RemoveMilestonesFunc removes all elements for which fn returns true.
 func (e *Studio) RemoveMilestonesFunc(fn func(time.Time) bool) {
-	e.s.Milestones = slices.DeleteFunc(e.s.Milestones, fn)
+	e.Unwrap().Milestones = slices.DeleteFunc(e.Unwrap().Milestones, fn)
 }

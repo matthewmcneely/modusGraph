@@ -3,48 +3,38 @@
 package movies
 
 import (
-	"time"
+	"github.com/matthewmcneely/modusgraph/typed"
 
 	dg "github.com/dolan-in/dgman/v2"
+	"time"
 )
 
-// StudioOption configures a *Studio. Applied at construction time via
-// NewStudio or WrapStudio, or in bulk later via ApplyStudioOptions.
-type StudioOption func(*Studio)
-
-// ApplyStudioOptions applies a sequence of options to e in order.
-func ApplyStudioOptions(e *Studio, opts ...StudioOption) {
-	for _, opt := range opts {
-		opt(e)
-	}
-}
-
 // WithStudioName sets the name field on a *Studio.
-func WithStudioName(v string) StudioOption {
+func WithStudioName(v string) typed.Option[Studio] {
 	return func(e *Studio) { e.SetName(v) }
 }
 
 // WithStudioYearFounded sets the yearFounded field on a *Studio.
-func WithStudioYearFounded(v int) StudioOption {
+func WithStudioYearFounded(v int) typed.Option[Studio] {
 	return func(e *Studio) { e.SetYearFounded(v) }
 }
 
 // WithStudioRevenue sets the revenue field on a *Studio.
-func WithStudioRevenue(v float64) StudioOption {
+func WithStudioRevenue(v float64) typed.Option[Studio] {
 	return func(e *Studio) { e.SetRevenue(v) }
 }
 
 // WithStudioActive sets the active field on a *Studio.
-func WithStudioActive(v bool) StudioOption {
+func WithStudioActive(v bool) typed.Option[Studio] {
 	return func(e *Studio) { e.SetActive(v) }
 }
 
 // WithStudioCreatedAt sets the createdAt field on a *Studio.
-func WithStudioCreatedAt(v time.Time) StudioOption {
+func WithStudioCreatedAt(v time.Time) typed.Option[Studio] {
 	return func(e *Studio) { e.SetCreatedAt(v) }
 }
 
 // WithStudioEmbedding sets the embedding field on a *Studio.
-func WithStudioEmbedding(v *dg.VectorFloat32) StudioOption {
+func WithStudioEmbedding(v *dg.VectorFloat32) typed.Option[Studio] {
 	return func(e *Studio) { e.SetEmbedding(v) }
 }

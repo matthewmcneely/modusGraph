@@ -2,18 +2,11 @@
 
 package movies
 
-// PerformanceOption configures a *Performance. Applied at construction time via
-// NewPerformance or WrapPerformance, or in bulk later via ApplyPerformanceOptions.
-type PerformanceOption func(*Performance)
-
-// ApplyPerformanceOptions applies a sequence of options to e in order.
-func ApplyPerformanceOptions(e *Performance, opts ...PerformanceOption) {
-	for _, opt := range opts {
-		opt(e)
-	}
-}
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
+)
 
 // WithPerformanceCharacterNote sets the characterNote field on a *Performance.
-func WithPerformanceCharacterNote(v string) PerformanceOption {
+func WithPerformanceCharacterNote(v string) typed.Option[Performance] {
 	return func(e *Performance) { e.SetCharacterNote(v) }
 }

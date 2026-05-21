@@ -3,7 +3,7 @@
 package movies
 
 // CharacterNote returns the characterNote field.
-func (e *Performance) CharacterNote() string { return e.s.CharacterNote }
+func (e *Performance) CharacterNote() string { return e.Unwrap().CharacterNote }
 
 // SetCharacterNote sets the characterNote field.
-func (e *Performance) SetCharacterNote(v string) { e.s.CharacterNote = v }
+func (e *Performance) SetCharacterNote(v string) { e.Unwrap().CharacterNote = v }

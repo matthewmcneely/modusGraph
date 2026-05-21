@@ -2,18 +2,65 @@
 
 package movies
 
-import "github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
 
-// StudioQuery is the wrapper-side query builder. Composes over
-// schema.StudioQuery; terminal methods wrap results before returning.
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+)
+
+// StudioQuery is the wrapper-side fluent query builder for Studio. Builder
+// methods return *StudioQuery for chaining; terminal methods (Nodes, First)
+// execute the query and wrap results.
 type StudioQuery struct {
-	schemaQuery *schema.StudioQuery
+	typed *typed.Query[schema.Studio]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *StudioQuery) Filter(filter string, params ...any) *StudioQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *StudioQuery) OrderAsc(clause string) *StudioQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *StudioQuery) OrderDesc(clause string) *StudioQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *StudioQuery) Limit(n int) *StudioQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *StudioQuery) Offset(n int) *StudioQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *StudioQuery) After(uid string) *StudioQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *StudioQuery) Cascade(predicates ...string) *StudioQuery {
+	q.typed.Cascade(predicates...)
+	return q
 }
 
 // Nodes executes the query and returns wrapped Studio results.
 func (q *StudioQuery) Nodes() ([]*Studio, error) {
-	var recs []schema.Studio
-	if err := q.schemaQuery.Nodes(&recs); err != nil {
+	recs, err := q.typed.Nodes()
+	if err != nil {
 		return nil, err
 	}
 	out := make([]*Studio, len(recs))
@@ -23,14 +70,12 @@ func (q *StudioQuery) Nodes() ([]*Studio, error) {
 	return out, nil
 }
 
-// First returns the first matching wrapper, or nil if no rows.
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Studio, or nil if no rows matched.
 func (q *StudioQuery) First() (*Studio, error) {
-	s, err := q.schemaQuery.First()
-	if err != nil {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
 		return nil, err
-	}
-	if s == nil {
-		return nil, nil
 	}
 	return WrapStudio(s), nil
 }

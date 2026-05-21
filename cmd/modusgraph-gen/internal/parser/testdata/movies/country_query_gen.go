@@ -2,18 +2,65 @@
 
 package movies
 
-import "github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
 
-// CountryQuery is the wrapper-side query builder. Composes over
-// schema.CountryQuery; terminal methods wrap results before returning.
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+)
+
+// CountryQuery is the wrapper-side fluent query builder for Country. Builder
+// methods return *CountryQuery for chaining; terminal methods (Nodes, First)
+// execute the query and wrap results.
 type CountryQuery struct {
-	schemaQuery *schema.CountryQuery
+	typed *typed.Query[schema.Country]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *CountryQuery) Filter(filter string, params ...any) *CountryQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *CountryQuery) OrderAsc(clause string) *CountryQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *CountryQuery) OrderDesc(clause string) *CountryQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *CountryQuery) Limit(n int) *CountryQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *CountryQuery) Offset(n int) *CountryQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *CountryQuery) After(uid string) *CountryQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *CountryQuery) Cascade(predicates ...string) *CountryQuery {
+	q.typed.Cascade(predicates...)
+	return q
 }
 
 // Nodes executes the query and returns wrapped Country results.
 func (q *CountryQuery) Nodes() ([]*Country, error) {
-	var recs []schema.Country
-	if err := q.schemaQuery.Nodes(&recs); err != nil {
+	recs, err := q.typed.Nodes()
+	if err != nil {
 		return nil, err
 	}
 	out := make([]*Country, len(recs))
@@ -23,14 +70,12 @@ func (q *CountryQuery) Nodes() ([]*Country, error) {
 	return out, nil
 }
 
-// First returns the first matching wrapper, or nil if no rows.
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Country, or nil if no rows matched.
 func (q *CountryQuery) First() (*Country, error) {
-	s, err := q.schemaQuery.First()
-	if err != nil {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
 		return nil, err
-	}
-	if s == nil {
-		return nil, nil
 	}
 	return WrapCountry(s), nil
 }

@@ -2,18 +2,65 @@
 
 package movies
 
-import "github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
 
-// LocationQuery is the wrapper-side query builder. Composes over
-// schema.LocationQuery; terminal methods wrap results before returning.
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+)
+
+// LocationQuery is the wrapper-side fluent query builder for Location. Builder
+// methods return *LocationQuery for chaining; terminal methods (Nodes, First)
+// execute the query and wrap results.
 type LocationQuery struct {
-	schemaQuery *schema.LocationQuery
+	typed *typed.Query[schema.Location]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *LocationQuery) Filter(filter string, params ...any) *LocationQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *LocationQuery) OrderAsc(clause string) *LocationQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *LocationQuery) OrderDesc(clause string) *LocationQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *LocationQuery) Limit(n int) *LocationQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *LocationQuery) Offset(n int) *LocationQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *LocationQuery) After(uid string) *LocationQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *LocationQuery) Cascade(predicates ...string) *LocationQuery {
+	q.typed.Cascade(predicates...)
+	return q
 }
 
 // Nodes executes the query and returns wrapped Location results.
 func (q *LocationQuery) Nodes() ([]*Location, error) {
-	var recs []schema.Location
-	if err := q.schemaQuery.Nodes(&recs); err != nil {
+	recs, err := q.typed.Nodes()
+	if err != nil {
 		return nil, err
 	}
 	out := make([]*Location, len(recs))
@@ -23,14 +70,12 @@ func (q *LocationQuery) Nodes() ([]*Location, error) {
 	return out, nil
 }
 
-// First returns the first matching wrapper, or nil if no rows.
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Location, or nil if no rows matched.
 func (q *LocationQuery) First() (*Location, error) {
-	s, err := q.schemaQuery.First()
-	if err != nil {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
 		return nil, err
-	}
-	if s == nil {
-		return nil, nil
 	}
 	return WrapLocation(s), nil
 }

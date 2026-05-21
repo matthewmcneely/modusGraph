@@ -3,77 +3,43 @@
 package movies
 
 import (
-	"context"
-	"encoding/json"
-
-	"github.com/go-playground/validator/v10"
+	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
-// Country wraps a schema.Country and exposes its data through
-// methods. The backing schema struct is held in s; the only way to obtain
-// it is via Unwrap(). All mutation goes through generated setters that
-// write to s, so the wrapper has no state of its own.
+// Country wraps a schema.Country and exposes its data through methods.
+// It embeds typed.Wrapper, which supplies Unwrap, JSON marshaling, and
+// validation; the backing schema struct is reachable only via Unwrap().
 type Country struct {
-	s *schema.Country
+	typed.Wrapper[schema.Country]
 }
 
-// NewCountry constructs a Country with a fresh, empty schema struct inside,
-// then applies the given options.
-func NewCountry(opts ...CountryOption) *Country {
-	e := &Country{s: &schema.Country{}}
-	for _, opt := range opts {
-		opt(e)
-	}
+// NewCountry constructs a Country with a fresh, empty schema struct, then
+// applies the given options.
+func NewCountry(opts ...typed.Option[Country]) *Country {
+	e := &Country{Wrapper: typed.WrapValue(&schema.Country{})}
+	typed.Apply(e, opts...)
 	return e
 }
 
 // WrapCountry constructs a Country backed by the given schema struct, then
-// applies the given options. The wrapper holds s directly — no defensive copy.
-// Mutations through Country's setters write to s.
-func WrapCountry(s *schema.Country, opts ...CountryOption) *Country {
-	e := &Country{s: s}
-	for _, opt := range opts {
-		opt(e)
-	}
+// applies the given options. The wrapper holds s directly — no defensive
+// copy, so setters mutate the caller's struct.
+func WrapCountry(s *schema.Country, opts ...typed.Option[Country]) *Country {
+	e := &Country{Wrapper: typed.WrapValue(s)}
+	typed.Apply(e, opts...)
 	return e
 }
 
-// Unwrap returns the backing schema struct. modusgraph.Client uses this
-// (via reflection) to substitute the schema struct when a wrapper is
-// passed across the boundary.
-func (e *Country) Unwrap() *schema.Country { return e.s }
-
 // UID returns the entity's UID bookkeeping field.
-func (e *Country) UID() string { return e.s.UID }
+func (e *Country) UID() string { return e.Unwrap().UID }
 
 // SetUID sets the entity's UID bookkeeping field.
-func (e *Country) SetUID(v string) { e.s.UID = v }
+func (e *Country) SetUID(v string) { e.Unwrap().UID = v }
 
 // DType returns the entity's dgraph type list.
-func (e *Country) DType() []string { return e.s.DType }
+func (e *Country) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
-func (e *Country) SetDType(v []string) { e.s.DType = v }
-
-// Validate runs v against the backing schema struct. The validator's tag
-// processing sees the schema struct's public fields directly.
-func (e *Country) Validate(ctx context.Context, v *validator.Validate) error {
-	return v.StructCtx(ctx, e.s)
-}
-
-// MarshalJSON delegates to the schema struct, whose public fields and
-// json tags produce the correct serialization.
-func (e *Country) MarshalJSON() ([]byte, error) {
-	return json.Marshal(e.s)
-}
-
-// UnmarshalJSON lazily initializes the backing schema struct if needed,
-// then delegates. Safe to call on a zero-value *Country.
-func (e *Country) UnmarshalJSON(data []byte) error {
-	if e.s == nil {
-		e.s = &schema.Country{}
-	}
-	return json.Unmarshal(data, e.s)
-}
+func (e *Country) SetDType(v []string) { e.Unwrap().DType = v }

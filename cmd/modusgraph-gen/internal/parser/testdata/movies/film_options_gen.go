@@ -3,31 +3,22 @@
 package movies
 
 import (
+	"github.com/matthewmcneely/modusgraph/typed"
+
 	"time"
 )
 
-// FilmOption configures a *Film. Applied at construction time via
-// NewFilm or WrapFilm, or in bulk later via ApplyFilmOptions.
-type FilmOption func(*Film)
-
-// ApplyFilmOptions applies a sequence of options to e in order.
-func ApplyFilmOptions(e *Film, opts ...FilmOption) {
-	for _, opt := range opts {
-		opt(e)
-	}
-}
-
 // WithFilmName sets the name field on a *Film.
-func WithFilmName(v string) FilmOption {
+func WithFilmName(v string) typed.Option[Film] {
 	return func(e *Film) { e.SetName(v) }
 }
 
 // WithFilmInitialReleaseDate sets the initialReleaseDate field on a *Film.
-func WithFilmInitialReleaseDate(v time.Time) FilmOption {
+func WithFilmInitialReleaseDate(v time.Time) typed.Option[Film] {
 	return func(e *Film) { e.SetInitialReleaseDate(v) }
 }
 
 // WithFilmTagline sets the tagline field on a *Film.
-func WithFilmTagline(v string) FilmOption {
+func WithFilmTagline(v string) typed.Option[Film] {
 	return func(e *Film) { e.SetTagline(v) }
 }

@@ -4,41 +4,42 @@ package schema
 
 import (
 	"github.com/matthewmcneely/modusgraph"
+	"github.com/matthewmcneely/modusgraph/typed"
 )
 
-// Client is a top-level holder for per-entity schema-side clients bound to
-// a single modusgraph.Client connection. It is a convenience layer over the
-// per-entity New<Entity>Client(conn) constructors.
+// Client is a top-level holder for per-entity typed clients bound to a single
+// modusgraph.Client connection.
 type Client struct {
 	// GraphClient is the shared modusgraph.Client connection. It is exported
 	// so callers can reach operations the typed clients do not wrap — for
 	// example QueryRaw, DropAll, WithRetry, and Close.
 	GraphClient   modusgraph.Client
-	Actor         *ActorClient
-	ContentRating *ContentRatingClient
-	Country       *CountryClient
-	Director      *DirectorClient
-	Film          *FilmClient
-	Genre         *GenreClient
-	Location      *LocationClient
-	Performance   *PerformanceClient
-	Rating        *RatingClient
-	Studio        *StudioClient
+	Actor         *typed.Client[Actor]
+	ContentRating *typed.Client[ContentRating]
+	Country       *typed.Client[Country]
+	Director      *typed.Client[Director]
+	Film          *typed.Client[Film]
+	Genre         *typed.Client[Genre]
+	Location      *typed.Client[Location]
+	Performance   *typed.Client[Performance]
+	Rating        *typed.Client[Rating]
+	Studio        *typed.Client[Studio]
 }
 
-// NewClient binds conn to a Client whose per-entity sub-clients all share
+// NewClient binds conn to a Client whose per-entity typed clients all share
 // the same connection.
 func NewClient(conn modusgraph.Client) *Client {
-	c := &Client{GraphClient: conn}
-	c.Actor = NewActorClient(conn)
-	c.ContentRating = NewContentRatingClient(conn)
-	c.Country = NewCountryClient(conn)
-	c.Director = NewDirectorClient(conn)
-	c.Film = NewFilmClient(conn)
-	c.Genre = NewGenreClient(conn)
-	c.Location = NewLocationClient(conn)
-	c.Performance = NewPerformanceClient(conn)
-	c.Rating = NewRatingClient(conn)
-	c.Studio = NewStudioClient(conn)
-	return c
+	return &Client{
+		GraphClient:   conn,
+		Actor:         typed.NewClient[Actor](conn),
+		ContentRating: typed.NewClient[ContentRating](conn),
+		Country:       typed.NewClient[Country](conn),
+		Director:      typed.NewClient[Director](conn),
+		Film:          typed.NewClient[Film](conn),
+		Genre:         typed.NewClient[Genre](conn),
+		Location:      typed.NewClient[Location](conn),
+		Performance:   typed.NewClient[Performance](conn),
+		Rating:        typed.NewClient[Rating](conn),
+		Studio:        typed.NewClient[Studio](conn),
+	}
 }

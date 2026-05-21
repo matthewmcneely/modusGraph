@@ -7,33 +7,35 @@ import (
 	"slices"
 	"time"
 
+	"github.com/matthewmcneely/modusgraph/typed"
+
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // Name returns the name field.
-func (e *Film) Name() string { return e.s.Name }
+func (e *Film) Name() string { return e.Unwrap().Name }
 
 // SetName sets the name field.
-func (e *Film) SetName(v string) { e.s.Name = v }
+func (e *Film) SetName(v string) { e.Unwrap().Name = v }
 
 // InitialReleaseDate returns the initialReleaseDate field.
-func (e *Film) InitialReleaseDate() time.Time { return e.s.InitialReleaseDate }
+func (e *Film) InitialReleaseDate() time.Time { return e.Unwrap().InitialReleaseDate }
 
 // SetInitialReleaseDate sets the initialReleaseDate field.
-func (e *Film) SetInitialReleaseDate(v time.Time) { e.s.InitialReleaseDate = v }
+func (e *Film) SetInitialReleaseDate(v time.Time) { e.Unwrap().InitialReleaseDate = v }
 
 // Tagline returns the tagline field.
-func (e *Film) Tagline() string { return e.s.Tagline }
+func (e *Film) Tagline() string { return e.Unwrap().Tagline }
 
 // SetTagline sets the tagline field.
-func (e *Film) SetTagline(v string) { e.s.Tagline = v }
+func (e *Film) SetTagline(v string) { e.Unwrap().Tagline = v }
 
 // Genres returns a freshly allocated slice of wrappers over each
 // Genre in the multi-edge.
 func (e *Film) Genres() []*Genre {
-	out := make([]*Genre, len(e.s.Genres))
-	for i, x := range e.s.Genres {
-		out[i] = &Genre{s: x}
+	out := make([]*Genre, len(e.Unwrap().Genres))
+	for i, x := range e.Unwrap().Genres {
+		out[i] = &Genre{Wrapper: typed.WrapValue(x)}
 	}
 	return out
 }
@@ -42,8 +44,8 @@ func (e *Film) Genres() []*Genre {
 // the allocation in Genres().
 func (e *Film) GenresSeq() iter.Seq[*Genre] {
 	return func(yield func(*Genre) bool) {
-		for _, x := range e.s.Genres {
-			if !yield(&Genre{s: x}) {
+		for _, x := range e.Unwrap().Genres {
+			if !yield(&Genre{Wrapper: typed.WrapValue(x)}) {
 				return
 			}
 		}
@@ -52,22 +54,22 @@ func (e *Film) GenresSeq() iter.Seq[*Genre] {
 
 // SetGenres replaces the multi-edge with the given items.
 func (e *Film) SetGenres(items ...*Genre) {
-	e.s.Genres = make([]*schema.Genre, len(items))
+	e.Unwrap().Genres = make([]*schema.Genre, len(items))
 	for i, x := range items {
-		e.s.Genres[i] = x.s
+		e.Unwrap().Genres[i] = x.Unwrap()
 	}
 }
 
 // AppendGenres appends items to the multi-edge.
 func (e *Film) AppendGenres(items ...*Genre) {
 	for _, x := range items {
-		e.s.Genres = append(e.s.Genres, x.s)
+		e.Unwrap().Genres = append(e.Unwrap().Genres, x.Unwrap())
 	}
 }
 
 // RemoveGenres removes elements with any of the given UIDs from the multi-edge.
 func (e *Film) RemoveGenres(uids ...string) {
-	e.s.Genres = slices.DeleteFunc(e.s.Genres, func(x *schema.Genre) bool {
+	e.Unwrap().Genres = slices.DeleteFunc(e.Unwrap().Genres, func(x *schema.Genre) bool {
 		return x != nil && slices.Contains(uids, x.UID)
 	})
 }
@@ -75,9 +77,9 @@ func (e *Film) RemoveGenres(uids ...string) {
 // Countries returns a freshly allocated slice of wrappers over each
 // Country in the multi-edge.
 func (e *Film) Countries() []*Country {
-	out := make([]*Country, len(e.s.Countries))
-	for i, x := range e.s.Countries {
-		out[i] = &Country{s: x}
+	out := make([]*Country, len(e.Unwrap().Countries))
+	for i, x := range e.Unwrap().Countries {
+		out[i] = &Country{Wrapper: typed.WrapValue(x)}
 	}
 	return out
 }
@@ -86,8 +88,8 @@ func (e *Film) Countries() []*Country {
 // the allocation in Countries().
 func (e *Film) CountriesSeq() iter.Seq[*Country] {
 	return func(yield func(*Country) bool) {
-		for _, x := range e.s.Countries {
-			if !yield(&Country{s: x}) {
+		for _, x := range e.Unwrap().Countries {
+			if !yield(&Country{Wrapper: typed.WrapValue(x)}) {
 				return
 			}
 		}
@@ -96,22 +98,22 @@ func (e *Film) CountriesSeq() iter.Seq[*Country] {
 
 // SetCountries replaces the multi-edge with the given items.
 func (e *Film) SetCountries(items ...*Country) {
-	e.s.Countries = make([]*schema.Country, len(items))
+	e.Unwrap().Countries = make([]*schema.Country, len(items))
 	for i, x := range items {
-		e.s.Countries[i] = x.s
+		e.Unwrap().Countries[i] = x.Unwrap()
 	}
 }
 
 // AppendCountries appends items to the multi-edge.
 func (e *Film) AppendCountries(items ...*Country) {
 	for _, x := range items {
-		e.s.Countries = append(e.s.Countries, x.s)
+		e.Unwrap().Countries = append(e.Unwrap().Countries, x.Unwrap())
 	}
 }
 
 // RemoveCountries removes elements with any of the given UIDs from the multi-edge.
 func (e *Film) RemoveCountries(uids ...string) {
-	e.s.Countries = slices.DeleteFunc(e.s.Countries, func(x *schema.Country) bool {
+	e.Unwrap().Countries = slices.DeleteFunc(e.Unwrap().Countries, func(x *schema.Country) bool {
 		return x != nil && slices.Contains(uids, x.UID)
 	})
 }
@@ -119,9 +121,9 @@ func (e *Film) RemoveCountries(uids ...string) {
 // Ratings returns a freshly allocated slice of wrappers over each
 // Rating in the multi-edge.
 func (e *Film) Ratings() []*Rating {
-	out := make([]*Rating, len(e.s.Ratings))
-	for i, x := range e.s.Ratings {
-		out[i] = &Rating{s: x}
+	out := make([]*Rating, len(e.Unwrap().Ratings))
+	for i, x := range e.Unwrap().Ratings {
+		out[i] = &Rating{Wrapper: typed.WrapValue(x)}
 	}
 	return out
 }
@@ -130,8 +132,8 @@ func (e *Film) Ratings() []*Rating {
 // the allocation in Ratings().
 func (e *Film) RatingsSeq() iter.Seq[*Rating] {
 	return func(yield func(*Rating) bool) {
-		for _, x := range e.s.Ratings {
-			if !yield(&Rating{s: x}) {
+		for _, x := range e.Unwrap().Ratings {
+			if !yield(&Rating{Wrapper: typed.WrapValue(x)}) {
 				return
 			}
 		}
@@ -140,22 +142,22 @@ func (e *Film) RatingsSeq() iter.Seq[*Rating] {
 
 // SetRatings replaces the multi-edge with the given items.
 func (e *Film) SetRatings(items ...*Rating) {
-	e.s.Ratings = make([]*schema.Rating, len(items))
+	e.Unwrap().Ratings = make([]*schema.Rating, len(items))
 	for i, x := range items {
-		e.s.Ratings[i] = x.s
+		e.Unwrap().Ratings[i] = x.Unwrap()
 	}
 }
 
 // AppendRatings appends items to the multi-edge.
 func (e *Film) AppendRatings(items ...*Rating) {
 	for _, x := range items {
-		e.s.Ratings = append(e.s.Ratings, x.s)
+		e.Unwrap().Ratings = append(e.Unwrap().Ratings, x.Unwrap())
 	}
 }
 
 // RemoveRatings removes elements with any of the given UIDs from the multi-edge.
 func (e *Film) RemoveRatings(uids ...string) {
-	e.s.Ratings = slices.DeleteFunc(e.s.Ratings, func(x *schema.Rating) bool {
+	e.Unwrap().Ratings = slices.DeleteFunc(e.Unwrap().Ratings, func(x *schema.Rating) bool {
 		return x != nil && slices.Contains(uids, x.UID)
 	})
 }
@@ -163,9 +165,9 @@ func (e *Film) RemoveRatings(uids ...string) {
 // ContentRatings returns a freshly allocated slice of wrappers over each
 // ContentRating in the multi-edge.
 func (e *Film) ContentRatings() []*ContentRating {
-	out := make([]*ContentRating, len(e.s.ContentRatings))
-	for i, x := range e.s.ContentRatings {
-		out[i] = &ContentRating{s: x}
+	out := make([]*ContentRating, len(e.Unwrap().ContentRatings))
+	for i, x := range e.Unwrap().ContentRatings {
+		out[i] = &ContentRating{Wrapper: typed.WrapValue(x)}
 	}
 	return out
 }
@@ -174,8 +176,8 @@ func (e *Film) ContentRatings() []*ContentRating {
 // the allocation in ContentRatings().
 func (e *Film) ContentRatingsSeq() iter.Seq[*ContentRating] {
 	return func(yield func(*ContentRating) bool) {
-		for _, x := range e.s.ContentRatings {
-			if !yield(&ContentRating{s: x}) {
+		for _, x := range e.Unwrap().ContentRatings {
+			if !yield(&ContentRating{Wrapper: typed.WrapValue(x)}) {
 				return
 			}
 		}
@@ -184,22 +186,22 @@ func (e *Film) ContentRatingsSeq() iter.Seq[*ContentRating] {
 
 // SetContentRatings replaces the multi-edge with the given items.
 func (e *Film) SetContentRatings(items ...*ContentRating) {
-	e.s.ContentRatings = make([]*schema.ContentRating, len(items))
+	e.Unwrap().ContentRatings = make([]*schema.ContentRating, len(items))
 	for i, x := range items {
-		e.s.ContentRatings[i] = x.s
+		e.Unwrap().ContentRatings[i] = x.Unwrap()
 	}
 }
 
 // AppendContentRatings appends items to the multi-edge.
 func (e *Film) AppendContentRatings(items ...*ContentRating) {
 	for _, x := range items {
-		e.s.ContentRatings = append(e.s.ContentRatings, x.s)
+		e.Unwrap().ContentRatings = append(e.Unwrap().ContentRatings, x.Unwrap())
 	}
 }
 
 // RemoveContentRatings removes elements with any of the given UIDs from the multi-edge.
 func (e *Film) RemoveContentRatings(uids ...string) {
-	e.s.ContentRatings = slices.DeleteFunc(e.s.ContentRatings, func(x *schema.ContentRating) bool {
+	e.Unwrap().ContentRatings = slices.DeleteFunc(e.Unwrap().ContentRatings, func(x *schema.ContentRating) bool {
 		return x != nil && slices.Contains(uids, x.UID)
 	})
 }
@@ -207,9 +209,9 @@ func (e *Film) RemoveContentRatings(uids ...string) {
 // Starring returns a freshly allocated slice of wrappers over each
 // Performance in the multi-edge.
 func (e *Film) Starring() []*Performance {
-	out := make([]*Performance, len(e.s.Starring))
-	for i, x := range e.s.Starring {
-		out[i] = &Performance{s: x}
+	out := make([]*Performance, len(e.Unwrap().Starring))
+	for i, x := range e.Unwrap().Starring {
+		out[i] = &Performance{Wrapper: typed.WrapValue(x)}
 	}
 	return out
 }
@@ -218,8 +220,8 @@ func (e *Film) Starring() []*Performance {
 // the allocation in Starring().
 func (e *Film) StarringSeq() iter.Seq[*Performance] {
 	return func(yield func(*Performance) bool) {
-		for _, x := range e.s.Starring {
-			if !yield(&Performance{s: x}) {
+		for _, x := range e.Unwrap().Starring {
+			if !yield(&Performance{Wrapper: typed.WrapValue(x)}) {
 				return
 			}
 		}
@@ -228,22 +230,22 @@ func (e *Film) StarringSeq() iter.Seq[*Performance] {
 
 // SetStarring replaces the multi-edge with the given items.
 func (e *Film) SetStarring(items ...*Performance) {
-	e.s.Starring = make([]*schema.Performance, len(items))
+	e.Unwrap().Starring = make([]*schema.Performance, len(items))
 	for i, x := range items {
-		e.s.Starring[i] = x.s
+		e.Unwrap().Starring[i] = x.Unwrap()
 	}
 }
 
 // AppendStarring appends items to the multi-edge.
 func (e *Film) AppendStarring(items ...*Performance) {
 	for _, x := range items {
-		e.s.Starring = append(e.s.Starring, x.s)
+		e.Unwrap().Starring = append(e.Unwrap().Starring, x.Unwrap())
 	}
 }
 
 // RemoveStarring removes elements with any of the given UIDs from the multi-edge.
 func (e *Film) RemoveStarring(uids ...string) {
-	e.s.Starring = slices.DeleteFunc(e.s.Starring, func(x *schema.Performance) bool {
+	e.Unwrap().Starring = slices.DeleteFunc(e.Unwrap().Starring, func(x *schema.Performance) bool {
 		return x != nil && slices.Contains(uids, x.UID)
 	})
 }
@@ -251,9 +253,9 @@ func (e *Film) RemoveStarring(uids ...string) {
 // Directors returns a freshly allocated slice of wrappers over each
 // Director in the multi-edge.
 func (e *Film) Directors() []*Director {
-	out := make([]*Director, len(e.s.Directors))
-	for i, x := range e.s.Directors {
-		out[i] = &Director{s: x}
+	out := make([]*Director, len(e.Unwrap().Directors))
+	for i, x := range e.Unwrap().Directors {
+		out[i] = &Director{Wrapper: typed.WrapValue(x)}
 	}
 	return out
 }
@@ -262,8 +264,8 @@ func (e *Film) Directors() []*Director {
 // the allocation in Directors().
 func (e *Film) DirectorsSeq() iter.Seq[*Director] {
 	return func(yield func(*Director) bool) {
-		for _, x := range e.s.Directors {
-			if !yield(&Director{s: x}) {
+		for _, x := range e.Unwrap().Directors {
+			if !yield(&Director{Wrapper: typed.WrapValue(x)}) {
 				return
 			}
 		}
@@ -272,22 +274,22 @@ func (e *Film) DirectorsSeq() iter.Seq[*Director] {
 
 // SetDirectors replaces the multi-edge with the given items.
 func (e *Film) SetDirectors(items ...*Director) {
-	e.s.Directors = make([]*schema.Director, len(items))
+	e.Unwrap().Directors = make([]*schema.Director, len(items))
 	for i, x := range items {
-		e.s.Directors[i] = x.s
+		e.Unwrap().Directors[i] = x.Unwrap()
 	}
 }
 
 // AppendDirectors appends items to the multi-edge.
 func (e *Film) AppendDirectors(items ...*Director) {
 	for _, x := range items {
-		e.s.Directors = append(e.s.Directors, x.s)
+		e.Unwrap().Directors = append(e.Unwrap().Directors, x.Unwrap())
 	}
 }
 
 // RemoveDirectors removes elements with any of the given UIDs from the multi-edge.
 func (e *Film) RemoveDirectors(uids ...string) {
-	e.s.Directors = slices.DeleteFunc(e.s.Directors, func(x *schema.Director) bool {
+	e.Unwrap().Directors = slices.DeleteFunc(e.Unwrap().Directors, func(x *schema.Director) bool {
 		return x != nil && slices.Contains(uids, x.UID)
 	})
 }

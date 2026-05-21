@@ -2,18 +2,65 @@
 
 package movies
 
-import "github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
 
-// DirectorQuery is the wrapper-side query builder. Composes over
-// schema.DirectorQuery; terminal methods wrap results before returning.
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+)
+
+// DirectorQuery is the wrapper-side fluent query builder for Director. Builder
+// methods return *DirectorQuery for chaining; terminal methods (Nodes, First)
+// execute the query and wrap results.
 type DirectorQuery struct {
-	schemaQuery *schema.DirectorQuery
+	typed *typed.Query[schema.Director]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *DirectorQuery) Filter(filter string, params ...any) *DirectorQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *DirectorQuery) OrderAsc(clause string) *DirectorQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *DirectorQuery) OrderDesc(clause string) *DirectorQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *DirectorQuery) Limit(n int) *DirectorQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *DirectorQuery) Offset(n int) *DirectorQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *DirectorQuery) After(uid string) *DirectorQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *DirectorQuery) Cascade(predicates ...string) *DirectorQuery {
+	q.typed.Cascade(predicates...)
+	return q
 }
 
 // Nodes executes the query and returns wrapped Director results.
 func (q *DirectorQuery) Nodes() ([]*Director, error) {
-	var recs []schema.Director
-	if err := q.schemaQuery.Nodes(&recs); err != nil {
+	recs, err := q.typed.Nodes()
+	if err != nil {
 		return nil, err
 	}
 	out := make([]*Director, len(recs))
@@ -23,14 +70,12 @@ func (q *DirectorQuery) Nodes() ([]*Director, error) {
 	return out, nil
 }
 
-// First returns the first matching wrapper, or nil if no rows.
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Director, or nil if no rows matched.
 func (q *DirectorQuery) First() (*Director, error) {
-	s, err := q.schemaQuery.First()
-	if err != nil {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
 		return nil, err
-	}
-	if s == nil {
-		return nil, nil
 	}
 	return WrapDirector(s), nil
 }

@@ -2,18 +2,11 @@
 
 package movies
 
-// ActorOption configures a *Actor. Applied at construction time via
-// NewActor or WrapActor, or in bulk later via ApplyActorOptions.
-type ActorOption func(*Actor)
-
-// ApplyActorOptions applies a sequence of options to e in order.
-func ApplyActorOptions(e *Actor, opts ...ActorOption) {
-	for _, opt := range opts {
-		opt(e)
-	}
-}
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
+)
 
 // WithActorName sets the name field on a *Actor.
-func WithActorName(v string) ActorOption {
+func WithActorName(v string) typed.Option[Actor] {
 	return func(e *Actor) { e.SetName(v) }
 }

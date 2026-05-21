@@ -2,18 +2,11 @@
 
 package movies
 
-// GenreOption configures a *Genre. Applied at construction time via
-// NewGenre or WrapGenre, or in bulk later via ApplyGenreOptions.
-type GenreOption func(*Genre)
-
-// ApplyGenreOptions applies a sequence of options to e in order.
-func ApplyGenreOptions(e *Genre, opts ...GenreOption) {
-	for _, opt := range opts {
-		opt(e)
-	}
-}
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
+)
 
 // WithGenreName sets the name field on a *Genre.
-func WithGenreName(v string) GenreOption {
+func WithGenreName(v string) typed.Option[Genre] {
 	return func(e *Genre) { e.SetName(v) }
 }

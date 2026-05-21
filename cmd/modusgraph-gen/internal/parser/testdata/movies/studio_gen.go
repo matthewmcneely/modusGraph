@@ -3,77 +3,43 @@
 package movies
 
 import (
-	"context"
-	"encoding/json"
-
-	"github.com/go-playground/validator/v10"
+	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
-// Studio wraps a schema.Studio and exposes its data through
-// methods. The backing schema struct is held in s; the only way to obtain
-// it is via Unwrap(). All mutation goes through generated setters that
-// write to s, so the wrapper has no state of its own.
+// Studio wraps a schema.Studio and exposes its data through methods.
+// It embeds typed.Wrapper, which supplies Unwrap, JSON marshaling, and
+// validation; the backing schema struct is reachable only via Unwrap().
 type Studio struct {
-	s *schema.Studio
+	typed.Wrapper[schema.Studio]
 }
 
-// NewStudio constructs a Studio with a fresh, empty schema struct inside,
-// then applies the given options.
-func NewStudio(opts ...StudioOption) *Studio {
-	e := &Studio{s: &schema.Studio{}}
-	for _, opt := range opts {
-		opt(e)
-	}
+// NewStudio constructs a Studio with a fresh, empty schema struct, then
+// applies the given options.
+func NewStudio(opts ...typed.Option[Studio]) *Studio {
+	e := &Studio{Wrapper: typed.WrapValue(&schema.Studio{})}
+	typed.Apply(e, opts...)
 	return e
 }
 
 // WrapStudio constructs a Studio backed by the given schema struct, then
-// applies the given options. The wrapper holds s directly — no defensive copy.
-// Mutations through Studio's setters write to s.
-func WrapStudio(s *schema.Studio, opts ...StudioOption) *Studio {
-	e := &Studio{s: s}
-	for _, opt := range opts {
-		opt(e)
-	}
+// applies the given options. The wrapper holds s directly — no defensive
+// copy, so setters mutate the caller's struct.
+func WrapStudio(s *schema.Studio, opts ...typed.Option[Studio]) *Studio {
+	e := &Studio{Wrapper: typed.WrapValue(s)}
+	typed.Apply(e, opts...)
 	return e
 }
 
-// Unwrap returns the backing schema struct. modusgraph.Client uses this
-// (via reflection) to substitute the schema struct when a wrapper is
-// passed across the boundary.
-func (e *Studio) Unwrap() *schema.Studio { return e.s }
-
 // UID returns the entity's UID bookkeeping field.
-func (e *Studio) UID() string { return e.s.UID }
+func (e *Studio) UID() string { return e.Unwrap().UID }
 
 // SetUID sets the entity's UID bookkeeping field.
-func (e *Studio) SetUID(v string) { e.s.UID = v }
+func (e *Studio) SetUID(v string) { e.Unwrap().UID = v }
 
 // DType returns the entity's dgraph type list.
-func (e *Studio) DType() []string { return e.s.DType }
+func (e *Studio) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
-func (e *Studio) SetDType(v []string) { e.s.DType = v }
-
-// Validate runs v against the backing schema struct. The validator's tag
-// processing sees the schema struct's public fields directly.
-func (e *Studio) Validate(ctx context.Context, v *validator.Validate) error {
-	return v.StructCtx(ctx, e.s)
-}
-
-// MarshalJSON delegates to the schema struct, whose public fields and
-// json tags produce the correct serialization.
-func (e *Studio) MarshalJSON() ([]byte, error) {
-	return json.Marshal(e.s)
-}
-
-// UnmarshalJSON lazily initializes the backing schema struct if needed,
-// then delegates. Safe to call on a zero-value *Studio.
-func (e *Studio) UnmarshalJSON(data []byte) error {
-	if e.s == nil {
-		e.s = &schema.Studio{}
-	}
-	return json.Unmarshal(data, e.s)
-}
+func (e *Studio) SetDType(v []string) { e.Unwrap().DType = v }

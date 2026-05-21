@@ -6,55 +6,54 @@ import (
 	"context"
 
 	"github.com/matthewmcneely/modusgraph"
+	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
-// CountryClient wraps a schema.CountryClient and exposes the same
-// operations over wrapper types. Reads allocate a wrapper around the schema
-// result; writes deref the wrapper's backing schema struct (w.s) and forward.
+// CountryClient provides CRUD/query operations over Country wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
 type CountryClient struct {
-	schemaClient *schema.CountryClient
+	typed *typed.Client[schema.Country]
 }
 
-// NewCountryClient binds a wrapper-side CountryClient to conn. Internally
-// constructs a fresh schema.CountryClient on the same conn.
+// NewCountryClient binds a CountryClient to conn.
 func NewCountryClient(conn modusgraph.Client) *CountryClient {
-	return &CountryClient{schemaClient: schema.NewCountryClient(conn)}
+	return &CountryClient{typed: typed.NewClient[schema.Country](conn)}
 }
 
 // Get loads the Country with the given UID and returns it wrapped.
 func (c *CountryClient) Get(ctx context.Context, uid string) (*Country, error) {
-	s, err := c.schemaClient.Get(ctx, uid)
+	s, err := c.typed.Get(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
 	return WrapCountry(s), nil
 }
 
-// Add inserts the underlying schema struct from w.
+// Add inserts the schema struct backing w.
 func (c *CountryClient) Add(ctx context.Context, w *Country) error {
-	return c.schemaClient.Add(ctx, w.s)
+	return c.typed.Add(ctx, w.Unwrap())
 }
 
-// Update modifies the underlying schema struct from w (must have UID set).
+// Update modifies the schema struct backing w (must have UID set).
 func (c *CountryClient) Update(ctx context.Context, w *Country) error {
-	return c.schemaClient.Update(ctx, w.s)
+	return c.typed.Update(ctx, w.Unwrap())
 }
 
-// Upsert inserts or updates the underlying schema struct from w, matching
-// against predicates. If no predicates are provided, the first field tagged
-// dgraph:"upsert" wins.
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
 func (c *CountryClient) Upsert(ctx context.Context, w *Country, predicates ...string) error {
-	return c.schemaClient.Upsert(ctx, w.s, predicates...)
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
 }
 
 // Delete removes the Country with the given UID.
 func (c *CountryClient) Delete(ctx context.Context, uid string) error {
-	return c.schemaClient.Delete(ctx, uid)
+	return c.typed.Delete(ctx, uid)
 }
 
 // Query returns a wrapper-side query builder for Country.
 func (c *CountryClient) Query(ctx context.Context) *CountryQuery {
-	return &CountryQuery{schemaQuery: c.schemaClient.Query(ctx)}
+	return &CountryQuery{typed: c.typed.Query(ctx)}
 }

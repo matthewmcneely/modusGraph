@@ -6,55 +6,54 @@ import (
 	"context"
 
 	"github.com/matthewmcneely/modusgraph"
+	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
-// ContentRatingClient wraps a schema.ContentRatingClient and exposes the same
-// operations over wrapper types. Reads allocate a wrapper around the schema
-// result; writes deref the wrapper's backing schema struct (w.s) and forward.
+// ContentRatingClient provides CRUD/query operations over ContentRating wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
 type ContentRatingClient struct {
-	schemaClient *schema.ContentRatingClient
+	typed *typed.Client[schema.ContentRating]
 }
 
-// NewContentRatingClient binds a wrapper-side ContentRatingClient to conn. Internally
-// constructs a fresh schema.ContentRatingClient on the same conn.
+// NewContentRatingClient binds a ContentRatingClient to conn.
 func NewContentRatingClient(conn modusgraph.Client) *ContentRatingClient {
-	return &ContentRatingClient{schemaClient: schema.NewContentRatingClient(conn)}
+	return &ContentRatingClient{typed: typed.NewClient[schema.ContentRating](conn)}
 }
 
 // Get loads the ContentRating with the given UID and returns it wrapped.
 func (c *ContentRatingClient) Get(ctx context.Context, uid string) (*ContentRating, error) {
-	s, err := c.schemaClient.Get(ctx, uid)
+	s, err := c.typed.Get(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
 	return WrapContentRating(s), nil
 }
 
-// Add inserts the underlying schema struct from w.
+// Add inserts the schema struct backing w.
 func (c *ContentRatingClient) Add(ctx context.Context, w *ContentRating) error {
-	return c.schemaClient.Add(ctx, w.s)
+	return c.typed.Add(ctx, w.Unwrap())
 }
 
-// Update modifies the underlying schema struct from w (must have UID set).
+// Update modifies the schema struct backing w (must have UID set).
 func (c *ContentRatingClient) Update(ctx context.Context, w *ContentRating) error {
-	return c.schemaClient.Update(ctx, w.s)
+	return c.typed.Update(ctx, w.Unwrap())
 }
 
-// Upsert inserts or updates the underlying schema struct from w, matching
-// against predicates. If no predicates are provided, the first field tagged
-// dgraph:"upsert" wins.
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
 func (c *ContentRatingClient) Upsert(ctx context.Context, w *ContentRating, predicates ...string) error {
-	return c.schemaClient.Upsert(ctx, w.s, predicates...)
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
 }
 
 // Delete removes the ContentRating with the given UID.
 func (c *ContentRatingClient) Delete(ctx context.Context, uid string) error {
-	return c.schemaClient.Delete(ctx, uid)
+	return c.typed.Delete(ctx, uid)
 }
 
 // Query returns a wrapper-side query builder for ContentRating.
 func (c *ContentRatingClient) Query(ctx context.Context) *ContentRatingQuery {
-	return &ContentRatingQuery{schemaQuery: c.schemaClient.Query(ctx)}
+	return &ContentRatingQuery{typed: c.typed.Query(ctx)}
 }

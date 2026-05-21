@@ -3,77 +3,43 @@
 package movies
 
 import (
-	"context"
-	"encoding/json"
-
-	"github.com/go-playground/validator/v10"
+	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
-// Genre wraps a schema.Genre and exposes its data through
-// methods. The backing schema struct is held in s; the only way to obtain
-// it is via Unwrap(). All mutation goes through generated setters that
-// write to s, so the wrapper has no state of its own.
+// Genre wraps a schema.Genre and exposes its data through methods.
+// It embeds typed.Wrapper, which supplies Unwrap, JSON marshaling, and
+// validation; the backing schema struct is reachable only via Unwrap().
 type Genre struct {
-	s *schema.Genre
+	typed.Wrapper[schema.Genre]
 }
 
-// NewGenre constructs a Genre with a fresh, empty schema struct inside,
-// then applies the given options.
-func NewGenre(opts ...GenreOption) *Genre {
-	e := &Genre{s: &schema.Genre{}}
-	for _, opt := range opts {
-		opt(e)
-	}
+// NewGenre constructs a Genre with a fresh, empty schema struct, then
+// applies the given options.
+func NewGenre(opts ...typed.Option[Genre]) *Genre {
+	e := &Genre{Wrapper: typed.WrapValue(&schema.Genre{})}
+	typed.Apply(e, opts...)
 	return e
 }
 
 // WrapGenre constructs a Genre backed by the given schema struct, then
-// applies the given options. The wrapper holds s directly — no defensive copy.
-// Mutations through Genre's setters write to s.
-func WrapGenre(s *schema.Genre, opts ...GenreOption) *Genre {
-	e := &Genre{s: s}
-	for _, opt := range opts {
-		opt(e)
-	}
+// applies the given options. The wrapper holds s directly — no defensive
+// copy, so setters mutate the caller's struct.
+func WrapGenre(s *schema.Genre, opts ...typed.Option[Genre]) *Genre {
+	e := &Genre{Wrapper: typed.WrapValue(s)}
+	typed.Apply(e, opts...)
 	return e
 }
 
-// Unwrap returns the backing schema struct. modusgraph.Client uses this
-// (via reflection) to substitute the schema struct when a wrapper is
-// passed across the boundary.
-func (e *Genre) Unwrap() *schema.Genre { return e.s }
-
 // UID returns the entity's UID bookkeeping field.
-func (e *Genre) UID() string { return e.s.UID }
+func (e *Genre) UID() string { return e.Unwrap().UID }
 
 // SetUID sets the entity's UID bookkeeping field.
-func (e *Genre) SetUID(v string) { e.s.UID = v }
+func (e *Genre) SetUID(v string) { e.Unwrap().UID = v }
 
 // DType returns the entity's dgraph type list.
-func (e *Genre) DType() []string { return e.s.DType }
+func (e *Genre) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
-func (e *Genre) SetDType(v []string) { e.s.DType = v }
-
-// Validate runs v against the backing schema struct. The validator's tag
-// processing sees the schema struct's public fields directly.
-func (e *Genre) Validate(ctx context.Context, v *validator.Validate) error {
-	return v.StructCtx(ctx, e.s)
-}
-
-// MarshalJSON delegates to the schema struct, whose public fields and
-// json tags produce the correct serialization.
-func (e *Genre) MarshalJSON() ([]byte, error) {
-	return json.Marshal(e.s)
-}
-
-// UnmarshalJSON lazily initializes the backing schema struct if needed,
-// then delegates. Safe to call on a zero-value *Genre.
-func (e *Genre) UnmarshalJSON(data []byte) error {
-	if e.s == nil {
-		e.s = &schema.Genre{}
-	}
-	return json.Unmarshal(data, e.s)
-}
+func (e *Genre) SetDType(v []string) { e.Unwrap().DType = v }

@@ -7,29 +7,29 @@ import (
 )
 
 // Name returns the name field.
-func (e *Location) Name() string { return e.s.Name }
+func (e *Location) Name() string { return e.Unwrap().Name }
 
 // SetName sets the name field.
-func (e *Location) SetName(v string) { e.s.Name = v }
+func (e *Location) SetName(v string) { e.Unwrap().Name = v }
 
 // Email returns the email field.
-func (e *Location) Email() string { return e.s.Email }
+func (e *Location) Email() string { return e.Unwrap().Email }
 
 // SetEmail sets the email field.
-func (e *Location) SetEmail(v string) { e.s.Email = v }
+func (e *Location) SetEmail(v string) { e.Unwrap().Email = v }
 
 // Loc returns the scalar slice.
-func (e *Location) Loc() []float64 { return e.s.Loc }
+func (e *Location) Loc() []float64 { return e.Unwrap().Loc }
 
 // SetLoc sets the scalar slice.
-func (e *Location) SetLoc(v []float64) { e.s.Loc = v }
+func (e *Location) SetLoc(v []float64) { e.Unwrap().Loc = v }
 
 // AppendLoc appends values to the scalar slice.
 func (e *Location) AppendLoc(v ...float64) {
-	e.s.Loc = append(e.s.Loc, v...)
+	e.Unwrap().Loc = append(e.Unwrap().Loc, v...)
 }
 
 // RemoveLocFunc removes all elements for which fn returns true.
 func (e *Location) RemoveLocFunc(fn func(float64) bool) {
-	e.s.Loc = slices.DeleteFunc(e.s.Loc, fn)
+	e.Unwrap().Loc = slices.DeleteFunc(e.Unwrap().Loc, fn)
 }

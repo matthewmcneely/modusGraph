@@ -4,15 +4,12 @@ package movies
 
 import (
 	"github.com/matthewmcneely/modusgraph"
-
-	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
-// Client is a top-level wrapper-side client. Holds a schema.Client
-// internally and exposes per-entity wrapper sub-clients that compose over
-// the schema-side clients.
+// Client is a top-level wrapper-side client. It holds a modusgraph.Client
+// connection and exposes per-entity wrapper sub-clients that all share it.
 type Client struct {
-	schemaClient  *schema.Client
+	conn          modusgraph.Client
 	Actor         *ActorClient
 	ContentRating *ContentRatingClient
 	Country       *CountryClient
@@ -25,27 +22,25 @@ type Client struct {
 	Studio        *StudioClient
 }
 
-// NewClient binds conn to a wrapper-side Client. The internal schema-side
-// Client is constructed once and shared by all per-entity sub-clients.
+// NewClient binds conn to a wrapper-side Client.
 func NewClient(conn modusgraph.Client) *Client {
-	sc := schema.NewClient(conn)
-	c := &Client{schemaClient: sc}
-	c.Actor = &ActorClient{schemaClient: sc.Actor}
-	c.ContentRating = &ContentRatingClient{schemaClient: sc.ContentRating}
-	c.Country = &CountryClient{schemaClient: sc.Country}
-	c.Director = &DirectorClient{schemaClient: sc.Director}
-	c.Film = &FilmClient{schemaClient: sc.Film}
-	c.Genre = &GenreClient{schemaClient: sc.Genre}
-	c.Location = &LocationClient{schemaClient: sc.Location}
-	c.Performance = &PerformanceClient{schemaClient: sc.Performance}
-	c.Rating = &RatingClient{schemaClient: sc.Rating}
-	c.Studio = &StudioClient{schemaClient: sc.Studio}
+	c := &Client{conn: conn}
+	c.Actor = NewActorClient(conn)
+	c.ContentRating = NewContentRatingClient(conn)
+	c.Country = NewCountryClient(conn)
+	c.Director = NewDirectorClient(conn)
+	c.Film = NewFilmClient(conn)
+	c.Genre = NewGenreClient(conn)
+	c.Location = NewLocationClient(conn)
+	c.Performance = NewPerformanceClient(conn)
+	c.Rating = NewRatingClient(conn)
+	c.Studio = NewStudioClient(conn)
 	return c
 }
 
-// GraphClient returns the underlying modusgraph.Client connection, shared
-// with the internal schema-side Client. Use it for operations the typed
-// clients do not wrap — for example QueryRaw, DropAll, WithRetry, and Close.
+// GraphClient returns the underlying modusgraph.Client connection. Use it for
+// operations the typed clients do not wrap — for example QueryRaw, DropAll,
+// WithRetry, and Close.
 func (c *Client) GraphClient() modusgraph.Client {
-	return c.schemaClient.GraphClient
+	return c.conn
 }

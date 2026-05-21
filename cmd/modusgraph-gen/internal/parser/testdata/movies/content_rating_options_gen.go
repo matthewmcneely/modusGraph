@@ -2,18 +2,11 @@
 
 package movies
 
-// ContentRatingOption configures a *ContentRating. Applied at construction time via
-// NewContentRating or WrapContentRating, or in bulk later via ApplyContentRatingOptions.
-type ContentRatingOption func(*ContentRating)
-
-// ApplyContentRatingOptions applies a sequence of options to e in order.
-func ApplyContentRatingOptions(e *ContentRating, opts ...ContentRatingOption) {
-	for _, opt := range opts {
-		opt(e)
-	}
-}
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
+)
 
 // WithContentRatingName sets the name field on a *ContentRating.
-func WithContentRatingName(v string) ContentRatingOption {
+func WithContentRatingName(v string) typed.Option[ContentRating] {
 	return func(e *ContentRating) { e.SetName(v) }
 }

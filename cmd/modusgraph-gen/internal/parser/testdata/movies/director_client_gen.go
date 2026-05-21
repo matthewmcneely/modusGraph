@@ -6,55 +6,54 @@ import (
 	"context"
 
 	"github.com/matthewmcneely/modusgraph"
+	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
-// DirectorClient wraps a schema.DirectorClient and exposes the same
-// operations over wrapper types. Reads allocate a wrapper around the schema
-// result; writes deref the wrapper's backing schema struct (w.s) and forward.
+// DirectorClient provides CRUD/query operations over Director wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
 type DirectorClient struct {
-	schemaClient *schema.DirectorClient
+	typed *typed.Client[schema.Director]
 }
 
-// NewDirectorClient binds a wrapper-side DirectorClient to conn. Internally
-// constructs a fresh schema.DirectorClient on the same conn.
+// NewDirectorClient binds a DirectorClient to conn.
 func NewDirectorClient(conn modusgraph.Client) *DirectorClient {
-	return &DirectorClient{schemaClient: schema.NewDirectorClient(conn)}
+	return &DirectorClient{typed: typed.NewClient[schema.Director](conn)}
 }
 
 // Get loads the Director with the given UID and returns it wrapped.
 func (c *DirectorClient) Get(ctx context.Context, uid string) (*Director, error) {
-	s, err := c.schemaClient.Get(ctx, uid)
+	s, err := c.typed.Get(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
 	return WrapDirector(s), nil
 }
 
-// Add inserts the underlying schema struct from w.
+// Add inserts the schema struct backing w.
 func (c *DirectorClient) Add(ctx context.Context, w *Director) error {
-	return c.schemaClient.Add(ctx, w.s)
+	return c.typed.Add(ctx, w.Unwrap())
 }
 
-// Update modifies the underlying schema struct from w (must have UID set).
+// Update modifies the schema struct backing w (must have UID set).
 func (c *DirectorClient) Update(ctx context.Context, w *Director) error {
-	return c.schemaClient.Update(ctx, w.s)
+	return c.typed.Update(ctx, w.Unwrap())
 }
 
-// Upsert inserts or updates the underlying schema struct from w, matching
-// against predicates. If no predicates are provided, the first field tagged
-// dgraph:"upsert" wins.
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
 func (c *DirectorClient) Upsert(ctx context.Context, w *Director, predicates ...string) error {
-	return c.schemaClient.Upsert(ctx, w.s, predicates...)
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
 }
 
 // Delete removes the Director with the given UID.
 func (c *DirectorClient) Delete(ctx context.Context, uid string) error {
-	return c.schemaClient.Delete(ctx, uid)
+	return c.typed.Delete(ctx, uid)
 }
 
 // Query returns a wrapper-side query builder for Director.
 func (c *DirectorClient) Query(ctx context.Context) *DirectorQuery {
-	return &DirectorQuery{schemaQuery: c.schemaClient.Query(ctx)}
+	return &DirectorQuery{typed: c.typed.Query(ctx)}
 }

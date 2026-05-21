@@ -2,18 +2,11 @@
 
 package movies
 
-// RatingOption configures a *Rating. Applied at construction time via
-// NewRating or WrapRating, or in bulk later via ApplyRatingOptions.
-type RatingOption func(*Rating)
-
-// ApplyRatingOptions applies a sequence of options to e in order.
-func ApplyRatingOptions(e *Rating, opts ...RatingOption) {
-	for _, opt := range opts {
-		opt(e)
-	}
-}
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
+)
 
 // WithRatingName sets the name field on a *Rating.
-func WithRatingName(v string) RatingOption {
+func WithRatingName(v string) typed.Option[Rating] {
 	return func(e *Rating) { e.SetName(v) }
 }

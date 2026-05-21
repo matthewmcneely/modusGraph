@@ -6,55 +6,54 @@ import (
 	"context"
 
 	"github.com/matthewmcneely/modusgraph"
+	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
-// LocationClient wraps a schema.LocationClient and exposes the same
-// operations over wrapper types. Reads allocate a wrapper around the schema
-// result; writes deref the wrapper's backing schema struct (w.s) and forward.
+// LocationClient provides CRUD/query operations over Location wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
 type LocationClient struct {
-	schemaClient *schema.LocationClient
+	typed *typed.Client[schema.Location]
 }
 
-// NewLocationClient binds a wrapper-side LocationClient to conn. Internally
-// constructs a fresh schema.LocationClient on the same conn.
+// NewLocationClient binds a LocationClient to conn.
 func NewLocationClient(conn modusgraph.Client) *LocationClient {
-	return &LocationClient{schemaClient: schema.NewLocationClient(conn)}
+	return &LocationClient{typed: typed.NewClient[schema.Location](conn)}
 }
 
 // Get loads the Location with the given UID and returns it wrapped.
 func (c *LocationClient) Get(ctx context.Context, uid string) (*Location, error) {
-	s, err := c.schemaClient.Get(ctx, uid)
+	s, err := c.typed.Get(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
 	return WrapLocation(s), nil
 }
 
-// Add inserts the underlying schema struct from w.
+// Add inserts the schema struct backing w.
 func (c *LocationClient) Add(ctx context.Context, w *Location) error {
-	return c.schemaClient.Add(ctx, w.s)
+	return c.typed.Add(ctx, w.Unwrap())
 }
 
-// Update modifies the underlying schema struct from w (must have UID set).
+// Update modifies the schema struct backing w (must have UID set).
 func (c *LocationClient) Update(ctx context.Context, w *Location) error {
-	return c.schemaClient.Update(ctx, w.s)
+	return c.typed.Update(ctx, w.Unwrap())
 }
 
-// Upsert inserts or updates the underlying schema struct from w, matching
-// against predicates. If no predicates are provided, the first field tagged
-// dgraph:"upsert" wins.
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
 func (c *LocationClient) Upsert(ctx context.Context, w *Location, predicates ...string) error {
-	return c.schemaClient.Upsert(ctx, w.s, predicates...)
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
 }
 
 // Delete removes the Location with the given UID.
 func (c *LocationClient) Delete(ctx context.Context, uid string) error {
-	return c.schemaClient.Delete(ctx, uid)
+	return c.typed.Delete(ctx, uid)
 }
 
 // Query returns a wrapper-side query builder for Location.
 func (c *LocationClient) Query(ctx context.Context) *LocationQuery {
-	return &LocationQuery{schemaQuery: c.schemaClient.Query(ctx)}
+	return &LocationQuery{typed: c.typed.Query(ctx)}
 }

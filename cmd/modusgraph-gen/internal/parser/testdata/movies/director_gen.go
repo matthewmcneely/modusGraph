@@ -3,77 +3,43 @@
 package movies
 
 import (
-	"context"
-	"encoding/json"
-
-	"github.com/go-playground/validator/v10"
+	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
-// Director wraps a schema.Director and exposes its data through
-// methods. The backing schema struct is held in s; the only way to obtain
-// it is via Unwrap(). All mutation goes through generated setters that
-// write to s, so the wrapper has no state of its own.
+// Director wraps a schema.Director and exposes its data through methods.
+// It embeds typed.Wrapper, which supplies Unwrap, JSON marshaling, and
+// validation; the backing schema struct is reachable only via Unwrap().
 type Director struct {
-	s *schema.Director
+	typed.Wrapper[schema.Director]
 }
 
-// NewDirector constructs a Director with a fresh, empty schema struct inside,
-// then applies the given options.
-func NewDirector(opts ...DirectorOption) *Director {
-	e := &Director{s: &schema.Director{}}
-	for _, opt := range opts {
-		opt(e)
-	}
+// NewDirector constructs a Director with a fresh, empty schema struct, then
+// applies the given options.
+func NewDirector(opts ...typed.Option[Director]) *Director {
+	e := &Director{Wrapper: typed.WrapValue(&schema.Director{})}
+	typed.Apply(e, opts...)
 	return e
 }
 
 // WrapDirector constructs a Director backed by the given schema struct, then
-// applies the given options. The wrapper holds s directly — no defensive copy.
-// Mutations through Director's setters write to s.
-func WrapDirector(s *schema.Director, opts ...DirectorOption) *Director {
-	e := &Director{s: s}
-	for _, opt := range opts {
-		opt(e)
-	}
+// applies the given options. The wrapper holds s directly — no defensive
+// copy, so setters mutate the caller's struct.
+func WrapDirector(s *schema.Director, opts ...typed.Option[Director]) *Director {
+	e := &Director{Wrapper: typed.WrapValue(s)}
+	typed.Apply(e, opts...)
 	return e
 }
 
-// Unwrap returns the backing schema struct. modusgraph.Client uses this
-// (via reflection) to substitute the schema struct when a wrapper is
-// passed across the boundary.
-func (e *Director) Unwrap() *schema.Director { return e.s }
-
 // UID returns the entity's UID bookkeeping field.
-func (e *Director) UID() string { return e.s.UID }
+func (e *Director) UID() string { return e.Unwrap().UID }
 
 // SetUID sets the entity's UID bookkeeping field.
-func (e *Director) SetUID(v string) { e.s.UID = v }
+func (e *Director) SetUID(v string) { e.Unwrap().UID = v }
 
 // DType returns the entity's dgraph type list.
-func (e *Director) DType() []string { return e.s.DType }
+func (e *Director) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
-func (e *Director) SetDType(v []string) { e.s.DType = v }
-
-// Validate runs v against the backing schema struct. The validator's tag
-// processing sees the schema struct's public fields directly.
-func (e *Director) Validate(ctx context.Context, v *validator.Validate) error {
-	return v.StructCtx(ctx, e.s)
-}
-
-// MarshalJSON delegates to the schema struct, whose public fields and
-// json tags produce the correct serialization.
-func (e *Director) MarshalJSON() ([]byte, error) {
-	return json.Marshal(e.s)
-}
-
-// UnmarshalJSON lazily initializes the backing schema struct if needed,
-// then delegates. Safe to call on a zero-value *Director.
-func (e *Director) UnmarshalJSON(data []byte) error {
-	if e.s == nil {
-		e.s = &schema.Director{}
-	}
-	return json.Unmarshal(data, e.s)
-}
+func (e *Director) SetDType(v []string) { e.Unwrap().DType = v }

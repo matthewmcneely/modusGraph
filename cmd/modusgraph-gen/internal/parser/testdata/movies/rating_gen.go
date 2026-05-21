@@ -3,77 +3,43 @@
 package movies
 
 import (
-	"context"
-	"encoding/json"
-
-	"github.com/go-playground/validator/v10"
+	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
-// Rating wraps a schema.Rating and exposes its data through
-// methods. The backing schema struct is held in s; the only way to obtain
-// it is via Unwrap(). All mutation goes through generated setters that
-// write to s, so the wrapper has no state of its own.
+// Rating wraps a schema.Rating and exposes its data through methods.
+// It embeds typed.Wrapper, which supplies Unwrap, JSON marshaling, and
+// validation; the backing schema struct is reachable only via Unwrap().
 type Rating struct {
-	s *schema.Rating
+	typed.Wrapper[schema.Rating]
 }
 
-// NewRating constructs a Rating with a fresh, empty schema struct inside,
-// then applies the given options.
-func NewRating(opts ...RatingOption) *Rating {
-	e := &Rating{s: &schema.Rating{}}
-	for _, opt := range opts {
-		opt(e)
-	}
+// NewRating constructs a Rating with a fresh, empty schema struct, then
+// applies the given options.
+func NewRating(opts ...typed.Option[Rating]) *Rating {
+	e := &Rating{Wrapper: typed.WrapValue(&schema.Rating{})}
+	typed.Apply(e, opts...)
 	return e
 }
 
 // WrapRating constructs a Rating backed by the given schema struct, then
-// applies the given options. The wrapper holds s directly — no defensive copy.
-// Mutations through Rating's setters write to s.
-func WrapRating(s *schema.Rating, opts ...RatingOption) *Rating {
-	e := &Rating{s: s}
-	for _, opt := range opts {
-		opt(e)
-	}
+// applies the given options. The wrapper holds s directly — no defensive
+// copy, so setters mutate the caller's struct.
+func WrapRating(s *schema.Rating, opts ...typed.Option[Rating]) *Rating {
+	e := &Rating{Wrapper: typed.WrapValue(s)}
+	typed.Apply(e, opts...)
 	return e
 }
 
-// Unwrap returns the backing schema struct. modusgraph.Client uses this
-// (via reflection) to substitute the schema struct when a wrapper is
-// passed across the boundary.
-func (e *Rating) Unwrap() *schema.Rating { return e.s }
-
 // UID returns the entity's UID bookkeeping field.
-func (e *Rating) UID() string { return e.s.UID }
+func (e *Rating) UID() string { return e.Unwrap().UID }
 
 // SetUID sets the entity's UID bookkeeping field.
-func (e *Rating) SetUID(v string) { e.s.UID = v }
+func (e *Rating) SetUID(v string) { e.Unwrap().UID = v }
 
 // DType returns the entity's dgraph type list.
-func (e *Rating) DType() []string { return e.s.DType }
+func (e *Rating) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
-func (e *Rating) SetDType(v []string) { e.s.DType = v }
-
-// Validate runs v against the backing schema struct. The validator's tag
-// processing sees the schema struct's public fields directly.
-func (e *Rating) Validate(ctx context.Context, v *validator.Validate) error {
-	return v.StructCtx(ctx, e.s)
-}
-
-// MarshalJSON delegates to the schema struct, whose public fields and
-// json tags produce the correct serialization.
-func (e *Rating) MarshalJSON() ([]byte, error) {
-	return json.Marshal(e.s)
-}
-
-// UnmarshalJSON lazily initializes the backing schema struct if needed,
-// then delegates. Safe to call on a zero-value *Rating.
-func (e *Rating) UnmarshalJSON(data []byte) error {
-	if e.s == nil {
-		e.s = &schema.Rating{}
-	}
-	return json.Unmarshal(data, e.s)
-}
+func (e *Rating) SetDType(v []string) { e.Unwrap().DType = v }

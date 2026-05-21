@@ -6,21 +6,23 @@ import (
 	"iter"
 	"slices"
 
+	"github.com/matthewmcneely/modusgraph/typed"
+
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
 // Name returns the name field.
-func (e *Actor) Name() string { return e.s.Name }
+func (e *Actor) Name() string { return e.Unwrap().Name }
 
 // SetName sets the name field.
-func (e *Actor) SetName(v string) { e.s.Name = v }
+func (e *Actor) SetName(v string) { e.Unwrap().Name = v }
 
 // Films returns a freshly allocated slice of wrappers over each
 // Performance in the multi-edge.
 func (e *Actor) Films() []*Performance {
-	out := make([]*Performance, len(e.s.Films))
-	for i, x := range e.s.Films {
-		out[i] = &Performance{s: x}
+	out := make([]*Performance, len(e.Unwrap().Films))
+	for i, x := range e.Unwrap().Films {
+		out[i] = &Performance{Wrapper: typed.WrapValue(x)}
 	}
 	return out
 }
@@ -29,8 +31,8 @@ func (e *Actor) Films() []*Performance {
 // the allocation in Films().
 func (e *Actor) FilmsSeq() iter.Seq[*Performance] {
 	return func(yield func(*Performance) bool) {
-		for _, x := range e.s.Films {
-			if !yield(&Performance{s: x}) {
+		for _, x := range e.Unwrap().Films {
+			if !yield(&Performance{Wrapper: typed.WrapValue(x)}) {
 				return
 			}
 		}
@@ -39,22 +41,22 @@ func (e *Actor) FilmsSeq() iter.Seq[*Performance] {
 
 // SetFilms replaces the multi-edge with the given items.
 func (e *Actor) SetFilms(items ...*Performance) {
-	e.s.Films = make([]*schema.Performance, len(items))
+	e.Unwrap().Films = make([]*schema.Performance, len(items))
 	for i, x := range items {
-		e.s.Films[i] = x.s
+		e.Unwrap().Films[i] = x.Unwrap()
 	}
 }
 
 // AppendFilms appends items to the multi-edge.
 func (e *Actor) AppendFilms(items ...*Performance) {
 	for _, x := range items {
-		e.s.Films = append(e.s.Films, x.s)
+		e.Unwrap().Films = append(e.Unwrap().Films, x.Unwrap())
 	}
 }
 
 // RemoveFilms removes elements with any of the given UIDs from the multi-edge.
 func (e *Actor) RemoveFilms(uids ...string) {
-	e.s.Films = slices.DeleteFunc(e.s.Films, func(x *schema.Performance) bool {
+	e.Unwrap().Films = slices.DeleteFunc(e.Unwrap().Films, func(x *schema.Performance) bool {
 		return x != nil && slices.Contains(uids, x.UID)
 	})
 }

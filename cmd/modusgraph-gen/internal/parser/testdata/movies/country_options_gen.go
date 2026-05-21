@@ -2,18 +2,11 @@
 
 package movies
 
-// CountryOption configures a *Country. Applied at construction time via
-// NewCountry or WrapCountry, or in bulk later via ApplyCountryOptions.
-type CountryOption func(*Country)
-
-// ApplyCountryOptions applies a sequence of options to e in order.
-func ApplyCountryOptions(e *Country, opts ...CountryOption) {
-	for _, opt := range opts {
-		opt(e)
-	}
-}
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
+)
 
 // WithCountryName sets the name field on a *Country.
-func WithCountryName(v string) CountryOption {
+func WithCountryName(v string) typed.Option[Country] {
 	return func(e *Country) { e.SetName(v) }
 }

@@ -2,18 +2,65 @@
 
 package movies
 
-import "github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
 
-// ActorQuery is the wrapper-side query builder. Composes over
-// schema.ActorQuery; terminal methods wrap results before returning.
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
+)
+
+// ActorQuery is the wrapper-side fluent query builder for Actor. Builder
+// methods return *ActorQuery for chaining; terminal methods (Nodes, First)
+// execute the query and wrap results.
 type ActorQuery struct {
-	schemaQuery *schema.ActorQuery
+	typed *typed.Query[schema.Actor]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *ActorQuery) Filter(filter string, params ...any) *ActorQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *ActorQuery) OrderAsc(clause string) *ActorQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *ActorQuery) OrderDesc(clause string) *ActorQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *ActorQuery) Limit(n int) *ActorQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *ActorQuery) Offset(n int) *ActorQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *ActorQuery) After(uid string) *ActorQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *ActorQuery) Cascade(predicates ...string) *ActorQuery {
+	q.typed.Cascade(predicates...)
+	return q
 }
 
 // Nodes executes the query and returns wrapped Actor results.
 func (q *ActorQuery) Nodes() ([]*Actor, error) {
-	var recs []schema.Actor
-	if err := q.schemaQuery.Nodes(&recs); err != nil {
+	recs, err := q.typed.Nodes()
+	if err != nil {
 		return nil, err
 	}
 	out := make([]*Actor, len(recs))
@@ -23,14 +70,12 @@ func (q *ActorQuery) Nodes() ([]*Actor, error) {
 	return out, nil
 }
 
-// First returns the first matching wrapper, or nil if no rows.
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Actor, or nil if no rows matched.
 func (q *ActorQuery) First() (*Actor, error) {
-	s, err := q.schemaQuery.First()
-	if err != nil {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
 		return nil, err
-	}
-	if s == nil {
-		return nil, nil
 	}
 	return WrapActor(s), nil
 }
