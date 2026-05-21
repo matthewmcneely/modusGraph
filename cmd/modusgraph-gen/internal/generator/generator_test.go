@@ -1044,6 +1044,7 @@ func TestGenerate_WrapperQuery(t *testing.T) {
 	for _, want := range []string{
 		`package entity`,
 		`"github.com/matthewmcneely/modusgraph/typed"`,
+		`"iter"`,
 		`type StudioQuery struct {`,
 		`typed *typed.Query[schema.Studio]`,
 		`func (q *StudioQuery) Filter(filter string, params ...any) *StudioQuery`,
@@ -1055,6 +1056,7 @@ func TestGenerate_WrapperQuery(t *testing.T) {
 		`func (q *StudioQuery) Cascade(predicates ...string) *StudioQuery`,
 		`func (q *StudioQuery) Nodes() ([]*Studio, error)`,
 		`func (q *StudioQuery) First() (*Studio, error)`,
+		`func (q *StudioQuery) IterNodes() iter.Seq2[*Studio, error]`,
 		`return WrapStudio(s), nil`,
 	} {
 		if !strings.Contains(data, want) {
