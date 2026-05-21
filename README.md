@@ -647,14 +647,14 @@ go generate ./...
 
 | Template | Output | Scope |
 |----------|--------|-------|
-| client | `client_gen.go` | Once -- typed `Client` with sub-clients per entity and `QueryRaw` |
-| page_options | `page_options_gen.go` | Once -- `First(n)` and `Offset(n)` pagination |
-| iter | `iter_gen.go` | Once -- auto-paging `SearchIter` and `ListIter` iterators (Go 1.23+) |
-| entity | `<entity>_gen.go` | Per entity -- `Get`, `Add`, `Update`, `Delete`, `Search`, `List` |
-| options | `<entity>_options_gen.go` | Per entity -- functional options for each scalar field |
-| query | `<entity>_query_gen.go` | Per entity -- fluent query builder with filter, order, pagination |
+| schema_marker | `marker_gen.go` | Once (schema dir) -- `SchemaTypeName`, `SchemaPredicates`, `SchemaSearchPredicate` constants |
+| schema_client | `client_gen.go` | Once (schema-client dir) -- aggregate `Client` with one `*typed.Client[T]` field per entity |
+| wrapper_client | `client_gen.go` | Once (entity-client dir) -- wrapper-side aggregate `Client` with per-entity wrapper sub-clients |
+| entity | `<entity>_gen.go` | Per entity -- wrapper type embedding `typed.Wrapper[S]` with `New<E>` constructor and `Wrap<E>` adapter |
+| options | `<entity>_options_gen.go` | Per entity -- functional options (`typed.Option[T]`) for each scalar field |
 | accessors | `<entity>_accessors_gen.go` | Per entity (private fields only) -- getters, setters, slice helpers |
-| marshal | `<entity>_marshal_gen.go` | Per entity (private fields only) -- `DgraphMap()` and `UnmarshalJSON()` |
+| wrapper_entity_client | `<entity>_client_gen.go` | Per entity -- wrapper client composing over `*typed.Client[S]` |
+| wrapper_query | `<entity>_query_gen.go` | Per entity -- fluent wrapper query builder over `*typed.Query[S]` |
 | cli | `cmd/<pkg>/main.go` | Once -- Kong CLI with subcommands per entity and raw DQL query |
 
 ### Flags
