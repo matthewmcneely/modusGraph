@@ -21,10 +21,12 @@ import (
 // every executed query at verbosity 3 with the message "execute query"; the
 // returned *int is incremented once per such log line.
 //
-// dgman's logger is process-global and modusgraph.NewClient is a per-URI
-// singleton, so each call uses a fresh t.TempDir() URI. Tests that use
-// newCountingConn must NOT call t.Parallel(): a parallel test sharing the
-// global logger would corrupt the count.
+// dgman's logger is process-global, and modusgraph allows only one live
+// file-backed engine per process (see modusgraph.ErrSingletonOnly). Each call
+// uses a fresh t.TempDir() URI for data isolation. Tests that use
+// newCountingConn must NOT call t.Parallel(): a second live client would hit
+// the engine singleton, and parallel tests would also corrupt the shared
+// query count.
 func newCountingConn(t *testing.T, count *int) modusgraph.Client {
 	t.Helper()
 	logger := funcr.New(func(_, args string) {
@@ -387,7 +389,6 @@ func TestQuery_OrderAccumulates(t *testing.T) {
 }
 
 func TestQuery_CascadeOverwrites(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	c := typed.NewClient[widget](newConn(t))
 
