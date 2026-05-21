@@ -56,3 +56,9 @@ func (c *Client[T]) Upsert(ctx context.Context, rec *T, predicates ...string) er
 func (c *Client[T]) Delete(ctx context.Context, uid string) error {
 	return c.conn.Delete(ctx, []string{uid})
 }
+
+// Query returns a typed query builder for T.
+func (c *Client[T]) Query(ctx context.Context) *Query[T] {
+	var z T
+	return &Query[T]{q: c.conn.Query(ctx, &z)}
+}
