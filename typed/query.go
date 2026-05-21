@@ -22,8 +22,8 @@ import (
 // keeps mutating — the same underlying query.
 //
 // Repeated builder calls do not all behave the same way. Filter, Limit,
-// Offset, After, and Cascade overwrite: the last call wins. OrderAsc and
-// OrderDesc accumulate: each call adds to the query.
+// Offset, After, Cascade, As, Name, RootFunc, and Vars overwrite: the last
+// call wins. OrderAsc and OrderDesc accumulate: each call adds to the query.
 //
 // Limit and Offset additionally record the bounds that IterNodes pages
 // within — a Limit caps the rows it streams, an Offset is its start.
@@ -75,6 +75,38 @@ func (qb *Query[T]) After(uid string) *Query[T] {
 // Cascade drops nodes missing any of the given predicates (all, if none given).
 func (qb *Query[T]) Cascade(predicates ...string) *Query[T] {
 	qb.q.Cascade(predicates...)
+	return qb
+}
+
+// RootFunc overrides the query root function. dgman's default root function
+// is type(<NodeType>); RootFunc replaces it with an expression such as
+// eq(name, "Alice") or has(email). Repeated calls overwrite.
+func (qb *Query[T]) RootFunc(rootFunc string) *Query[T] {
+	qb.q.RootFunc(rootFunc)
+	return qb
+}
+
+// As assigns a dgraph query-variable name to the query block. Repeated calls
+// overwrite.
+func (qb *Query[T]) As(varName string) *Query[T] {
+	qb.q.As(varName)
+	return qb
+}
+
+// Name sets the query block name. It defaults to "data"; dgman uses the name
+// to both generate and decode the query, so a renamed block still decodes
+// into []T. Repeated calls overwrite.
+func (qb *Query[T]) Name(queryName string) *Query[T] {
+	qb.q.Name(queryName)
+	return qb
+}
+
+// Vars supplies GraphQL variables for a parameterized query: funcDef is the
+// query function definition (for example "getByName($n: string)") and vars
+// binds each variable. The query then executes via dgraph's QueryWithVars
+// path. Repeated calls overwrite.
+func (qb *Query[T]) Vars(funcDef string, vars map[string]string) *Query[T] {
+	qb.q.Vars(funcDef, vars)
 	return qb
 }
 
@@ -142,7 +174,7 @@ func (qb *Query[T]) IterNodes() iter.Seq2[*T, error] {
 }
 
 // Raw returns the underlying dgman query for operations Query does not wrap
-// (Var, As, Name, RootFunc, GroupBy, Vars).
+// (Var, GroupBy).
 func (qb *Query[T]) Raw() *dg.Query {
 	return qb.q
 }

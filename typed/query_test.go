@@ -768,3 +768,120 @@ func TestQuery_LimitOffsetStillDriveNodes(t *testing.T) {
 		}
 	}
 }
+
+func TestQuery_RootFuncOverridesRoot(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	for _, n := range []string{"a", "b", "c"} {
+		if err := c.Add(ctx, &widget{Name: n}); err != nil {
+			t.Fatalf("Add %s: %v", n, err)
+		}
+	}
+	// RootFunc replaces the default type(widget) root with an eq() lookup;
+	// the query still decodes into []widget.
+	got, err := c.Query(ctx).RootFunc(`eq(name, "b")`).Nodes()
+	if err != nil {
+		t.Fatalf("Nodes: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf(`RootFunc(eq(name,"b")).Nodes() returned %d records, want 1`, len(got))
+	}
+	if got[0].Name != "b" {
+		t.Fatalf("RootFunc lookup returned %q, want \"b\"", got[0].Name)
+	}
+}
+
+func TestQuery_RootFuncRendersAndOverwrites(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// RootFunc renders into the (func: ...) position and overwrites: the
+	// second call wins.
+	q := c.Query(ctx).RootFunc(`eq(name, "x")`).RootFunc(`eq(name, "y")`)
+	s := q.Raw().String()
+	if !strings.Contains(s, `func: eq(name, "y")`) {
+		t.Fatalf("second RootFunc not rendered; got:\n%s", s)
+	}
+	if strings.Contains(s, `eq(name, "x")`) {
+		t.Fatalf("first RootFunc still present after overwrite; got:\n%s", s)
+	}
+}
+
+func TestQuery_NameDecodesAfterRename(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	for _, n := range []string{"a", "b", "c"} {
+		if err := c.Add(ctx, &widget{Name: n}); err != nil {
+			t.Fatalf("Add %s: %v", n, err)
+		}
+	}
+	// Name renames the query block. dgman uses the name symmetrically to
+	// generate and decode, so a renamed block still decodes into []widget.
+	got, err := c.Query(ctx).Name("widgets").Nodes()
+	if err != nil {
+		t.Fatalf("Nodes: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf(`Name("widgets").Nodes() returned %d records, want 3`, len(got))
+	}
+}
+
+func TestQuery_NameRendersAndOverwrites(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Name renders as the block name and overwrites: the second call wins.
+	q := c.Query(ctx).Name("first").Name("second")
+	s := q.Raw().String()
+	if !strings.Contains(s, "second(func:") {
+		t.Fatalf("second Name not rendered as block name; got:\n%s", s)
+	}
+	if strings.Contains(s, "first(func:") {
+		t.Fatalf("first Name still present after overwrite; got:\n%s", s)
+	}
+}
+
+func TestQuery_AsRendersAndOverwrites(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// As prefixes the block with "<name> as " and overwrites.
+	q := c.Query(ctx).As("first").As("second")
+	s := q.Raw().String()
+	if !strings.Contains(s, "second as ") {
+		t.Fatalf("second As not rendered; got:\n%s", s)
+	}
+	if strings.Contains(s, "first as ") {
+		t.Fatalf("first As still present after overwrite; got:\n%s", s)
+	}
+}
+
+func TestQuery_VarsRendersQueryPrefix(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Vars renders a "query <funcDef>" prefix on the generated DQL.
+	q := c.Query(ctx).Vars("getByName($n: string)", map[string]string{"$n": "b"})
+	s := q.Raw().String()
+	if !strings.Contains(s, "query getByName($n: string)") {
+		t.Fatalf("Vars did not render the query-definition prefix; got:\n%s", s)
+	}
+}
+
+func TestQuery_VarsParameterizedQuery(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	for _, n := range []string{"a", "b", "c"} {
+		if err := c.Add(ctx, &widget{Name: n}); err != nil {
+			t.Fatalf("Add %s: %v", n, err)
+		}
+	}
+	// Vars supplies a GraphQL variable bound into the root function; the
+	// query executes via dgraph's QueryWithVars path.
+	got, err := c.Query(ctx).
+		Vars("getByName($n: string)", map[string]string{"$n": "b"}).
+		RootFunc("eq(name, $n)").
+		Nodes()
+	if err != nil {
+		t.Fatalf("Vars query Nodes: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "b" {
+		t.Fatalf(`Vars parameterized query returned %+v, want one widget named "b"`, got)
+	}
+}
