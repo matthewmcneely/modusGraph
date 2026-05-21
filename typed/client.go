@@ -11,6 +11,7 @@ package typed
 
 import (
 	"context"
+	"iter"
 
 	"github.com/matthewmcneely/modusgraph"
 )
@@ -61,4 +62,31 @@ func (c *Client[T]) Delete(ctx context.Context, uid string) error {
 func (c *Client[T]) Query(ctx context.Context) *Query[T] {
 	var z T
 	return &Query[T]{q: c.conn.Query(ctx, &z)}
+}
+
+// defaultPageSize is the page size Iter uses to walk results.
+const defaultPageSize = 50
+
+// Iter returns an iterator over every T, paging transparently so large result
+// sets are not materialized at once. It yields each record in turn; on error
+// it yields a final (nil, err) and stops. Iteration is offset-paged, so a data
+// set mutated mid-iteration may skip or repeat rows.
+func (c *Client[T]) Iter(ctx context.Context) iter.Seq2[*T, error] {
+	return func(yield func(*T, error) bool) {
+		for offset := 0; ; offset += defaultPageSize {
+			page, err := c.Query(ctx).Offset(offset).Limit(defaultPageSize).Nodes()
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			for i := range page {
+				if !yield(&page[i], nil) {
+					return
+				}
+			}
+			if len(page) < defaultPageSize {
+				return
+			}
+		}
+	}
 }

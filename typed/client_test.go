@@ -90,3 +90,60 @@ func TestClient_Delete(t *testing.T) {
 		t.Fatal("Get after Delete returned no error; expected not-found")
 	}
 }
+
+func TestClient_IterPagesThroughAllRecords(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+
+	// 125 is deliberately larger than the package's 50-record page size, so
+	// a correct Iter must fetch more than one page.
+	const n = 125
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+
+	seen := 0
+	for w, err := range c.Iter(ctx) {
+		if err != nil {
+			t.Fatalf("Iter yielded error: %v", err)
+		}
+		if w == nil {
+			t.Fatal("Iter yielded a nil widget")
+		}
+		seen++
+	}
+	if seen != n {
+		t.Fatalf("Iter yielded %d records, want %d", seen, n)
+	}
+}
+
+func TestClient_IterStopsOnConsumerBreak(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+
+	const n = 125
+	for i := range n {
+		if err := c.Add(ctx, &widget{Name: "w", Qty: i}); err != nil {
+			t.Fatalf("Add %d: %v", i, err)
+		}
+	}
+
+	seen := 0
+	for w, err := range c.Iter(ctx) {
+		if err != nil {
+			t.Fatalf("Iter yielded error: %v", err)
+		}
+		if w == nil {
+			t.Fatal("Iter yielded a nil widget")
+		}
+		seen++
+		if seen == 10 {
+			break
+		}
+	}
+	if seen != 10 {
+		t.Fatalf("Iter yielded %d records after break at 10, want 10", seen)
+	}
+}
