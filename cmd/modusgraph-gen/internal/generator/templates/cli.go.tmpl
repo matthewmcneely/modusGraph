@@ -111,8 +111,8 @@ func (c *{{.Name}}GetCmd) Run(client *{{$.Name}}.Client) error {
 type {{.Name}}ListCmd struct{}
 
 func (c *{{.Name}}ListCmd) Run(client *{{$.Name}}.Client) error {
-	var recs []{{$.Name}}.{{.Name}}
-	if err := client.{{.Name}}.Query(context.Background()).Nodes(&recs); err != nil {
+	recs, err := client.{{.Name}}.Query(context.Background()).Nodes()
+	if err != nil {
 		return err
 	}
 	return printJSON(recs)
