@@ -1039,8 +1039,16 @@ func TestGenerate_WrapperQuery(t *testing.T) {
 	data := mustReadGen(t, entityDir, "studio_query_gen.go")
 	for _, want := range []string{
 		`package entity`,
+		`"github.com/matthewmcneely/modusgraph/typed"`,
 		`type StudioQuery struct {`,
-		`schemaQuery *schema.StudioQuery`,
+		`typed *typed.Query[schema.Studio]`,
+		`func (q *StudioQuery) Filter(filter string, params ...any) *StudioQuery`,
+		`func (q *StudioQuery) OrderAsc(clause string) *StudioQuery`,
+		`func (q *StudioQuery) OrderDesc(clause string) *StudioQuery`,
+		`func (q *StudioQuery) Limit(n int) *StudioQuery`,
+		`func (q *StudioQuery) Offset(n int) *StudioQuery`,
+		`func (q *StudioQuery) After(uid string) *StudioQuery`,
+		`func (q *StudioQuery) Cascade(predicates ...string) *StudioQuery`,
 		`func (q *StudioQuery) Nodes() ([]*Studio, error)`,
 		`func (q *StudioQuery) First() (*Studio, error)`,
 		`return WrapStudio(s), nil`,
@@ -1048,6 +1056,9 @@ func TestGenerate_WrapperQuery(t *testing.T) {
 		if !strings.Contains(data, want) {
 			t.Errorf("studio_query_gen.go missing: %q", want)
 		}
+	}
+	if strings.Contains(data, `*schema.StudioQuery`) {
+		t.Errorf("studio_query_gen.go must NOT reference the deleted schema query type")
 	}
 }
 

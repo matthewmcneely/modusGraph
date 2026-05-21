@@ -1,20 +1,67 @@
 package {{ .EntityPackageName }}
 
-import "{{ .SchemaImportPath }}"
+import (
+	"github.com/matthewmcneely/modusgraph/typed"
+
+	"{{ .SchemaImportPath }}"
+)
 
 {{- $E := .Entity.Name }}
 {{- $sAlias := .SchemaAlias }}
 
-// {{ $E }}Query is the wrapper-side query builder. Composes over
-// {{ $sAlias }}.{{ $E }}Query; terminal methods wrap results before returning.
+// {{ $E }}Query is the wrapper-side fluent query builder for {{ $E }}. Builder
+// methods return *{{ $E }}Query for chaining; terminal methods (Nodes, First)
+// execute the query and wrap results.
 type {{ $E }}Query struct {
-	schemaQuery *{{ $sAlias }}.{{ $E }}Query
+	typed *typed.Query[{{ $sAlias }}.{{ $E }}]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *{{ $E }}Query) Filter(filter string, params ...any) *{{ $E }}Query {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *{{ $E }}Query) OrderAsc(clause string) *{{ $E }}Query {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *{{ $E }}Query) OrderDesc(clause string) *{{ $E }}Query {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *{{ $E }}Query) Limit(n int) *{{ $E }}Query {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *{{ $E }}Query) Offset(n int) *{{ $E }}Query {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *{{ $E }}Query) After(uid string) *{{ $E }}Query {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *{{ $E }}Query) Cascade(predicates ...string) *{{ $E }}Query {
+	q.typed.Cascade(predicates...)
+	return q
 }
 
 // Nodes executes the query and returns wrapped {{ $E }} results.
 func (q *{{ $E }}Query) Nodes() ([]*{{ $E }}, error) {
-	var recs []{{ $sAlias }}.{{ $E }}
-	if err := q.schemaQuery.Nodes(&recs); err != nil {
+	recs, err := q.typed.Nodes()
+	if err != nil {
 		return nil, err
 	}
 	out := make([]*{{ $E }}, len(recs))
@@ -24,14 +71,12 @@ func (q *{{ $E }}Query) Nodes() ([]*{{ $E }}, error) {
 	return out, nil
 }
 
-// First returns the first matching wrapper, or nil if no rows.
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped {{ $E }}, or nil if no rows matched.
 func (q *{{ $E }}Query) First() (*{{ $E }}, error) {
-	s, err := q.schemaQuery.First()
-	if err != nil {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
 		return nil, err
-	}
-	if s == nil {
-		return nil, nil
 	}
 	return Wrap{{ $E }}(s), nil
 }
