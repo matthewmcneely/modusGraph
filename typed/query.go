@@ -24,6 +24,9 @@ import (
 // Repeated builder calls do not all behave the same way. Filter, Limit,
 // Offset, After, and Cascade overwrite: the last call wins. OrderAsc and
 // OrderDesc accumulate: each call adds to the query.
+//
+// Limit and Offset additionally record the bounds that IterNodes pages
+// within — a Limit caps the rows it streams, an Offset is its start.
 type Query[T any] struct {
 	q      *dg.Query
 	limit  int // caller-set row cap; 0 = unbounded
