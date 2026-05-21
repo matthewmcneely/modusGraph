@@ -771,7 +771,7 @@ type Studio struct {
 
 	// Scalar
 	for _, want := range []string{
-		`func (e *Studio) Name() string { return e.s.Name }`,
+		`func (e *Studio) Name() string { return e.Unwrap().Name }`,
 		`func (e *Studio) SetName(v string)`,
 	} {
 		if !strings.Contains(data, want) {
@@ -781,8 +781,8 @@ type Studio struct {
 	// Pointer-singular edge
 	for _, want := range []string{
 		`func (e *Studio) Founder() *Director {`,
-		`if e.s.Founder == nil {`,
-		`return &Director{s: e.s.Founder}`,
+		`if e.Unwrap().Founder == nil {`,
+		`return &Director{Wrapper: typed.WrapValue(e.Unwrap().Founder)}`,
 		`func (e *Studio) SetFounder(v *Director)`,
 	} {
 		if !strings.Contains(data, want) {
@@ -792,9 +792,9 @@ type Studio struct {
 	// Value-singular edge
 	for _, want := range []string{
 		`func (e *Studio) Headquarters() *Country {`,
-		`return &Country{s: &e.s.Headquarters}`,
+		`return &Country{Wrapper: typed.WrapValue(&e.Unwrap().Headquarters)}`,
 		`func (e *Studio) SetHeadquarters(v *Country)`,
-		`e.s.Headquarters = *v.s`,
+		`e.Unwrap().Headquarters = *v.Unwrap()`,
 	} {
 		if !strings.Contains(data, want) {
 			t.Errorf("value-singular accessor missing: %q", want)
@@ -803,9 +803,9 @@ type Studio struct {
 	// Singular-via-list
 	for _, want := range []string{
 		`func (e *Studio) CurrentHead() *Director {`,
-		`if len(e.s.CurrentHead) == 0 || e.s.CurrentHead[0] == nil {`,
+		`if len(e.Unwrap().CurrentHead) == 0 || e.Unwrap().CurrentHead[0] == nil {`,
 		`func (e *Studio) SetCurrentHead(v *Director)`,
-		`e.s.CurrentHead = []*schema.Director{v.s}`,
+		`e.Unwrap().CurrentHead = []*schema.Director{v.Unwrap()}`,
 	} {
 		if !strings.Contains(data, want) {
 			t.Errorf("singular-via-list accessor missing: %q", want)
