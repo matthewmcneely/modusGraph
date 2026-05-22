@@ -769,6 +769,199 @@ func TestQuery_LimitOffsetStillDriveNodes(t *testing.T) {
 	}
 }
 
+func TestQuery_RootFuncOverridesRoot(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	for _, n := range []string{"a", "b", "c"} {
+		if err := c.Add(ctx, &widget{Name: n}); err != nil {
+			t.Fatalf("Add %s: %v", n, err)
+		}
+	}
+	// RootFunc replaces the default type(widget) root with an eq() lookup;
+	// the query still decodes into []widget.
+	got, err := c.Query(ctx).RootFunc(`eq(name, "b")`).Nodes()
+	if err != nil {
+		t.Fatalf("Nodes: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf(`RootFunc(eq(name,"b")).Nodes() returned %d records, want 1`, len(got))
+	}
+	if got[0].Name != "b" {
+		t.Fatalf("RootFunc lookup returned %q, want \"b\"", got[0].Name)
+	}
+}
+
+func TestQuery_RootFuncRendersAndOverwrites(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// RootFunc renders into the (func: ...) position and overwrites: the
+	// second call wins.
+	q := c.Query(ctx).RootFunc(`eq(name, "x")`).RootFunc(`eq(name, "y")`)
+	s := q.Raw().String()
+	if !strings.Contains(s, `func: eq(name, "y")`) {
+		t.Fatalf("second RootFunc not rendered; got:\n%s", s)
+	}
+	if strings.Contains(s, `eq(name, "x")`) {
+		t.Fatalf("first RootFunc still present after overwrite; got:\n%s", s)
+	}
+}
+
+func TestQuery_NameDecodesAfterRename(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	for _, n := range []string{"a", "b", "c"} {
+		if err := c.Add(ctx, &widget{Name: n}); err != nil {
+			t.Fatalf("Add %s: %v", n, err)
+		}
+	}
+	// Name renames the query block. dgman uses the name symmetrically to
+	// generate and decode, so a renamed block still decodes into []widget.
+	got, err := c.Query(ctx).Name("widgets").Nodes()
+	if err != nil {
+		t.Fatalf("Nodes: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf(`Name("widgets").Nodes() returned %d records, want 3`, len(got))
+	}
+}
+
+func TestQuery_NameRendersAndOverwrites(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Name renders as the block name and overwrites: the second call wins.
+	q := c.Query(ctx).Name("first").Name("second")
+	s := q.Raw().String()
+	if !strings.Contains(s, "second(func:") {
+		t.Fatalf("second Name not rendered as block name; got:\n%s", s)
+	}
+	if strings.Contains(s, "first(func:") {
+		t.Fatalf("first Name still present after overwrite; got:\n%s", s)
+	}
+}
+
+func TestQuery_AsRendersAndOverwrites(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// As transitions to *RawQuery, prefixes the block with "<name> as ",
+	// and overwrites: the second call wins.
+	q := c.Query(ctx).As("first").As("second")
+	if q == nil {
+		t.Fatal("As() returned nil *RawQuery")
+	}
+	s := q.String()
+	if !strings.Contains(s, "second as ") {
+		t.Fatalf("second As not rendered; got:\n%s", s)
+	}
+	if strings.Contains(s, "first as ") {
+		t.Fatalf("first As still present after overwrite; got:\n%s", s)
+	}
+}
+
+func TestQuery_VarsRendersQueryPrefix(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Vars renders a "query <funcDef>" prefix on the generated DQL.
+	q := c.Query(ctx).Vars("getByName($n: string)", map[string]string{"$n": "b"})
+	s := q.Raw().String()
+	if !strings.Contains(s, "query getByName($n: string)") {
+		t.Fatalf("Vars did not render the query-definition prefix; got:\n%s", s)
+	}
+}
+
+func TestQuery_VarsParameterizedQuery(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	for _, n := range []string{"a", "b", "c"} {
+		if err := c.Add(ctx, &widget{Name: n}); err != nil {
+			t.Fatalf("Add %s: %v", n, err)
+		}
+	}
+	// Vars supplies a GraphQL variable bound into the root function; the
+	// query executes via dgraph's QueryWithVars path.
+	got, err := c.Query(ctx).
+		Vars("getByName($n: string)", map[string]string{"$n": "b"}).
+		RootFunc("eq(name, $n)").
+		Nodes()
+	if err != nil {
+		t.Fatalf("Vars query Nodes: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "b" {
+		t.Fatalf(`Vars parameterized query returned %+v, want one widget named "b"`, got)
+	}
+}
+
+func TestQuery_VarReturnsRawQuery(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Var transitions to *RawQuery and emits a var block: dgman renders the
+	// block name as "var".
+	rq := c.Query(ctx).Var()
+	if rq == nil {
+		t.Fatal("Var() returned nil *RawQuery")
+	}
+	s := rq.String()
+	if !strings.Contains(s, "var(func:") {
+		t.Fatalf("Var() did not render a var block; got:\n%s", s)
+	}
+}
+
+func TestQuery_GroupByReturnsRawQuery(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// GroupBy transitions to *RawQuery and emits an @groupby clause.
+	rq := c.Query(ctx).GroupBy("name")
+	if rq == nil {
+		t.Fatal("GroupBy() returned nil *RawQuery")
+	}
+	s := rq.String()
+	if !strings.Contains(s, "@groupby(name)") {
+		t.Fatalf(`GroupBy("name") did not render an @groupby clause; got:\n%s`, s)
+	}
+}
+
+func TestRawQuery_RawExposesUnderlyingQuery(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	rq := c.Query(ctx).Var()
+	// Raw returns the underlying *dg.Query; String mirrors Raw().String().
+	var raw *dg.Query = rq.Raw()
+	if raw == nil {
+		t.Fatal("RawQuery.Raw() returned nil")
+	}
+	if rq.String() != raw.String() {
+		t.Fatalf("RawQuery.String() and Raw().String() differ:\n%s\n---\n%s",
+			rq.String(), raw.String())
+	}
+}
+
+func TestRawQuery_GroupByThenVarChains(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// RawQuery re-exposes Var and GroupBy so the canonical .GroupBy(...).Var()
+	// composition still chains; both clauses survive.
+	s := c.Query(ctx).GroupBy("name").Var().String()
+	if !strings.Contains(s, "@groupby(name)") {
+		t.Fatalf("@groupby clause missing after GroupBy().Var(); got:\n%s", s)
+	}
+	if !strings.Contains(s, "var(func:") {
+		t.Fatalf("var block missing after GroupBy().Var(); got:\n%s", s)
+	}
+}
+
+func TestRawQuery_CarriesEarlierBuilders(t *testing.T) {
+	ctx := context.Background()
+	c := typed.NewClient[widget](newConn(t))
+	// Builders applied on *Query[T] before the GroupBy transition survive
+	// into the *RawQuery — the two share one underlying *dg.Query.
+	s := c.Query(ctx).Filter(`eq(name, "z")`).GroupBy("name").String()
+	if !strings.Contains(s, `eq(name, "z")`) {
+		t.Fatalf("Filter set before GroupBy did not survive the transition; got:\n%s", s)
+	}
+	if !strings.Contains(s, "@groupby(name)") {
+		t.Fatalf("@groupby clause missing; got:\n%s", s)
+	}
+}
+
 // seedOwners inserts owner/pet pairs over conn for the WhereEdge tests. Each
 // map entry is one owner owning one pet of the given name; the pet is inserted
 // first so the owner's edge links an already-persisted node. It returns an

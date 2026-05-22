@@ -16,8 +16,9 @@ import (
 )
 
 // Query is a fluent, type-safe query builder over records of type T. Builder
-// methods return *Query[T] for chaining; terminal methods (Nodes, First,
-// IterNodes) execute the query and decode typed results.
+// methods return *Query[T] for chaining, except As, Var, and GroupBy, which
+// change the result shape and transition to *RawQuery; terminal methods
+// (Nodes, First, IterNodes) execute the query and decode typed results.
 //
 // A Query is single-use. Builder methods mutate the underlying query in place
 // and return the same *Query, so a Query value should be built as one chain
@@ -26,8 +27,9 @@ import (
 // keeps mutating — the same underlying query.
 //
 // Repeated builder calls do not all behave the same way. Filter, Limit,
-// Offset, After, and Cascade overwrite: the last call wins. OrderAsc,
-// OrderDesc, and WhereEdge accumulate: each call adds to the query.
+// Offset, After, Cascade, Name, RootFunc, and Vars overwrite: the last call
+// wins. OrderAsc, OrderDesc, and WhereEdge accumulate: each call adds to the
+// query.
 //
 // Limit and Offset additionally record the bounds that IterNodes pages
 // within — a Limit caps the rows it streams, an Offset is its start.
@@ -93,6 +95,31 @@ func (qb *Query[T]) Cascade(predicates ...string) *Query[T] {
 	return qb
 }
 
+// RootFunc overrides the query root function. dgman's default root function
+// is type(<NodeType>); RootFunc replaces it with an expression such as
+// eq(name, "Alice") or has(email). Repeated calls overwrite.
+func (qb *Query[T]) RootFunc(rootFunc string) *Query[T] {
+	qb.q.RootFunc(rootFunc)
+	return qb
+}
+
+// Name sets the query block name. It defaults to "data"; dgman uses the name
+// to both generate and decode the query, so a renamed block still decodes
+// into []T. Repeated calls overwrite.
+func (qb *Query[T]) Name(queryName string) *Query[T] {
+	qb.q.Name(queryName)
+	return qb
+}
+
+// Vars supplies GraphQL variables for a parameterized query: funcDef is the
+// query function definition (for example "getByName($n: string)") and vars
+// binds each variable. The query then executes via dgraph's QueryWithVars
+// path. Repeated calls overwrite.
+func (qb *Query[T]) Vars(funcDef string, vars map[string]string) *Query[T] {
+	qb.q.Vars(funcDef, vars)
+	return qb
+}
+
 // WhereEdge constrains results to records that have at least one `predicate`
 // edge whose target node satisfies the dgraph @filter expression. params bind
 // to $N placeholders within filter, exactly as Filter binds them.
@@ -111,6 +138,31 @@ func (qb *Query[T]) Cascade(predicates ...string) *Query[T] {
 func (qb *Query[T]) WhereEdge(predicate, filter string, params ...any) *Query[T] {
 	qb.edges = append(qb.edges, edgeFilter{predicate: predicate, filter: filter, params: params})
 	return qb
+}
+
+// As names the query block as a dgraph query variable. dgraph requires such a
+// variable be consumed by another block, which a single-block typed query
+// cannot do, so As transitions out of the typed query: it returns a *RawQuery,
+// which exposes no node terminal.
+func (qb *Query[T]) As(varName string) *RawQuery {
+	qb.q.As(varName)
+	return &RawQuery{q: qb.q}
+}
+
+// Var marks the query block as a dgraph var block. A var block computes query
+// variables and returns no data of its own, so Var transitions out of the
+// typed query: it returns a *RawQuery, which exposes no node terminal.
+func (qb *Query[T]) Var() *RawQuery {
+	qb.q.Var()
+	return &RawQuery{q: qb.q}
+}
+
+// GroupBy adds an @groupby(predicate) aggregation. A grouped query returns
+// aggregation groups rather than a slice of T, so GroupBy transitions out of
+// the typed query: it returns a *RawQuery, which exposes no node terminal.
+func (qb *Query[T]) GroupBy(predicate string) *RawQuery {
+	qb.q.GroupBy(predicate)
+	return &RawQuery{q: qb.q}
 }
 
 // Nodes executes the query and returns all matching records.
@@ -201,10 +253,46 @@ func (qb *Query[T]) IterNodes() iter.Seq2[*T, error] {
 }
 
 // Raw returns the underlying dgman query for operations Query does not wrap
-// (Var, As, Name, RootFunc, GroupBy, Vars). Raw does not carry WhereEdge
+// (for example UID, Query, NodesAndCount). Raw does not carry WhereEdge
 // constraints — those are resolved only when a terminal runs.
 func (qb *Query[T]) Raw() *dg.Query {
 	return qb.q
+}
+
+// RawQuery is a query whose result is not a slice of T — produced by the
+// shape-changing builders Query.As, Query.Var, and Query.GroupBy. A RawQuery
+// deliberately exposes no typed node terminal: its result must be decoded by
+// the caller through the underlying dgman query, obtained via Raw.
+type RawQuery struct {
+	q *dg.Query
+}
+
+// Raw returns the underlying dgman query, for the caller to execute and decode.
+func (r *RawQuery) Raw() *dg.Query {
+	return r.q
+}
+
+// String returns the generated DQL.
+func (r *RawQuery) String() string {
+	return r.q.String()
+}
+
+// As names the block as a dgraph query variable. See Query.As.
+func (r *RawQuery) As(varName string) *RawQuery {
+	r.q.As(varName)
+	return r
+}
+
+// Var marks the block as a dgraph var block. See Query.Var.
+func (r *RawQuery) Var() *RawQuery {
+	r.q.Var()
+	return r
+}
+
+// GroupBy adds an @groupby(predicate) aggregation. See Query.GroupBy.
+func (r *RawQuery) GroupBy(predicate string) *RawQuery {
+	r.q.GroupBy(predicate)
+	return r
 }
 
 // resolveRoots runs the WhereEdge pre-pass when the query carries edge

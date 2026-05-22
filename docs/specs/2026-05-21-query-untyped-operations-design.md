@@ -30,53 +30,59 @@ dropping to the raw dgman query.
   aggregations; a general decoder is its own feature. `GroupBy` here yields a
   `*RawQuery`, and the caller decodes via `Raw()`.
 - Multi-block query composition. `typed.Query[T]` wraps a single `*dg.Query`,
-  which emits one query block; `As`/`Var`/`Name` produce valid DQL but their
-  cross-block referencing purpose stays out of reach.
+  which emits one query block. `Var` and `Name` produce valid single-block
+  DQL; `As` does not — see below — and its cross-block referencing purpose
+  stays out of reach either way.
 - Removing `Raw()`. It remains the escape hatch for operations still unwrapped
   (`UID`, `Query`, `NodesAndCount`, `Model`).
 
 ## Why This Approach
 
-The six operations split cleanly in two, and dgman's decode behavior — not
-taste — decides the split.
+The six operations split in two: those a single-block `typed.Query[T]` can
+still execute and decode into `[]T`, and those it cannot. dgman's decode
+behavior and dgraph's query validation — not taste — decide the split.
 
 dgman's `nodes()` decoder strips a `{"<q.name>":` prefix from the JSON
 response, where `q.name` defaults to `"data"` (set by `txn.Get`). The block
 name drives both query generation and response stripping, so it is used
 **symmetrically**.
 
-**Safe — the query still yields `[]T`.** `RootFunc`, `As`, `Name`, and `Vars`
-leave the `{"data":[...]}` response shape intact:
+**Safe — the query still yields `[]T`.** `RootFunc`, `Name`, and `Vars` leave
+the `{"data":[...]}` response shape intact:
 
 - `RootFunc` changes only `(func: ...)`; the response key is unchanged.
-- `As` prefixes the block with `x as`; the response key is still the block
-  name.
 - `Name` renames the block, and dgman strips `{"<name>":` symmetrically, so the
   result still decodes.
 - `Vars` adds a `query <funcDef>` prefix and routes execution through
   `tx.QueryWithVars`; the response key is unchanged.
 
-These four are thin pass-throughs returning `*Query[T]`, byte-for-byte in the
+These three are thin pass-throughs returning `*Query[T]`, byte-for-byte in the
 style of the existing `Filter`/`OrderAsc` methods.
 
-**Shape-changing — the query no longer yields `[]T`.** `Var` and `GroupBy`
-change what the query returns:
+**Shape-changing — the query no longer yields `[]T`.** `As`, `Var`, and
+`GroupBy` each leave the typed-results world:
 
 - `Var()` makes dgman emit `var` in place of the block name; a `var` block
   returns **no data** at all.
 - `GroupBy` adds `@groupby(...)`; the result is `{"data":[{"@groupby":[...]}]}`
   — aggregation groups, not nodes.
+- `As` names the block as a dgraph query variable (`x as data(func:...)`).
+  dgraph **rejects** a query that defines a variable without consuming it
+  ("Some variables are defined but not used"), and a single-block
+  `typed.Query[T]` has no second block to consume it — so a standalone `As`
+  query is invalid, not a decodable one.
 
-For both, `Nodes()`/`First()`/`IterNodes()` would decode nonsense. So `Var()`
-and `GroupBy()` return a new type, `*RawQuery`, that exposes no typed node
-terminal. `qb.Var().Nodes()` becomes a **compile error** rather than a silent
-empty result — the central value of this design.
+For all three, `Nodes()`/`First()`/`IterNodes()` would fail or decode
+nonsense. So `As()`, `Var()`, and `GroupBy()` return a new type, `*RawQuery`,
+that exposes no typed node terminal. `qb.As(...).Nodes()` becomes a **compile
+error** rather than a runtime "variables defined but not used" failure — the
+central value of this design.
 
 ## Design
 
 ### Safe builders on `Query[T]`
 
-Four new methods, each a thin pass-through returning `*Query[T]`:
+Three new methods, each a thin pass-through returning `*Query[T]`:
 
 ```go
 // RootFunc overrides the query root function. dgman's default is
@@ -84,12 +90,6 @@ Four new methods, each a thin pass-through returning `*Query[T]`:
 // eq(name, "Alice") or has(email).
 func (qb *Query[T]) RootFunc(rootFunc string) *Query[T] {
 	qb.q.RootFunc(rootFunc)
-	return qb
-}
-
-// As assigns a dgraph query-variable name to the query block.
-func (qb *Query[T]) As(varName string) *Query[T] {
-	qb.q.As(varName)
 	return qb
 }
 
@@ -115,9 +115,18 @@ method, so — unlike `First`→`Limit` — no rename is needed.
 
 ### Shape-changing transitions and `RawQuery`
 
-`Var` and `GroupBy` return `*RawQuery`:
+`As`, `Var`, and `GroupBy` return `*RawQuery`:
 
 ```go
+// As names the query block as a dgraph query variable. dgraph requires such a
+// variable be consumed by another block, which a single-block typed query
+// cannot do, so As transitions out of the typed query: it returns a
+// *RawQuery, which exposes no node terminal.
+func (qb *Query[T]) As(varName string) *RawQuery {
+	qb.q.As(varName)
+	return &RawQuery{q: qb.q}
+}
+
 // Var marks the query block as a dgraph var block. A var block computes query
 // variables and returns no data of its own, so Var transitions out of the
 // typed query: it returns a *RawQuery, which exposes no node terminal.
@@ -141,9 +150,9 @@ type parameter.
 
 ```go
 // RawQuery is a query whose result is not a slice of T — produced by the
-// shape-changing builders Query.Var and Query.GroupBy. A RawQuery deliberately
-// exposes no typed node terminal: its result must be decoded by the caller
-// through the underlying dgman query, obtained via Raw.
+// shape-changing builders Query.As, Query.Var, and Query.GroupBy. A RawQuery
+// deliberately exposes no typed node terminal: its result must be decoded by
+// the caller through the underlying dgman query, obtained via Raw.
 type RawQuery struct {
 	q *dg.Query
 }
@@ -153,6 +162,12 @@ func (r *RawQuery) Raw() *dg.Query { return r.q }
 
 // String returns the generated DQL.
 func (r *RawQuery) String() string { return r.q.String() }
+
+// As names the block as a dgraph query variable. See Query.As.
+func (r *RawQuery) As(varName string) *RawQuery {
+	r.q.As(varName)
+	return r
+}
 
 // Var marks the block as a var block. See Query.Var.
 func (r *RawQuery) Var() *RawQuery {
@@ -167,16 +182,16 @@ func (r *RawQuery) GroupBy(predicate string) *RawQuery {
 }
 ```
 
-`RawQuery` re-exposes only `Var` and `GroupBy` — so the canonical
-`.GroupBy(...).Var()` combination still chains — plus `Raw` and `String`. It
-does not re-expose `Filter`/`Order`/`Limit`/etc.: those are set on `*Query[T]`
+`RawQuery` re-exposes only `As`, `Var`, and `GroupBy` — so the shape-changing
+operations still chain after the transition — plus `Raw` and `String`. It does
+not re-expose `Filter`/`Order`/`Limit`/etc.: those are set on `*Query[T]`
 before the transition, or applied via `Raw()`.
 
-The natural call order is: safe builders on `*Query[T]`, then `Var()`/
+The natural call order is: safe builders on `*Query[T]`, then `As()`/`Var()`/
 `GroupBy()` as the transition into `*RawQuery`. For example:
 
 ```go
-raw := client.Query(ctx).Filter(`ge(year, 2000)`).As("genres").GroupBy("genre")
+raw := client.Query(ctx).Filter(`ge(year, 2000)`).GroupBy("genre").As("genres")
 // raw is *RawQuery; decode via raw.Raw()
 ```
 
@@ -195,23 +210,23 @@ func (qb *Query[T]) Raw() *dg.Query {
 The `Query[T]` type doc comment changes in two places:
 
 - The opening line "Builder methods return `*Query[T]` for chaining" gains a
-  trailing clause: "...except `Var` and `GroupBy`, which transition to
+  trailing clause: "...except `As`, `Var`, and `GroupBy`, which transition to
   `*RawQuery`."
-- The "repeated builder calls" paragraph adds `As`, `Name`, `RootFunc`, and
-  `Vars` to the overwrite list (last call wins), and a sentence noting that
-  `Var` and `GroupBy` change the result shape and so return `*RawQuery`.
+- The "repeated builder calls" paragraph adds `Name`, `RootFunc`, and `Vars`
+  to the overwrite list (last call wins), and a sentence noting that `As`,
+  `Var`, and `GroupBy` change the result shape and so return `*RawQuery`.
 
 ## Error handling
 
-The four safe builders set a single field on the dgman query and cannot fail;
+The three safe builders set a single field on the dgman query and cannot fail;
 they have no error path, exactly like the existing builder methods. `Vars`
 changes the *execution* path (dgman uses `QueryWithVars` when variables are
 set) — any resulting error surfaces at the terminal (`Nodes`/`First`/
 `IterNodes`), unchanged from how query-execution errors already surface.
 
-`Var()` and `GroupBy()` cannot fail and have no error path. A `*RawQuery` has
-no terminal, so it produces no error itself; execution and error handling
-belong to whoever runs `RawQuery.Raw()`.
+`As()`, `Var()`, and `GroupBy()` cannot fail and have no error path. A
+`*RawQuery` has no terminal, so it produces no error itself; execution and
+error handling belong to whoever runs `RawQuery.Raw()`.
 
 ## Testing
 
@@ -234,8 +249,10 @@ behavioral tests against `newConn(t)`, string assertions via
 
 **String-assertion tests** (`.Raw().String()` / `RawQuery.String()`):
 
-- `As` — output contains `x as data(`; plus an overwrite test (second `As`
-  wins).
+- `As` — `RawQuery.String()` shows the `<var> as data(` prefix; plus an
+  overwrite test (second `As` wins). `As` gets no behavioral decode test: a
+  standalone `As` query is rejected by dgraph as an unused variable, which is
+  precisely why `As` returns `*RawQuery`.
 - `Name` — output contains `widgets(func:`; plus an overwrite test.
 - `RootFunc` — an overwrite test (second `RootFunc` wins).
 - `Var` — `RawQuery.String()` contains `var(func:`.
@@ -243,8 +260,8 @@ behavioral tests against `newConn(t)`, string assertions via
 
 **`RawQuery` structural tests:**
 
-- `Var()` and `GroupBy()` return a non-nil `*RawQuery`; `Raw()` returns the
-  underlying `*dg.Query`; `String()` equals `Raw().String()`.
+- `As()`, `Var()`, and `GroupBy()` return a non-nil `*RawQuery`; `Raw()`
+  returns the underlying `*dg.Query`; `String()` equals `Raw().String()`.
 - The `.GroupBy("name").Var()` combination chains and emits both `@groupby` and
   `var`.
 - That `*RawQuery` exposes no `Nodes`/`First`/`IterNodes` is a compile-time
@@ -252,8 +269,8 @@ behavioral tests against `newConn(t)`, string assertions via
 
 ## Migration / blast radius
 
-- **Modified:** `typed/query.go` — four safe builder methods (`RootFunc`, `As`,
-  `Name`, `Vars`), two transition methods (`Var`, `GroupBy`), the new
+- **Modified:** `typed/query.go` — three safe builder methods (`RootFunc`,
+  `Name`, `Vars`), three transition methods (`As`, `Var`, `GroupBy`), the new
   `RawQuery` type, the `Raw()` doc comment, and the `Query[T]` type doc
   comment.
 - **New tests** in `typed/query_test.go`.
@@ -263,7 +280,15 @@ behavioral tests against `newConn(t)`, string assertions via
 
 ## Open decisions
 
-None. The layer scope (`typed.Query[T]` only), the safe/shape-changing split
-(decided by dgman's decode behavior), the `RawQuery` transition type
-(non-generic, `Var`/`GroupBy`/`Raw`/`String` only), and the decision not to
-build a groupby decoder were all settled during brainstorming.
+None. The layer scope (`typed.Query[T]` only), the safe/shape-changing split,
+the `RawQuery` transition type (non-generic, `As`/`Var`/`GroupBy`/`Raw`/
+`String` only), and the decision not to build a groupby decoder were all
+settled during brainstorming.
+
+> **Correction (post-implementation).** `As` was originally classified as a
+> safe builder returning `*Query[T]`, on the reasoning that it leaves the
+> response key unchanged. Implementation testing showed dgraph rejects a
+> standalone `As` query outright ("Some variables are defined but not used"),
+> so `As` cannot yield `[]T` from a single-block `typed.Query[T]`. It was
+> moved to the shape-changing group, returning `*RawQuery` — the spec text
+> above reflects the corrected design.
