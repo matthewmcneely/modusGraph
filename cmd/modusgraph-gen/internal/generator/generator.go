@@ -274,28 +274,39 @@ func Generate(pkg *model.Package, cfg Config) error {
 	return nil
 }
 
-// executeAndWrite renders a named template and writes the gofmt'd result to path.
-func executeAndWrite(tmpl *template.Template, name string, data any, path string) error {
+// render executes a named template against data and returns the rendered body
+// with no header. It is the building block for both standalone-file templates
+// and merged per-entity files.
+func render(tmpl *template.Template, name string, data any) (string, error) {
 	var buf bytes.Buffer
-	buf.WriteString(header)
-
 	if err := tmpl.ExecuteTemplate(&buf, name, data); err != nil {
-		return fmt.Errorf("executing template %s: %w", name, err)
+		return "", fmt.Errorf("executing template %s: %w", name, err)
 	}
+	return buf.String(), nil
+}
 
-	// Format the output with gofmt.
-	formatted, err := format.Source(buf.Bytes())
+// writeGoFile prepends the generated-code header, gofmt-formats the result, and
+// writes it to path. On a formatting error the raw output is written to
+// path+".broken" for debugging.
+func writeGoFile(path, content string) error {
+	src := header + content
+	formatted, err := format.Source([]byte(src))
 	if err != nil {
-		// Write the unformatted output for debugging.
-		_ = os.WriteFile(path+".broken", buf.Bytes(), 0o644)
-		return fmt.Errorf("formatting %s: %w\nRaw output written to %s.broken", name, err, path)
+		_ = os.WriteFile(path+".broken", []byte(src), 0o644)
+		return fmt.Errorf("formatting %s: %w\nRaw output written to %s.broken", filepath.Base(path), err, path)
 	}
+	return os.WriteFile(path, formatted, 0o644)
+}
 
-	if err := os.WriteFile(path, formatted, 0o644); err != nil {
-		return fmt.Errorf("writing %s: %w", path, err)
+// executeAndWrite renders a standalone-file template and writes the formatted
+// result to path. Used by templates that emit a complete file with their own
+// package/import header (wrapper_client, schema_client, schema_marker, cli).
+func executeAndWrite(tmpl *template.Template, name string, data any, path string) error {
+	body, err := render(tmpl, name, data)
+	if err != nil {
+		return err
 	}
-
-	return nil
+	return writeGoFile(path, body)
 }
 
 // toSnakeCase converts a Go identifier like "ContentRating" to "content_rating".
