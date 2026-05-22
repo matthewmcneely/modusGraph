@@ -209,55 +209,90 @@ func Generate(pkg *model.Package, cfg Config) error {
 		SchemaImportPath  string
 	}
 
+	// Per-entity loop: render the five fragment templates and merge them into
+	// one <entity>_gen.go per (directory, entity) group. In the default layout
+	// EntityDir == EntityClientDir, so all five fragments land in one file;
+	// when they differ, the entity-side fragments and client-side fragments
+	// form two separate <entity>_gen.go files.
 	for _, entity := range pkg.Entities {
+		if cfg.NoEntities {
+			break
+		}
 		snake := toSnakeCase(entity.Name)
 
-		// Entity-side templates (entity, options, accessors) — gated by NoEntities.
-		if !cfg.NoEntities {
-			data := entityData{
-				PackageName:       pkg.Name,
-				Entity:            entity,
-				Entities:          pkg.Entities,
-				Imports:           pkg.Imports,
-				EntityPackageName: entityPkg,
-				SchemaAlias:       schemaAlias,
-				SchemaImportPath:  schemaImportPath,
-			}
+		data := entityData{
+			PackageName:       pkg.Name,
+			Entity:            entity,
+			Entities:          pkg.Entities,
+			Imports:           pkg.Imports,
+			EntityPackageName: entityPkg,
+			SchemaAlias:       schemaAlias,
+			SchemaImportPath:  schemaImportPath,
+		}
+		entityBody, err := render(tmpl, "entity.go.tmpl", data)
+		if err != nil {
+			return err
+		}
+		accessorsBody, err := render(tmpl, "accessors.go.tmpl", data)
+		if err != nil {
+			return err
+		}
+		optionsBody, err := render(tmpl, "options.go.tmpl", data)
+		if err != nil {
+			return err
+		}
 
-			// entity.go.tmpl → <snake>_gen.go (EntityDir)
-			if err := executeAndWrite(tmpl, "entity.go.tmpl", data, filepath.Join(cfg.EntityDir, snake+"_gen.go")); err != nil {
+		// When wrapper clients are skipped, the merged file holds only the
+		// three entity-side fragments.
+		if cfg.NoEntityClients {
+			imps := newGenImports()
+			imps.addEntitySideImports(entity, pkg.Imports, schemaImportPath)
+			content := assembleGenFile(entityPkg, imps.block(), entityBody, accessorsBody, optionsBody)
+			if err := writeGoFile(filepath.Join(cfg.EntityDir, snake+"_gen.go"), content); err != nil {
 				return err
 			}
-			// options.go.tmpl → <snake>_options_gen.go (EntityDir)
-			if err := executeAndWrite(tmpl, "options.go.tmpl", data, filepath.Join(cfg.EntityDir, snake+"_options_gen.go")); err != nil {
+			continue
+		}
+
+		wrapData := data
+		wrapData.EntityPackageName = entityClientPkg
+		clientBody, err := render(tmpl, "wrapper_entity_client.go.tmpl", wrapData)
+		if err != nil {
+			return err
+		}
+		queryBody, err := render(tmpl, "wrapper_query.go.tmpl", wrapData)
+		if err != nil {
+			return err
+		}
+
+		if filepath.Clean(cfg.EntityDir) == filepath.Clean(cfg.EntityClientDir) {
+			// Default layout: all five fragments in one file.
+			imps := newGenImports()
+			imps.addEntitySideImports(entity, pkg.Imports, schemaImportPath)
+			imps.addClientSideImports(schemaImportPath)
+			content := assembleGenFile(entityPkg, imps.block(),
+				entityBody, accessorsBody, optionsBody, clientBody, queryBody)
+			if err := writeGoFile(filepath.Join(cfg.EntityDir, snake+"_gen.go"), content); err != nil {
 				return err
 			}
-			// accessors.go.tmpl → <snake>_accessors_gen.go (EntityDir)
-			if err := executeAndWrite(tmpl, "accessors.go.tmpl", data, filepath.Join(cfg.EntityDir, snake+"_accessors_gen.go")); err != nil {
-				return err
-			}
+			continue
+		}
 
-			// Wrapper-side per-entity templates — gated by NoEntityClients.
-			if !cfg.NoEntityClients {
-				wrapData := entityData{
-					PackageName:       pkg.Name,
-					Entity:            entity,
-					Entities:          pkg.Entities,
-					Imports:           pkg.Imports,
-					EntityPackageName: entityClientPkg,
-					SchemaAlias:       schemaAlias,
-					SchemaImportPath:  schemaImportPath,
-				}
+		// Split layout: entity-side file in EntityDir, client-side file in
+		// EntityClientDir, each named <entity>_gen.go.
+		entityImps := newGenImports()
+		entityImps.addEntitySideImports(entity, pkg.Imports, schemaImportPath)
+		entityContent := assembleGenFile(entityPkg, entityImps.block(),
+			entityBody, accessorsBody, optionsBody)
+		if err := writeGoFile(filepath.Join(cfg.EntityDir, snake+"_gen.go"), entityContent); err != nil {
+			return err
+		}
 
-				// wrapper_entity_client.go.tmpl → <snake>_client_gen.go (EntityClientDir)
-				if err := executeAndWrite(tmpl, "wrapper_entity_client.go.tmpl", wrapData, filepath.Join(cfg.EntityClientDir, snake+"_client_gen.go")); err != nil {
-					return err
-				}
-				// wrapper_query.go.tmpl → <snake>_query_gen.go (EntityClientDir)
-				if err := executeAndWrite(tmpl, "wrapper_query.go.tmpl", wrapData, filepath.Join(cfg.EntityClientDir, snake+"_query_gen.go")); err != nil {
-					return err
-				}
-			}
+		clientImps := newGenImports()
+		clientImps.addClientSideImports(schemaImportPath)
+		clientContent := assembleGenFile(entityClientPkg, clientImps.block(), clientBody, queryBody)
+		if err := writeGoFile(filepath.Join(cfg.EntityClientDir, snake+"_gen.go"), clientContent); err != nil {
+			return err
 		}
 	}
 

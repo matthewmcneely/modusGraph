@@ -767,7 +767,7 @@ type Studio struct {
 	if err := Generate(pkg, cfg); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
-	data := mustReadGen(t, outDir, "studio_accessors_gen.go")
+	data := mustReadGen(t, outDir, "studio_gen.go")
 
 	// Scalar
 	for _, want := range []string{
@@ -844,15 +844,15 @@ type Studio struct {
 		t.Errorf("SetTags() must appear exactly once; got %d duplicates", n)
 	}
 
-	// Negative: NO UID/DType getter/setter (entity.go.tmpl already provides those).
-	for _, notWant := range []string{
+	// UID/DType getters/setters are provided by the entity fragment of the
+	// merged file, so they SHOULD appear exactly once. (Earlier layouts kept
+	// accessors in a separate file and forbade those methods there.)
+	for _, want := range []string{
 		`func (e *Studio) UID() string`,
-		`func (e *Studio) SetUID(v string)`,
 		`func (e *Studio) DType() []string`,
-		`func (e *Studio) SetDType(v []string)`,
 	} {
-		if strings.Contains(data, notWant) {
-			t.Errorf("accessors_gen.go must NOT include UID/DType methods (entity.go.tmpl provides them); found: %q", notWant)
+		if !strings.Contains(data, want) {
+			t.Errorf("merged studio_gen.go should include UID/DType getter %q", want)
 		}
 	}
 }
@@ -882,23 +882,24 @@ func TestGenerate_EntityWrapperStruct(t *testing.T) {
 	}
 
 	// Negative: Unwrap/Marshal/Unmarshal/Validate are inherited from
-	// typed.Wrapper and MUST NOT be re-emitted here; nor any client type.
+	// typed.Wrapper and MUST NOT be re-emitted by any fragment. (The client
+	// type IS legitimately present in the merged file via the client fragment;
+	// it's covered by TestGenerate_WrapperEntityClient.)
 	for _, notWant := range []string{
 		`func (e *Studio) Unwrap()`,
 		`func (e *Studio) MarshalJSON(`,
 		`func (e *Studio) UnmarshalJSON(`,
 		`func (e *Studio) Validate(`,
-		`type StudioClient struct {`,
 	} {
 		if strings.Contains(data, notWant) {
-			t.Errorf("studio_gen.go must NOT include %q (provided by typed.Wrapper or another template)", notWant)
+			t.Errorf("studio_gen.go must NOT include %q (provided by typed.Wrapper)", notWant)
 		}
 	}
 }
 
 func TestGenerate_OptionsScalarOnly(t *testing.T) {
 	_, _, entityDir := generateFromMinimalSchema(t)
-	data := mustReadGen(t, entityDir, "studio_options_gen.go")
+	data := mustReadGen(t, entityDir, "studio_gen.go")
 
 	for _, want := range []string{
 		`package entity`,
@@ -1007,7 +1008,7 @@ type Film struct {
 
 func TestGenerate_WrapperEntityClient(t *testing.T) {
 	_, _, entityDir := generateFromMinimalSchema(t)
-	data := mustReadGen(t, entityDir, "studio_client_gen.go")
+	data := mustReadGen(t, entityDir, "studio_gen.go")
 	for _, want := range []string{
 		`package entity`,
 		`"github.com/matthewmcneely/modusgraph/typed"`,
@@ -1040,7 +1041,7 @@ func TestGenerate_WrapperEntityClient(t *testing.T) {
 
 func TestGenerate_WrapperQuery(t *testing.T) {
 	_, _, entityDir := generateFromMinimalSchema(t)
-	data := mustReadGen(t, entityDir, "studio_query_gen.go")
+	data := mustReadGen(t, entityDir, "studio_gen.go")
 	for _, want := range []string{
 		`package entity`,
 		`"github.com/matthewmcneely/modusgraph/typed"`,
@@ -1118,20 +1119,20 @@ func TestGenerate_WrapperQueryEdgeFilter(t *testing.T) {
 
 	// Owner has a Pets edge → OwnerQuery gains WherePets, delegating to the
 	// typed substrate with the resolved predicate.
-	ownerQuery := mustReadGen(t, entityDir, "owner_query_gen.go")
+	ownerQuery := mustReadGen(t, entityDir, "owner_gen.go")
 	for _, want := range []string{
 		`func (q *OwnerQuery) WherePets(filter string, params ...any) *OwnerQuery`,
 		`q.typed.WhereEdge("pets", filter, params...)`,
 	} {
 		if !strings.Contains(ownerQuery, want) {
-			t.Errorf("owner_query_gen.go missing %q; got:\n%s", want, ownerQuery)
+			t.Errorf("owner_gen.go missing %q; got:\n%s", want, ownerQuery)
 		}
 	}
 
 	// Pet has no edges → PetQuery must carry no Where* method.
-	petQuery := mustReadGen(t, entityDir, "pet_query_gen.go")
+	petQuery := mustReadGen(t, entityDir, "pet_gen.go")
 	if strings.Contains(petQuery, "func (q *PetQuery) Where") {
-		t.Errorf("pet_query_gen.go has a Where* method but Pet has no edges:\n%s", petQuery)
+		t.Errorf("pet_gen.go has a Where* method but Pet has no edges:\n%s", petQuery)
 	}
 }
 

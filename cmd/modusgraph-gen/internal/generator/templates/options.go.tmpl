@@ -1,31 +1,5 @@
-package {{ .EntityPackageName }}
-
 {{- $E := .Entity.Name }}
 {{- $fields := nonSliceScalarFields .Entity.Fields }}
-
-{{- $hasOpts := false }}
-{{- range $fields }}{{ if and (not .IsUID) (not .IsDType) }}{{ $hasOpts = true }}{{ end }}{{ end }}
-
-{{- $needsTime := false }}
-{{- range $fields }}{{ if contains .GoType "time." }}{{ $needsTime = true }}{{ end }}{{ end }}
-{{- $extImports := externalImports $fields .Imports }}
-
-{{ if $hasOpts -}}
-import (
-	"github.com/matthewmcneely/modusgraph/typed"
-{{- if $needsTime }}
-
-	"time"
-{{- end }}
-{{- range $extImports }}
-	{{- if .Alias }}
-	{{ .Alias }} "{{ .Path }}"
-	{{- else }}
-	"{{ .Path }}"
-	{{- end }}
-{{- end }}
-)
-{{ end }}
 {{- range $fields }}
   {{- if and (not .IsUID) (not .IsDType) }}
 

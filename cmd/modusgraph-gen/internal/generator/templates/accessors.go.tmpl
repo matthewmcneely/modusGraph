@@ -1,4 +1,3 @@
-package {{ .EntityPackageName }}
 {{- $E := .Entity.Name }}
 {{- $sAlias := .SchemaAlias }}
 
@@ -8,43 +7,6 @@ package {{ .EntityPackageName }}
 {{- $singularViaList := allSingularViaListFields .Entity.Fields }}
 {{- $multiEdges := allMultiEdgeFields .Entity.Fields }}
 {{- $scalarSlices := allSliceFields .Entity.Fields }}
-
-{{- $needsIter := gt (len $multiEdges) 0 }}
-{{- $needsSlices := or (gt (len $multiEdges) 0) (gt (len $scalarSlices) 0) }}
-{{- $needsSchema := or (gt (len $pointerEdges) 0) (gt (len $valueEdges) 0) (gt (len $singularViaList) 0) (gt (len $multiEdges) 0) }}
-
-{{- $needsTime := false }}
-{{- range $scalars }}{{ if contains .GoType "time." }}{{ $needsTime = true }}{{ end }}{{ end }}
-{{- range $scalarSlices }}{{ if contains .GoType "time." }}{{ $needsTime = true }}{{ end }}{{ end }}
-{{- $allScalarFields := concat $scalars $scalarSlices }}
-{{- $extImports := externalImports $allScalarFields .Imports }}
-
-{{ if or $needsIter $needsSlices $needsSchema $needsTime (gt (len $extImports) 0) -}}
-import (
-{{- if $needsIter }}
-	"iter"
-{{- end }}
-{{- if $needsSlices }}
-	"slices"
-{{- end }}
-{{- if $needsTime }}
-	"time"
-{{- end }}
-{{- if $needsSchema }}
-
-	"github.com/matthewmcneely/modusgraph/typed"
-
-	"{{ .SchemaImportPath }}"
-{{- end }}
-{{- range $extImports }}
-	{{- if .Alias }}
-	{{ .Alias }} "{{ .Path }}"
-	{{- else }}
-	"{{ .Path }}"
-	{{- end }}
-{{- end }}
-)
-{{- end }}
 
 {{- range $scalars }}
 {{- if not .IsUID }}{{- if not .IsDType }}
