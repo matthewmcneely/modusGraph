@@ -59,6 +59,14 @@ func (q *GenreQuery) Cascade(predicates ...string) *GenreQuery {
 	return q
 }
 
+// WhereFilms keeps only Genre records that have a ~genre
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *GenreQuery) WhereFilms(filter string, params ...any) *GenreQuery {
+	q.typed.WhereEdge("~genre", filter, params...)
+	return q
+}
+
 // Nodes executes the query and returns wrapped Genre results.
 func (q *GenreQuery) Nodes() ([]*Genre, error) {
 	recs, err := q.typed.Nodes()

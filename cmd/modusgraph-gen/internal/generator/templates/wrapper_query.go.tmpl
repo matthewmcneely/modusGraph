@@ -59,6 +59,16 @@ func (q *{{ $E }}Query) Cascade(predicates ...string) *{{ $E }}Query {
 	q.typed.Cascade(predicates...)
 	return q
 }
+{{- range edgeFields .Entity.Fields }}
+
+// Where{{ accessorName . }} keeps only {{ $E }} records that have a {{ .Predicate }}
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *{{ $E }}Query) Where{{ accessorName . }}(filter string, params ...any) *{{ $E }}Query {
+	q.typed.WhereEdge("{{ .Predicate }}", filter, params...)
+	return q
+}
+{{- end }}
 
 // Nodes executes the query and returns wrapped {{ $E }} results.
 func (q *{{ $E }}Query) Nodes() ([]*{{ $E }}, error) {

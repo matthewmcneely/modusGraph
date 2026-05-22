@@ -59,6 +59,54 @@ func (q *FilmQuery) Cascade(predicates ...string) *FilmQuery {
 	return q
 }
 
+// WhereGenres keeps only Film records that have a genre
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *FilmQuery) WhereGenres(filter string, params ...any) *FilmQuery {
+	q.typed.WhereEdge("genre", filter, params...)
+	return q
+}
+
+// WhereCountries keeps only Film records that have a country
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *FilmQuery) WhereCountries(filter string, params ...any) *FilmQuery {
+	q.typed.WhereEdge("country", filter, params...)
+	return q
+}
+
+// WhereRatings keeps only Film records that have a rating
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *FilmQuery) WhereRatings(filter string, params ...any) *FilmQuery {
+	q.typed.WhereEdge("rating", filter, params...)
+	return q
+}
+
+// WhereContentRatings keeps only Film records that have a rated
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *FilmQuery) WhereContentRatings(filter string, params ...any) *FilmQuery {
+	q.typed.WhereEdge("rated", filter, params...)
+	return q
+}
+
+// WhereStarring keeps only Film records that have a starring
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *FilmQuery) WhereStarring(filter string, params ...any) *FilmQuery {
+	q.typed.WhereEdge("starring", filter, params...)
+	return q
+}
+
+// WhereDirectors keeps only Film records that have a directors
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *FilmQuery) WhereDirectors(filter string, params ...any) *FilmQuery {
+	q.typed.WhereEdge("directors", filter, params...)
+	return q
+}
+
 // Nodes executes the query and returns wrapped Film results.
 func (q *FilmQuery) Nodes() ([]*Film, error) {
 	recs, err := q.typed.Nodes()
