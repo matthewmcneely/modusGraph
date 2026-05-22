@@ -842,9 +842,13 @@ func TestQuery_NameRendersAndOverwrites(t *testing.T) {
 func TestQuery_AsRendersAndOverwrites(t *testing.T) {
 	ctx := context.Background()
 	c := typed.NewClient[widget](newConn(t))
-	// As prefixes the block with "<name> as " and overwrites.
+	// As transitions to *RawQuery, prefixes the block with "<name> as ",
+	// and overwrites: the second call wins.
 	q := c.Query(ctx).As("first").As("second")
-	s := q.Raw().String()
+	if q == nil {
+		t.Fatal("As() returned nil *RawQuery")
+	}
+	s := q.String()
 	if !strings.Contains(s, "second as ") {
 		t.Fatalf("second As not rendered; got:\n%s", s)
 	}

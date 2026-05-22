@@ -12,9 +12,9 @@ import (
 )
 
 // Query is a fluent, type-safe query builder over records of type T. Builder
-// methods return *Query[T] for chaining, except Var and GroupBy, which change
-// the result shape and transition to *RawQuery; terminal methods (Nodes,
-// First, IterNodes) execute the query and decode typed results.
+// methods return *Query[T] for chaining, except As, Var, and GroupBy, which
+// change the result shape and transition to *RawQuery; terminal methods
+// (Nodes, First, IterNodes) execute the query and decode typed results.
 //
 // A Query is single-use. Builder methods mutate the underlying query in place
 // and return the same *Query, so a Query value should be built as one chain
@@ -23,8 +23,8 @@ import (
 // keeps mutating — the same underlying query.
 //
 // Repeated builder calls do not all behave the same way. Filter, Limit,
-// Offset, After, Cascade, As, Name, RootFunc, and Vars overwrite: the last
-// call wins. OrderAsc and OrderDesc accumulate: each call adds to the query.
+// Offset, After, Cascade, Name, RootFunc, and Vars overwrite: the last call
+// wins. OrderAsc and OrderDesc accumulate: each call adds to the query.
 //
 // Limit and Offset additionally record the bounds that IterNodes pages
 // within — a Limit caps the rows it streams, an Offset is its start.
@@ -87,13 +87,6 @@ func (qb *Query[T]) RootFunc(rootFunc string) *Query[T] {
 	return qb
 }
 
-// As assigns a dgraph query-variable name to the query block. Repeated calls
-// overwrite.
-func (qb *Query[T]) As(varName string) *Query[T] {
-	qb.q.As(varName)
-	return qb
-}
-
 // Name sets the query block name. It defaults to "data"; dgman uses the name
 // to both generate and decode the query, so a renamed block still decodes
 // into []T. Repeated calls overwrite.
@@ -109,6 +102,15 @@ func (qb *Query[T]) Name(queryName string) *Query[T] {
 func (qb *Query[T]) Vars(funcDef string, vars map[string]string) *Query[T] {
 	qb.q.Vars(funcDef, vars)
 	return qb
+}
+
+// As names the query block as a dgraph query variable. dgraph requires such a
+// variable be consumed by another block, which a single-block typed query
+// cannot do, so As transitions out of the typed query: it returns a *RawQuery,
+// which exposes no node terminal.
+func (qb *Query[T]) As(varName string) *RawQuery {
+	qb.q.As(varName)
+	return &RawQuery{q: qb.q}
 }
 
 // Var marks the query block as a dgraph var block. A var block computes query
@@ -197,9 +199,9 @@ func (qb *Query[T]) Raw() *dg.Query {
 }
 
 // RawQuery is a query whose result is not a slice of T — produced by the
-// shape-changing builders Query.Var and Query.GroupBy. A RawQuery deliberately
-// exposes no typed node terminal: its result must be decoded by the caller
-// through the underlying dgman query, obtained via Raw.
+// shape-changing builders Query.As, Query.Var, and Query.GroupBy. A RawQuery
+// deliberately exposes no typed node terminal: its result must be decoded by
+// the caller through the underlying dgman query, obtained via Raw.
 type RawQuery struct {
 	q *dg.Query
 }
@@ -212,6 +214,12 @@ func (r *RawQuery) Raw() *dg.Query {
 // String returns the generated DQL.
 func (r *RawQuery) String() string {
 	return r.q.String()
+}
+
+// As names the block as a dgraph query variable. See Query.As.
+func (r *RawQuery) As(varName string) *RawQuery {
+	r.q.As(varName)
+	return r
 }
 
 // Var marks the block as a dgraph var block. See Query.Var.
