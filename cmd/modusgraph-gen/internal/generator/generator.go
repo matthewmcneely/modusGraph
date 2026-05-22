@@ -714,6 +714,150 @@ func fieldsWithValidation(fields []model.Field) []model.Field {
 	return result
 }
 
+// genImports accumulates the imports a merged generated file needs, grouped for
+// gofmt-style output: standard library, the modusgraph module, then the schema
+// package plus any external (enum/scalar) packages.
+type genImports struct {
+	std   map[string]bool       // stdlib import paths
+	mg    map[string]bool       // modusgraph module import paths
+	other map[string]ImportSpec // schema + external imports, keyed by path
+}
+
+// newGenImports returns an empty genImports.
+func newGenImports() *genImports {
+	return &genImports{
+		std:   map[string]bool{},
+		mg:    map[string]bool{},
+		other: map[string]ImportSpec{},
+	}
+}
+
+// addEntitySideImports adds the imports needed by the entity, accessors, and
+// options fragments for e. The conditions mirror the guards the templates
+// previously carried inline ($needsIter/$needsSlices/$needsTime/$extImports).
+// The accessors scalar-field scan is a superset of the options scan, so options
+// contributes nothing additional.
+func (g *genImports) addEntitySideImports(e model.Entity, imports map[string]string, schemaPath string) {
+	// entity fragment: always typed + schema.
+	g.mg["github.com/matthewmcneely/modusgraph/typed"] = true
+	g.other[schemaPath] = ImportSpec{Path: schemaPath}
+
+	// accessors fragment.
+	multiEdges := allMultiEdgeFields(e.Fields)
+	sliceFields := allSliceFields(e.Fields)
+	if len(multiEdges) > 0 {
+		g.std["iter"] = true
+	}
+	if len(multiEdges) > 0 || len(sliceFields) > 0 {
+		g.std["slices"] = true
+	}
+	// time + external imports over all non-edge scalar fields (non-slice ∪ slice).
+	scalarFields := append(append([]model.Field{}, nonSliceScalarFields(e.Fields)...), sliceFields...)
+	for _, f := range scalarFields {
+		if strings.Contains(f.GoType, "time.") {
+			g.std["time"] = true
+		}
+	}
+	for _, spec := range externalImports(scalarFields, imports) {
+		g.other[spec.Path] = spec
+	}
+}
+
+// addClientSideImports adds the imports needed by the wrapper-client and
+// wrapper-query fragments. These fragments are emitted for every entity and
+// unconditionally reference all five of these imports.
+func (g *genImports) addClientSideImports(schemaPath string) {
+	g.std["context"] = true
+	g.std["iter"] = true
+	g.mg["github.com/matthewmcneely/modusgraph"] = true
+	g.mg["github.com/matthewmcneely/modusgraph/typed"] = true
+	g.other[schemaPath] = ImportSpec{Path: schemaPath}
+}
+
+// block renders the accumulated imports as a gofmt-style import block, with a
+// blank line between the stdlib, modusgraph, and schema/external groups. It
+// returns "" when no imports were added.
+func (g *genImports) block() string {
+	if len(g.std)+len(g.mg)+len(g.other) == 0 {
+		return ""
+	}
+
+	std := make([]string, 0, len(g.std))
+	for p := range g.std {
+		std = append(std, p)
+	}
+	sort.Strings(std)
+
+	mg := make([]string, 0, len(g.mg))
+	for p := range g.mg {
+		mg = append(mg, p)
+	}
+	sort.Strings(mg)
+
+	others := make([]ImportSpec, 0, len(g.other))
+	for _, s := range g.other {
+		others = append(others, s)
+	}
+	sort.Slice(others, func(i, j int) bool { return others[i].Path < others[j].Path })
+
+	var b strings.Builder
+	b.WriteString("import (\n")
+	wrote := false
+	writePlain := func(paths []string) {
+		for _, p := range paths {
+			b.WriteString("\t\"" + p + "\"\n")
+		}
+	}
+	if len(std) > 0 {
+		writePlain(std)
+		wrote = true
+	}
+	if len(mg) > 0 {
+		if wrote {
+			b.WriteString("\n")
+		}
+		writePlain(mg)
+		wrote = true
+	}
+	if len(others) > 0 {
+		if wrote {
+			b.WriteString("\n")
+		}
+		for _, s := range others {
+			if s.Alias != "" {
+				b.WriteString("\t" + s.Alias + " \"" + s.Path + "\"\n")
+			} else {
+				b.WriteString("\t\"" + s.Path + "\"\n")
+			}
+		}
+	}
+	b.WriteString(")")
+	return b.String()
+}
+
+// assembleGenFile builds the body of a merged generated file: a package
+// declaration, an optional import block, and the fragment bodies in order. The
+// caller passes the result to writeGoFile, which adds the header and gofmt.
+func assembleGenFile(pkgName, importBlock string, bodies ...string) string {
+	var b strings.Builder
+	b.WriteString("package ")
+	b.WriteString(pkgName)
+	b.WriteString("\n\n")
+	if importBlock != "" {
+		b.WriteString(importBlock)
+		b.WriteString("\n\n")
+	}
+	for _, body := range bodies {
+		trimmed := strings.TrimSpace(body)
+		if trimmed == "" {
+			continue
+		}
+		b.WriteString(trimmed)
+		b.WriteString("\n\n")
+	}
+	return b.String()
+}
+
 // ImportSpec represents a Go import with an optional alias.
 type ImportSpec struct {
 	Alias string // Non-empty only when the alias differs from the last path segment.
