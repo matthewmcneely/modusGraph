@@ -908,7 +908,7 @@ func TestGenerate_OptionsScalarOnly(t *testing.T) {
 		`return func(e *Studio) { e.SetName(v) }`,
 	} {
 		if !strings.Contains(data, want) {
-			t.Errorf("studio_options_gen.go missing: %q\n---file---\n%s", want, data)
+			t.Errorf("studio_gen.go (options content) missing: %q\n---file---\n%s", want, data)
 		}
 	}
 
@@ -921,7 +921,7 @@ func TestGenerate_OptionsScalarOnly(t *testing.T) {
 		`func WithStudioDType(`,
 	} {
 		if strings.Contains(data, notWant) {
-			t.Errorf("studio_options_gen.go must NOT emit %q", notWant)
+			t.Errorf("studio_gen.go (options content) must NOT emit %q", notWant)
 		}
 	}
 }
@@ -1026,7 +1026,7 @@ func TestGenerate_WrapperEntityClient(t *testing.T) {
 		`func (c *StudioClient) Query(ctx context.Context) *StudioQuery`,
 	} {
 		if !strings.Contains(data, want) {
-			t.Errorf("studio_client_gen.go missing: %q", want)
+			t.Errorf("studio_gen.go (client content) missing: %q", want)
 		}
 	}
 	for _, notWant := range []string{
@@ -1034,7 +1034,7 @@ func TestGenerate_WrapperEntityClient(t *testing.T) {
 		`*schema.StudioClient`,
 	} {
 		if strings.Contains(data, notWant) {
-			t.Errorf("studio_client_gen.go must NOT reference the deleted schema client: %q", notWant)
+			t.Errorf("studio_gen.go (client content) must NOT reference the deleted schema client: %q", notWant)
 		}
 	}
 }
@@ -1061,11 +1061,11 @@ func TestGenerate_WrapperQuery(t *testing.T) {
 		`return WrapStudio(s), nil`,
 	} {
 		if !strings.Contains(data, want) {
-			t.Errorf("studio_query_gen.go missing: %q", want)
+			t.Errorf("studio_gen.go (query content) missing: %q", want)
 		}
 	}
 	if strings.Contains(data, `*schema.StudioQuery`) {
-		t.Errorf("studio_query_gen.go must NOT reference the deleted schema query type")
+		t.Errorf("studio_gen.go (query content) must NOT reference the deleted schema query type")
 	}
 }
 

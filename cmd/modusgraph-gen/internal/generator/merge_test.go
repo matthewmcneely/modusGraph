@@ -1,10 +1,13 @@
 package generator
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/model"
+	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser"
 )
 
 // scalarField builds a plain scalar model.Field.
@@ -108,5 +111,89 @@ func TestAssembleGenFile(t *testing.T) {
 	}
 	if strings.Count(out, "package entity") != 1 {
 		t.Errorf("expected exactly one package decl:\n%s", out)
+	}
+}
+
+// TestGenerate_MergedSingleFilePerEntity verifies the default layout emits
+// exactly one <entity>_gen.go per entity and no split per-entity files.
+func TestGenerate_MergedSingleFilePerEntity(t *testing.T) {
+	_, _, entityDir := generateFromMinimalSchema(t)
+	if _, err := os.Stat(filepath.Join(entityDir, "studio_gen.go")); err != nil {
+		t.Fatalf("studio_gen.go must exist: %v", err)
+	}
+	for _, stale := range []string{
+		"studio_accessors_gen.go",
+		"studio_options_gen.go",
+		"studio_client_gen.go",
+		"studio_query_gen.go",
+	} {
+		if _, err := os.Stat(filepath.Join(entityDir, stale)); !os.IsNotExist(err) {
+			t.Errorf("%s must NOT be emitted in the merged layout; stat err = %v", stale, err)
+		}
+	}
+}
+
+// TestGenerate_SplitLayout verifies that when EntityDir != EntityClientDir the
+// entity-side fragments and client-side fragments land in separate
+// <entity>_gen.go files, each with a correctly partitioned import block.
+func TestGenerate_SplitLayout(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"),
+		[]byte("module example.com/test\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+	src := `package schema
+
+type Studio struct {
+	UID   string   ` + "`json:\"uid,omitempty\"`" + `
+	DType []string ` + "`json:\"dgraph.type,omitempty\"`" + `
+	Name  string   ` + "`json:\"name\"`" + `
+}
+`
+	if err := os.WriteFile(filepath.Join(srcDir, "studio.go"), []byte(src), 0o644); err != nil {
+		t.Fatalf("writing studio.go: %v", err)
+	}
+	pkg, err := parser.Parse(srcDir)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	entityDir := filepath.Join(t.TempDir(), "entity")
+	clientDir := filepath.Join(t.TempDir(), "client")
+	for _, d := range []string{entityDir, clientDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", d, err)
+		}
+	}
+	cfg := Config{
+		SchemaDir:               srcDir,
+		SchemaClientDir:         srcDir,
+		EntityDir:               entityDir,
+		EntityClientDir:         clientDir,
+		EntityPackageName:       "entity",
+		EntityClientPackageName: "client",
+		SchemaClientPackageName: "schema",
+		SchemaAlias:             "schema",
+		SchemaImportPath:        "example.com/test",
+		NoCLI:                   true,
+	}
+	if err := Generate(pkg, cfg); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	entitySide := mustReadGen(t, entityDir, "studio_gen.go")
+	for _, want := range []string{`package entity`, `type Studio struct {`, `func WithStudioName(`} {
+		if !strings.Contains(entitySide, want) {
+			t.Errorf("entity-side studio_gen.go missing %q:\n%s", want, entitySide)
+		}
+	}
+	if strings.Contains(entitySide, `type StudioClient struct {`) {
+		t.Errorf("entity-side file must not contain the client type")
+	}
+
+	clientSide := mustReadGen(t, clientDir, "studio_gen.go")
+	for _, want := range []string{`package client`, `type StudioClient struct {`, `type StudioQuery struct {`} {
+		if !strings.Contains(clientSide, want) {
+			t.Errorf("client-side studio_gen.go missing %q:\n%s", want, clientSide)
+		}
 	}
 }
