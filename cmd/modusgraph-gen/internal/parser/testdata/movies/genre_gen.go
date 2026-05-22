@@ -3,6 +3,11 @@
 package movies
 
 import (
+	"context"
+	"iter"
+	"slices"
+
+	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
@@ -43,3 +48,201 @@ func (e *Genre) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
 func (e *Genre) SetDType(v []string) { e.Unwrap().DType = v }
+
+// Name returns the name field.
+func (e *Genre) Name() string { return e.Unwrap().Name }
+
+// SetName sets the name field.
+func (e *Genre) SetName(v string) { e.Unwrap().Name = v }
+
+// Films returns a freshly allocated slice of wrappers over each
+// Film in the multi-edge.
+func (e *Genre) Films() []*Film {
+	out := make([]*Film, len(e.Unwrap().Films))
+	for i, x := range e.Unwrap().Films {
+		out[i] = &Film{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// FilmsSeq returns an iterator over the wrapped Films, avoiding
+// the allocation in Films().
+func (e *Genre) FilmsSeq() iter.Seq[*Film] {
+	return func(yield func(*Film) bool) {
+		for _, x := range e.Unwrap().Films {
+			if !yield(&Film{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetFilms replaces the multi-edge with the given items.
+func (e *Genre) SetFilms(items ...*Film) {
+	e.Unwrap().Films = make([]*schema.Film, len(items))
+	for i, x := range items {
+		e.Unwrap().Films[i] = x.Unwrap()
+	}
+}
+
+// AppendFilms appends items to the multi-edge.
+func (e *Genre) AppendFilms(items ...*Film) {
+	for _, x := range items {
+		e.Unwrap().Films = append(e.Unwrap().Films, x.Unwrap())
+	}
+}
+
+// RemoveFilms removes elements with any of the given UIDs from the multi-edge.
+func (e *Genre) RemoveFilms(uids ...string) {
+	e.Unwrap().Films = slices.DeleteFunc(e.Unwrap().Films, func(x *schema.Film) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// WithGenreName sets the name field on a *Genre.
+func WithGenreName(v string) typed.Option[Genre] {
+	return func(e *Genre) { e.SetName(v) }
+}
+
+// GenreClient provides CRUD/query operations over Genre wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
+type GenreClient struct {
+	typed *typed.Client[schema.Genre]
+}
+
+// NewGenreClient binds a GenreClient to conn.
+func NewGenreClient(conn modusgraph.Client) *GenreClient {
+	return &GenreClient{typed: typed.NewClient[schema.Genre](conn)}
+}
+
+// Get loads the Genre with the given UID and returns it wrapped.
+func (c *GenreClient) Get(ctx context.Context, uid string) (*Genre, error) {
+	s, err := c.typed.Get(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	return WrapGenre(s), nil
+}
+
+// Add inserts the schema struct backing w.
+func (c *GenreClient) Add(ctx context.Context, w *Genre) error {
+	return c.typed.Add(ctx, w.Unwrap())
+}
+
+// Update modifies the schema struct backing w (must have UID set).
+func (c *GenreClient) Update(ctx context.Context, w *Genre) error {
+	return c.typed.Update(ctx, w.Unwrap())
+}
+
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
+func (c *GenreClient) Upsert(ctx context.Context, w *Genre, predicates ...string) error {
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
+}
+
+// Delete removes the Genre with the given UID.
+func (c *GenreClient) Delete(ctx context.Context, uid string) error {
+	return c.typed.Delete(ctx, uid)
+}
+
+// Query returns a wrapper-side query builder for Genre.
+func (c *GenreClient) Query(ctx context.Context) *GenreQuery {
+	return &GenreQuery{typed: c.typed.Query(ctx)}
+}
+
+// GenreQuery is the wrapper-side fluent query builder for Genre. Builder
+// methods return *GenreQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
+type GenreQuery struct {
+	typed *typed.Query[schema.Genre]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *GenreQuery) Filter(filter string, params ...any) *GenreQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *GenreQuery) OrderAsc(clause string) *GenreQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *GenreQuery) OrderDesc(clause string) *GenreQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *GenreQuery) Limit(n int) *GenreQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *GenreQuery) Offset(n int) *GenreQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *GenreQuery) After(uid string) *GenreQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *GenreQuery) Cascade(predicates ...string) *GenreQuery {
+	q.typed.Cascade(predicates...)
+	return q
+}
+
+// WhereFilms keeps only Genre records that have a ~genre
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *GenreQuery) WhereFilms(filter string, params ...any) *GenreQuery {
+	q.typed.WhereEdge("~genre", filter, params...)
+	return q
+}
+
+// Nodes executes the query and returns wrapped Genre results.
+func (q *GenreQuery) Nodes() ([]*Genre, error) {
+	recs, err := q.typed.Nodes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Genre, len(recs))
+	for i := range recs {
+		out[i] = WrapGenre(&recs[i])
+	}
+	return out, nil
+}
+
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Genre, or nil if no rows matched.
+func (q *GenreQuery) First() (*Genre, error) {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
+		return nil, err
+	}
+	return WrapGenre(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Genre values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *GenreQuery) IterNodes() iter.Seq2[*Genre, error] {
+	return func(yield func(*Genre, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapGenre(s), nil) {
+				return
+			}
+		}
+	}
+}

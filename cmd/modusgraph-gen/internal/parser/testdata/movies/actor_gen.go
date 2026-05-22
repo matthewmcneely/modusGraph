@@ -3,6 +3,11 @@
 package movies
 
 import (
+	"context"
+	"iter"
+	"slices"
+
+	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
@@ -43,3 +48,201 @@ func (e *Actor) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
 func (e *Actor) SetDType(v []string) { e.Unwrap().DType = v }
+
+// Name returns the name field.
+func (e *Actor) Name() string { return e.Unwrap().Name }
+
+// SetName sets the name field.
+func (e *Actor) SetName(v string) { e.Unwrap().Name = v }
+
+// Films returns a freshly allocated slice of wrappers over each
+// Performance in the multi-edge.
+func (e *Actor) Films() []*Performance {
+	out := make([]*Performance, len(e.Unwrap().Films))
+	for i, x := range e.Unwrap().Films {
+		out[i] = &Performance{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// FilmsSeq returns an iterator over the wrapped Performances, avoiding
+// the allocation in Films().
+func (e *Actor) FilmsSeq() iter.Seq[*Performance] {
+	return func(yield func(*Performance) bool) {
+		for _, x := range e.Unwrap().Films {
+			if !yield(&Performance{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetFilms replaces the multi-edge with the given items.
+func (e *Actor) SetFilms(items ...*Performance) {
+	e.Unwrap().Films = make([]*schema.Performance, len(items))
+	for i, x := range items {
+		e.Unwrap().Films[i] = x.Unwrap()
+	}
+}
+
+// AppendFilms appends items to the multi-edge.
+func (e *Actor) AppendFilms(items ...*Performance) {
+	for _, x := range items {
+		e.Unwrap().Films = append(e.Unwrap().Films, x.Unwrap())
+	}
+}
+
+// RemoveFilms removes elements with any of the given UIDs from the multi-edge.
+func (e *Actor) RemoveFilms(uids ...string) {
+	e.Unwrap().Films = slices.DeleteFunc(e.Unwrap().Films, func(x *schema.Performance) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// WithActorName sets the name field on a *Actor.
+func WithActorName(v string) typed.Option[Actor] {
+	return func(e *Actor) { e.SetName(v) }
+}
+
+// ActorClient provides CRUD/query operations over Actor wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
+type ActorClient struct {
+	typed *typed.Client[schema.Actor]
+}
+
+// NewActorClient binds a ActorClient to conn.
+func NewActorClient(conn modusgraph.Client) *ActorClient {
+	return &ActorClient{typed: typed.NewClient[schema.Actor](conn)}
+}
+
+// Get loads the Actor with the given UID and returns it wrapped.
+func (c *ActorClient) Get(ctx context.Context, uid string) (*Actor, error) {
+	s, err := c.typed.Get(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	return WrapActor(s), nil
+}
+
+// Add inserts the schema struct backing w.
+func (c *ActorClient) Add(ctx context.Context, w *Actor) error {
+	return c.typed.Add(ctx, w.Unwrap())
+}
+
+// Update modifies the schema struct backing w (must have UID set).
+func (c *ActorClient) Update(ctx context.Context, w *Actor) error {
+	return c.typed.Update(ctx, w.Unwrap())
+}
+
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
+func (c *ActorClient) Upsert(ctx context.Context, w *Actor, predicates ...string) error {
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
+}
+
+// Delete removes the Actor with the given UID.
+func (c *ActorClient) Delete(ctx context.Context, uid string) error {
+	return c.typed.Delete(ctx, uid)
+}
+
+// Query returns a wrapper-side query builder for Actor.
+func (c *ActorClient) Query(ctx context.Context) *ActorQuery {
+	return &ActorQuery{typed: c.typed.Query(ctx)}
+}
+
+// ActorQuery is the wrapper-side fluent query builder for Actor. Builder
+// methods return *ActorQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
+type ActorQuery struct {
+	typed *typed.Query[schema.Actor]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *ActorQuery) Filter(filter string, params ...any) *ActorQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *ActorQuery) OrderAsc(clause string) *ActorQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *ActorQuery) OrderDesc(clause string) *ActorQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *ActorQuery) Limit(n int) *ActorQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *ActorQuery) Offset(n int) *ActorQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *ActorQuery) After(uid string) *ActorQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *ActorQuery) Cascade(predicates ...string) *ActorQuery {
+	q.typed.Cascade(predicates...)
+	return q
+}
+
+// WhereFilms keeps only Actor records that have a actor.film
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *ActorQuery) WhereFilms(filter string, params ...any) *ActorQuery {
+	q.typed.WhereEdge("actor.film", filter, params...)
+	return q
+}
+
+// Nodes executes the query and returns wrapped Actor results.
+func (q *ActorQuery) Nodes() ([]*Actor, error) {
+	recs, err := q.typed.Nodes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Actor, len(recs))
+	for i := range recs {
+		out[i] = WrapActor(&recs[i])
+	}
+	return out, nil
+}
+
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Actor, or nil if no rows matched.
+func (q *ActorQuery) First() (*Actor, error) {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
+		return nil, err
+	}
+	return WrapActor(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Actor values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *ActorQuery) IterNodes() iter.Seq2[*Actor, error] {
+	return func(yield func(*Actor, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapActor(s), nil) {
+				return
+			}
+		}
+	}
+}

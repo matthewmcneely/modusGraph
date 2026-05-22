@@ -3,6 +3,11 @@
 package movies
 
 import (
+	"context"
+	"iter"
+	"slices"
+
+	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
@@ -43,3 +48,176 @@ func (e *Location) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
 func (e *Location) SetDType(v []string) { e.Unwrap().DType = v }
+
+// Name returns the name field.
+func (e *Location) Name() string { return e.Unwrap().Name }
+
+// SetName sets the name field.
+func (e *Location) SetName(v string) { e.Unwrap().Name = v }
+
+// Email returns the email field.
+func (e *Location) Email() string { return e.Unwrap().Email }
+
+// SetEmail sets the email field.
+func (e *Location) SetEmail(v string) { e.Unwrap().Email = v }
+
+// Loc returns the scalar slice.
+func (e *Location) Loc() []float64 { return e.Unwrap().Loc }
+
+// SetLoc sets the scalar slice.
+func (e *Location) SetLoc(v []float64) { e.Unwrap().Loc = v }
+
+// AppendLoc appends values to the scalar slice.
+func (e *Location) AppendLoc(v ...float64) {
+	e.Unwrap().Loc = append(e.Unwrap().Loc, v...)
+}
+
+// RemoveLocFunc removes all elements for which fn returns true.
+func (e *Location) RemoveLocFunc(fn func(float64) bool) {
+	e.Unwrap().Loc = slices.DeleteFunc(e.Unwrap().Loc, fn)
+}
+
+// WithLocationName sets the name field on a *Location.
+func WithLocationName(v string) typed.Option[Location] {
+	return func(e *Location) { e.SetName(v) }
+}
+
+// WithLocationEmail sets the email field on a *Location.
+func WithLocationEmail(v string) typed.Option[Location] {
+	return func(e *Location) { e.SetEmail(v) }
+}
+
+// LocationClient provides CRUD/query operations over Location wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
+type LocationClient struct {
+	typed *typed.Client[schema.Location]
+}
+
+// NewLocationClient binds a LocationClient to conn.
+func NewLocationClient(conn modusgraph.Client) *LocationClient {
+	return &LocationClient{typed: typed.NewClient[schema.Location](conn)}
+}
+
+// Get loads the Location with the given UID and returns it wrapped.
+func (c *LocationClient) Get(ctx context.Context, uid string) (*Location, error) {
+	s, err := c.typed.Get(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	return WrapLocation(s), nil
+}
+
+// Add inserts the schema struct backing w.
+func (c *LocationClient) Add(ctx context.Context, w *Location) error {
+	return c.typed.Add(ctx, w.Unwrap())
+}
+
+// Update modifies the schema struct backing w (must have UID set).
+func (c *LocationClient) Update(ctx context.Context, w *Location) error {
+	return c.typed.Update(ctx, w.Unwrap())
+}
+
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
+func (c *LocationClient) Upsert(ctx context.Context, w *Location, predicates ...string) error {
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
+}
+
+// Delete removes the Location with the given UID.
+func (c *LocationClient) Delete(ctx context.Context, uid string) error {
+	return c.typed.Delete(ctx, uid)
+}
+
+// Query returns a wrapper-side query builder for Location.
+func (c *LocationClient) Query(ctx context.Context) *LocationQuery {
+	return &LocationQuery{typed: c.typed.Query(ctx)}
+}
+
+// LocationQuery is the wrapper-side fluent query builder for Location. Builder
+// methods return *LocationQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
+type LocationQuery struct {
+	typed *typed.Query[schema.Location]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *LocationQuery) Filter(filter string, params ...any) *LocationQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *LocationQuery) OrderAsc(clause string) *LocationQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *LocationQuery) OrderDesc(clause string) *LocationQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *LocationQuery) Limit(n int) *LocationQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *LocationQuery) Offset(n int) *LocationQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *LocationQuery) After(uid string) *LocationQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *LocationQuery) Cascade(predicates ...string) *LocationQuery {
+	q.typed.Cascade(predicates...)
+	return q
+}
+
+// Nodes executes the query and returns wrapped Location results.
+func (q *LocationQuery) Nodes() ([]*Location, error) {
+	recs, err := q.typed.Nodes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Location, len(recs))
+	for i := range recs {
+		out[i] = WrapLocation(&recs[i])
+	}
+	return out, nil
+}
+
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Location, or nil if no rows matched.
+func (q *LocationQuery) First() (*Location, error) {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
+		return nil, err
+	}
+	return WrapLocation(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Location values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *LocationQuery) IterNodes() iter.Seq2[*Location, error] {
+	return func(yield func(*Location, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapLocation(s), nil) {
+				return
+			}
+		}
+	}
+}

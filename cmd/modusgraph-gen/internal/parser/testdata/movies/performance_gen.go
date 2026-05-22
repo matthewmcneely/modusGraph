@@ -3,6 +3,10 @@
 package movies
 
 import (
+	"context"
+	"iter"
+
+	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
@@ -43,3 +47,149 @@ func (e *Performance) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
 func (e *Performance) SetDType(v []string) { e.Unwrap().DType = v }
+
+// CharacterNote returns the characterNote field.
+func (e *Performance) CharacterNote() string { return e.Unwrap().CharacterNote }
+
+// SetCharacterNote sets the characterNote field.
+func (e *Performance) SetCharacterNote(v string) { e.Unwrap().CharacterNote = v }
+
+// WithPerformanceCharacterNote sets the characterNote field on a *Performance.
+func WithPerformanceCharacterNote(v string) typed.Option[Performance] {
+	return func(e *Performance) { e.SetCharacterNote(v) }
+}
+
+// PerformanceClient provides CRUD/query operations over Performance wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
+type PerformanceClient struct {
+	typed *typed.Client[schema.Performance]
+}
+
+// NewPerformanceClient binds a PerformanceClient to conn.
+func NewPerformanceClient(conn modusgraph.Client) *PerformanceClient {
+	return &PerformanceClient{typed: typed.NewClient[schema.Performance](conn)}
+}
+
+// Get loads the Performance with the given UID and returns it wrapped.
+func (c *PerformanceClient) Get(ctx context.Context, uid string) (*Performance, error) {
+	s, err := c.typed.Get(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	return WrapPerformance(s), nil
+}
+
+// Add inserts the schema struct backing w.
+func (c *PerformanceClient) Add(ctx context.Context, w *Performance) error {
+	return c.typed.Add(ctx, w.Unwrap())
+}
+
+// Update modifies the schema struct backing w (must have UID set).
+func (c *PerformanceClient) Update(ctx context.Context, w *Performance) error {
+	return c.typed.Update(ctx, w.Unwrap())
+}
+
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
+func (c *PerformanceClient) Upsert(ctx context.Context, w *Performance, predicates ...string) error {
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
+}
+
+// Delete removes the Performance with the given UID.
+func (c *PerformanceClient) Delete(ctx context.Context, uid string) error {
+	return c.typed.Delete(ctx, uid)
+}
+
+// Query returns a wrapper-side query builder for Performance.
+func (c *PerformanceClient) Query(ctx context.Context) *PerformanceQuery {
+	return &PerformanceQuery{typed: c.typed.Query(ctx)}
+}
+
+// PerformanceQuery is the wrapper-side fluent query builder for Performance. Builder
+// methods return *PerformanceQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
+type PerformanceQuery struct {
+	typed *typed.Query[schema.Performance]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *PerformanceQuery) Filter(filter string, params ...any) *PerformanceQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *PerformanceQuery) OrderAsc(clause string) *PerformanceQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *PerformanceQuery) OrderDesc(clause string) *PerformanceQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *PerformanceQuery) Limit(n int) *PerformanceQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *PerformanceQuery) Offset(n int) *PerformanceQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *PerformanceQuery) After(uid string) *PerformanceQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *PerformanceQuery) Cascade(predicates ...string) *PerformanceQuery {
+	q.typed.Cascade(predicates...)
+	return q
+}
+
+// Nodes executes the query and returns wrapped Performance results.
+func (q *PerformanceQuery) Nodes() ([]*Performance, error) {
+	recs, err := q.typed.Nodes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Performance, len(recs))
+	for i := range recs {
+		out[i] = WrapPerformance(&recs[i])
+	}
+	return out, nil
+}
+
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Performance, or nil if no rows matched.
+func (q *PerformanceQuery) First() (*Performance, error) {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
+		return nil, err
+	}
+	return WrapPerformance(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Performance values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *PerformanceQuery) IterNodes() iter.Seq2[*Performance, error] {
+	return func(yield func(*Performance, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapPerformance(s), nil) {
+				return
+			}
+		}
+	}
+}
