@@ -209,55 +209,90 @@ func Generate(pkg *model.Package, cfg Config) error {
 		SchemaImportPath  string
 	}
 
+	// Per-entity loop: render the five fragment templates and merge them into
+	// one <entity>_gen.go per (directory, entity) group. In the default layout
+	// EntityDir == EntityClientDir, so all five fragments land in one file;
+	// when they differ, the entity-side fragments and client-side fragments
+	// form two separate <entity>_gen.go files.
 	for _, entity := range pkg.Entities {
+		if cfg.NoEntities {
+			break
+		}
 		snake := toSnakeCase(entity.Name)
 
-		// Entity-side templates (entity, options, accessors) — gated by NoEntities.
-		if !cfg.NoEntities {
-			data := entityData{
-				PackageName:       pkg.Name,
-				Entity:            entity,
-				Entities:          pkg.Entities,
-				Imports:           pkg.Imports,
-				EntityPackageName: entityPkg,
-				SchemaAlias:       schemaAlias,
-				SchemaImportPath:  schemaImportPath,
-			}
+		data := entityData{
+			PackageName:       pkg.Name,
+			Entity:            entity,
+			Entities:          pkg.Entities,
+			Imports:           pkg.Imports,
+			EntityPackageName: entityPkg,
+			SchemaAlias:       schemaAlias,
+			SchemaImportPath:  schemaImportPath,
+		}
+		entityBody, err := render(tmpl, "entity.go.tmpl", data)
+		if err != nil {
+			return err
+		}
+		accessorsBody, err := render(tmpl, "accessors.go.tmpl", data)
+		if err != nil {
+			return err
+		}
+		optionsBody, err := render(tmpl, "options.go.tmpl", data)
+		if err != nil {
+			return err
+		}
 
-			// entity.go.tmpl → <snake>_gen.go (EntityDir)
-			if err := executeAndWrite(tmpl, "entity.go.tmpl", data, filepath.Join(cfg.EntityDir, snake+"_gen.go")); err != nil {
+		// When wrapper clients are skipped, the merged file holds only the
+		// three entity-side fragments.
+		if cfg.NoEntityClients {
+			imps := newGenImports()
+			imps.addEntitySideImports(entity, pkg.Imports, schemaImportPath)
+			content := assembleGenFile(entityPkg, imps.block(), entityBody, accessorsBody, optionsBody)
+			if err := writeGoFile(filepath.Join(cfg.EntityDir, snake+"_gen.go"), content); err != nil {
 				return err
 			}
-			// options.go.tmpl → <snake>_options_gen.go (EntityDir)
-			if err := executeAndWrite(tmpl, "options.go.tmpl", data, filepath.Join(cfg.EntityDir, snake+"_options_gen.go")); err != nil {
+			continue
+		}
+
+		wrapData := data
+		wrapData.EntityPackageName = entityClientPkg
+		clientBody, err := render(tmpl, "wrapper_entity_client.go.tmpl", wrapData)
+		if err != nil {
+			return err
+		}
+		queryBody, err := render(tmpl, "wrapper_query.go.tmpl", wrapData)
+		if err != nil {
+			return err
+		}
+
+		if filepath.Clean(cfg.EntityDir) == filepath.Clean(cfg.EntityClientDir) {
+			// Default layout: all five fragments in one file.
+			imps := newGenImports()
+			imps.addEntitySideImports(entity, pkg.Imports, schemaImportPath)
+			imps.addClientSideImports(schemaImportPath)
+			content := assembleGenFile(entityPkg, imps.block(),
+				entityBody, accessorsBody, optionsBody, clientBody, queryBody)
+			if err := writeGoFile(filepath.Join(cfg.EntityDir, snake+"_gen.go"), content); err != nil {
 				return err
 			}
-			// accessors.go.tmpl → <snake>_accessors_gen.go (EntityDir)
-			if err := executeAndWrite(tmpl, "accessors.go.tmpl", data, filepath.Join(cfg.EntityDir, snake+"_accessors_gen.go")); err != nil {
-				return err
-			}
+			continue
+		}
 
-			// Wrapper-side per-entity templates — gated by NoEntityClients.
-			if !cfg.NoEntityClients {
-				wrapData := entityData{
-					PackageName:       pkg.Name,
-					Entity:            entity,
-					Entities:          pkg.Entities,
-					Imports:           pkg.Imports,
-					EntityPackageName: entityClientPkg,
-					SchemaAlias:       schemaAlias,
-					SchemaImportPath:  schemaImportPath,
-				}
+		// Split layout: entity-side file in EntityDir, client-side file in
+		// EntityClientDir, each named <entity>_gen.go.
+		entityImps := newGenImports()
+		entityImps.addEntitySideImports(entity, pkg.Imports, schemaImportPath)
+		entityContent := assembleGenFile(entityPkg, entityImps.block(),
+			entityBody, accessorsBody, optionsBody)
+		if err := writeGoFile(filepath.Join(cfg.EntityDir, snake+"_gen.go"), entityContent); err != nil {
+			return err
+		}
 
-				// wrapper_entity_client.go.tmpl → <snake>_client_gen.go (EntityClientDir)
-				if err := executeAndWrite(tmpl, "wrapper_entity_client.go.tmpl", wrapData, filepath.Join(cfg.EntityClientDir, snake+"_client_gen.go")); err != nil {
-					return err
-				}
-				// wrapper_query.go.tmpl → <snake>_query_gen.go (EntityClientDir)
-				if err := executeAndWrite(tmpl, "wrapper_query.go.tmpl", wrapData, filepath.Join(cfg.EntityClientDir, snake+"_query_gen.go")); err != nil {
-					return err
-				}
-			}
+		clientImps := newGenImports()
+		clientImps.addClientSideImports(schemaImportPath)
+		clientContent := assembleGenFile(entityClientPkg, clientImps.block(), clientBody, queryBody)
+		if err := writeGoFile(filepath.Join(cfg.EntityClientDir, snake+"_gen.go"), clientContent); err != nil {
+			return err
 		}
 	}
 
@@ -274,28 +309,39 @@ func Generate(pkg *model.Package, cfg Config) error {
 	return nil
 }
 
-// executeAndWrite renders a named template and writes the gofmt'd result to path.
-func executeAndWrite(tmpl *template.Template, name string, data any, path string) error {
+// render executes a named template against data and returns the rendered body
+// with no header. It is the building block for both standalone-file templates
+// and merged per-entity files.
+func render(tmpl *template.Template, name string, data any) (string, error) {
 	var buf bytes.Buffer
-	buf.WriteString(header)
-
 	if err := tmpl.ExecuteTemplate(&buf, name, data); err != nil {
-		return fmt.Errorf("executing template %s: %w", name, err)
+		return "", fmt.Errorf("executing template %s: %w", name, err)
 	}
+	return buf.String(), nil
+}
 
-	// Format the output with gofmt.
-	formatted, err := format.Source(buf.Bytes())
+// writeGoFile prepends the generated-code header, gofmt-formats the result, and
+// writes it to path. On a formatting error the raw output is written to
+// path+".broken" for debugging.
+func writeGoFile(path, content string) error {
+	src := header + content
+	formatted, err := format.Source([]byte(src))
 	if err != nil {
-		// Write the unformatted output for debugging.
-		_ = os.WriteFile(path+".broken", buf.Bytes(), 0o644)
-		return fmt.Errorf("formatting %s: %w\nRaw output written to %s.broken", name, err, path)
+		_ = os.WriteFile(path+".broken", []byte(src), 0o644)
+		return fmt.Errorf("formatting %s: %w\nRaw output written to %s.broken", filepath.Base(path), err, path)
 	}
+	return os.WriteFile(path, formatted, 0o644)
+}
 
-	if err := os.WriteFile(path, formatted, 0o644); err != nil {
-		return fmt.Errorf("writing %s: %w", path, err)
+// executeAndWrite renders a standalone-file template and writes the formatted
+// result to path. Used by templates that emit a complete file with their own
+// package/import header (wrapper_client, schema_client, schema_marker, cli).
+func executeAndWrite(tmpl *template.Template, name string, data any, path string) error {
+	body, err := render(tmpl, name, data)
+	if err != nil {
+		return err
 	}
-
-	return nil
+	return writeGoFile(path, body)
 }
 
 // toSnakeCase converts a Go identifier like "ContentRating" to "content_rating".
@@ -701,6 +747,150 @@ func fieldsWithValidation(fields []model.Field) []model.Field {
 		}
 	}
 	return result
+}
+
+// genImports accumulates the imports a merged generated file needs, grouped for
+// gofmt-style output: standard library, the modusgraph module, then the schema
+// package plus any external (enum/scalar) packages.
+type genImports struct {
+	std   map[string]bool       // stdlib import paths
+	mg    map[string]bool       // modusgraph module import paths
+	other map[string]ImportSpec // schema + external imports, keyed by path
+}
+
+// newGenImports returns an empty genImports.
+func newGenImports() *genImports {
+	return &genImports{
+		std:   map[string]bool{},
+		mg:    map[string]bool{},
+		other: map[string]ImportSpec{},
+	}
+}
+
+// addEntitySideImports adds the imports needed by the entity, accessors, and
+// options fragments for e. The conditions mirror the guards the templates
+// previously carried inline ($needsIter/$needsSlices/$needsTime/$extImports).
+// The accessors scalar-field scan is a superset of the options scan, so options
+// contributes nothing additional.
+func (g *genImports) addEntitySideImports(e model.Entity, imports map[string]string, schemaPath string) {
+	// entity fragment: always typed + schema.
+	g.mg["github.com/matthewmcneely/modusgraph/typed"] = true
+	g.other[schemaPath] = ImportSpec{Path: schemaPath}
+
+	// accessors fragment.
+	multiEdges := allMultiEdgeFields(e.Fields)
+	sliceFields := allSliceFields(e.Fields)
+	if len(multiEdges) > 0 {
+		g.std["iter"] = true
+	}
+	if len(multiEdges) > 0 || len(sliceFields) > 0 {
+		g.std["slices"] = true
+	}
+	// time + external imports over all non-edge scalar fields (non-slice ∪ slice).
+	scalarFields := append(append([]model.Field{}, nonSliceScalarFields(e.Fields)...), sliceFields...)
+	for _, f := range scalarFields {
+		if strings.Contains(f.GoType, "time.") {
+			g.std["time"] = true
+		}
+	}
+	for _, spec := range externalImports(scalarFields, imports) {
+		g.other[spec.Path] = spec
+	}
+}
+
+// addClientSideImports adds the imports needed by the wrapper-client and
+// wrapper-query fragments. These fragments are emitted for every entity and
+// unconditionally reference all five of these imports.
+func (g *genImports) addClientSideImports(schemaPath string) {
+	g.std["context"] = true
+	g.std["iter"] = true
+	g.mg["github.com/matthewmcneely/modusgraph"] = true
+	g.mg["github.com/matthewmcneely/modusgraph/typed"] = true
+	g.other[schemaPath] = ImportSpec{Path: schemaPath}
+}
+
+// block renders the accumulated imports as a gofmt-style import block, with a
+// blank line between the stdlib, modusgraph, and schema/external groups. It
+// returns "" when no imports were added.
+func (g *genImports) block() string {
+	if len(g.std)+len(g.mg)+len(g.other) == 0 {
+		return ""
+	}
+
+	std := make([]string, 0, len(g.std))
+	for p := range g.std {
+		std = append(std, p)
+	}
+	sort.Strings(std)
+
+	mg := make([]string, 0, len(g.mg))
+	for p := range g.mg {
+		mg = append(mg, p)
+	}
+	sort.Strings(mg)
+
+	others := make([]ImportSpec, 0, len(g.other))
+	for _, s := range g.other {
+		others = append(others, s)
+	}
+	sort.Slice(others, func(i, j int) bool { return others[i].Path < others[j].Path })
+
+	var b strings.Builder
+	b.WriteString("import (\n")
+	wrote := false
+	writePlain := func(paths []string) {
+		for _, p := range paths {
+			b.WriteString("\t\"" + p + "\"\n")
+		}
+	}
+	if len(std) > 0 {
+		writePlain(std)
+		wrote = true
+	}
+	if len(mg) > 0 {
+		if wrote {
+			b.WriteString("\n")
+		}
+		writePlain(mg)
+		wrote = true
+	}
+	if len(others) > 0 {
+		if wrote {
+			b.WriteString("\n")
+		}
+		for _, s := range others {
+			if s.Alias != "" {
+				b.WriteString("\t" + s.Alias + " \"" + s.Path + "\"\n")
+			} else {
+				b.WriteString("\t\"" + s.Path + "\"\n")
+			}
+		}
+	}
+	b.WriteString(")")
+	return b.String()
+}
+
+// assembleGenFile builds the body of a merged generated file: a package
+// declaration, an optional import block, and the fragment bodies in order. The
+// caller passes the result to writeGoFile, which adds the header and gofmt.
+func assembleGenFile(pkgName, importBlock string, bodies ...string) string {
+	var b strings.Builder
+	b.WriteString("package ")
+	b.WriteString(pkgName)
+	b.WriteString("\n\n")
+	if importBlock != "" {
+		b.WriteString(importBlock)
+		b.WriteString("\n\n")
+	}
+	for _, body := range bodies {
+		trimmed := strings.TrimSpace(body)
+		if trimmed == "" {
+			continue
+		}
+		b.WriteString(trimmed)
+		b.WriteString("\n\n")
+	}
+	return b.String()
 }
 
 // ImportSpec represents a Go import with an optional alias.

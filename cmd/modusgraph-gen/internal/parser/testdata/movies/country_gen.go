@@ -3,6 +3,11 @@
 package movies
 
 import (
+	"context"
+	"iter"
+	"slices"
+
+	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
@@ -43,3 +48,201 @@ func (e *Country) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
 func (e *Country) SetDType(v []string) { e.Unwrap().DType = v }
+
+// Name returns the name field.
+func (e *Country) Name() string { return e.Unwrap().Name }
+
+// SetName sets the name field.
+func (e *Country) SetName(v string) { e.Unwrap().Name = v }
+
+// Films returns a freshly allocated slice of wrappers over each
+// Film in the multi-edge.
+func (e *Country) Films() []*Film {
+	out := make([]*Film, len(e.Unwrap().Films))
+	for i, x := range e.Unwrap().Films {
+		out[i] = &Film{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// FilmsSeq returns an iterator over the wrapped Films, avoiding
+// the allocation in Films().
+func (e *Country) FilmsSeq() iter.Seq[*Film] {
+	return func(yield func(*Film) bool) {
+		for _, x := range e.Unwrap().Films {
+			if !yield(&Film{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetFilms replaces the multi-edge with the given items.
+func (e *Country) SetFilms(items ...*Film) {
+	e.Unwrap().Films = make([]*schema.Film, len(items))
+	for i, x := range items {
+		e.Unwrap().Films[i] = x.Unwrap()
+	}
+}
+
+// AppendFilms appends items to the multi-edge.
+func (e *Country) AppendFilms(items ...*Film) {
+	for _, x := range items {
+		e.Unwrap().Films = append(e.Unwrap().Films, x.Unwrap())
+	}
+}
+
+// RemoveFilms removes elements with any of the given UIDs from the multi-edge.
+func (e *Country) RemoveFilms(uids ...string) {
+	e.Unwrap().Films = slices.DeleteFunc(e.Unwrap().Films, func(x *schema.Film) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// WithCountryName sets the name field on a *Country.
+func WithCountryName(v string) typed.Option[Country] {
+	return func(e *Country) { e.SetName(v) }
+}
+
+// CountryClient provides CRUD/query operations over Country wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
+type CountryClient struct {
+	typed *typed.Client[schema.Country]
+}
+
+// NewCountryClient binds a CountryClient to conn.
+func NewCountryClient(conn modusgraph.Client) *CountryClient {
+	return &CountryClient{typed: typed.NewClient[schema.Country](conn)}
+}
+
+// Get loads the Country with the given UID and returns it wrapped.
+func (c *CountryClient) Get(ctx context.Context, uid string) (*Country, error) {
+	s, err := c.typed.Get(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	return WrapCountry(s), nil
+}
+
+// Add inserts the schema struct backing w.
+func (c *CountryClient) Add(ctx context.Context, w *Country) error {
+	return c.typed.Add(ctx, w.Unwrap())
+}
+
+// Update modifies the schema struct backing w (must have UID set).
+func (c *CountryClient) Update(ctx context.Context, w *Country) error {
+	return c.typed.Update(ctx, w.Unwrap())
+}
+
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
+func (c *CountryClient) Upsert(ctx context.Context, w *Country, predicates ...string) error {
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
+}
+
+// Delete removes the Country with the given UID.
+func (c *CountryClient) Delete(ctx context.Context, uid string) error {
+	return c.typed.Delete(ctx, uid)
+}
+
+// Query returns a wrapper-side query builder for Country.
+func (c *CountryClient) Query(ctx context.Context) *CountryQuery {
+	return &CountryQuery{typed: c.typed.Query(ctx)}
+}
+
+// CountryQuery is the wrapper-side fluent query builder for Country. Builder
+// methods return *CountryQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
+type CountryQuery struct {
+	typed *typed.Query[schema.Country]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *CountryQuery) Filter(filter string, params ...any) *CountryQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *CountryQuery) OrderAsc(clause string) *CountryQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *CountryQuery) OrderDesc(clause string) *CountryQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *CountryQuery) Limit(n int) *CountryQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *CountryQuery) Offset(n int) *CountryQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *CountryQuery) After(uid string) *CountryQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *CountryQuery) Cascade(predicates ...string) *CountryQuery {
+	q.typed.Cascade(predicates...)
+	return q
+}
+
+// WhereFilms keeps only Country records that have a ~country
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *CountryQuery) WhereFilms(filter string, params ...any) *CountryQuery {
+	q.typed.WhereEdge("~country", filter, params...)
+	return q
+}
+
+// Nodes executes the query and returns wrapped Country results.
+func (q *CountryQuery) Nodes() ([]*Country, error) {
+	recs, err := q.typed.Nodes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Country, len(recs))
+	for i := range recs {
+		out[i] = WrapCountry(&recs[i])
+	}
+	return out, nil
+}
+
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Country, or nil if no rows matched.
+func (q *CountryQuery) First() (*Country, error) {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
+		return nil, err
+	}
+	return WrapCountry(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Country values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *CountryQuery) IterNodes() iter.Seq2[*Country, error] {
+	return func(yield func(*Country, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapCountry(s), nil) {
+				return
+			}
+		}
+	}
+}

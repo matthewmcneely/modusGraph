@@ -3,6 +3,11 @@
 package movies
 
 import (
+	"context"
+	"iter"
+	"slices"
+
+	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
@@ -43,3 +48,201 @@ func (e *Director) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
 func (e *Director) SetDType(v []string) { e.Unwrap().DType = v }
+
+// Name returns the name field.
+func (e *Director) Name() string { return e.Unwrap().Name }
+
+// SetName sets the name field.
+func (e *Director) SetName(v string) { e.Unwrap().Name = v }
+
+// Films returns a freshly allocated slice of wrappers over each
+// Film in the multi-edge.
+func (e *Director) Films() []*Film {
+	out := make([]*Film, len(e.Unwrap().Films))
+	for i, x := range e.Unwrap().Films {
+		out[i] = &Film{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// FilmsSeq returns an iterator over the wrapped Films, avoiding
+// the allocation in Films().
+func (e *Director) FilmsSeq() iter.Seq[*Film] {
+	return func(yield func(*Film) bool) {
+		for _, x := range e.Unwrap().Films {
+			if !yield(&Film{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetFilms replaces the multi-edge with the given items.
+func (e *Director) SetFilms(items ...*Film) {
+	e.Unwrap().Films = make([]*schema.Film, len(items))
+	for i, x := range items {
+		e.Unwrap().Films[i] = x.Unwrap()
+	}
+}
+
+// AppendFilms appends items to the multi-edge.
+func (e *Director) AppendFilms(items ...*Film) {
+	for _, x := range items {
+		e.Unwrap().Films = append(e.Unwrap().Films, x.Unwrap())
+	}
+}
+
+// RemoveFilms removes elements with any of the given UIDs from the multi-edge.
+func (e *Director) RemoveFilms(uids ...string) {
+	e.Unwrap().Films = slices.DeleteFunc(e.Unwrap().Films, func(x *schema.Film) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// WithDirectorName sets the name field on a *Director.
+func WithDirectorName(v string) typed.Option[Director] {
+	return func(e *Director) { e.SetName(v) }
+}
+
+// DirectorClient provides CRUD/query operations over Director wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
+type DirectorClient struct {
+	typed *typed.Client[schema.Director]
+}
+
+// NewDirectorClient binds a DirectorClient to conn.
+func NewDirectorClient(conn modusgraph.Client) *DirectorClient {
+	return &DirectorClient{typed: typed.NewClient[schema.Director](conn)}
+}
+
+// Get loads the Director with the given UID and returns it wrapped.
+func (c *DirectorClient) Get(ctx context.Context, uid string) (*Director, error) {
+	s, err := c.typed.Get(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	return WrapDirector(s), nil
+}
+
+// Add inserts the schema struct backing w.
+func (c *DirectorClient) Add(ctx context.Context, w *Director) error {
+	return c.typed.Add(ctx, w.Unwrap())
+}
+
+// Update modifies the schema struct backing w (must have UID set).
+func (c *DirectorClient) Update(ctx context.Context, w *Director) error {
+	return c.typed.Update(ctx, w.Unwrap())
+}
+
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
+func (c *DirectorClient) Upsert(ctx context.Context, w *Director, predicates ...string) error {
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
+}
+
+// Delete removes the Director with the given UID.
+func (c *DirectorClient) Delete(ctx context.Context, uid string) error {
+	return c.typed.Delete(ctx, uid)
+}
+
+// Query returns a wrapper-side query builder for Director.
+func (c *DirectorClient) Query(ctx context.Context) *DirectorQuery {
+	return &DirectorQuery{typed: c.typed.Query(ctx)}
+}
+
+// DirectorQuery is the wrapper-side fluent query builder for Director. Builder
+// methods return *DirectorQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
+type DirectorQuery struct {
+	typed *typed.Query[schema.Director]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *DirectorQuery) Filter(filter string, params ...any) *DirectorQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *DirectorQuery) OrderAsc(clause string) *DirectorQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *DirectorQuery) OrderDesc(clause string) *DirectorQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *DirectorQuery) Limit(n int) *DirectorQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *DirectorQuery) Offset(n int) *DirectorQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *DirectorQuery) After(uid string) *DirectorQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *DirectorQuery) Cascade(predicates ...string) *DirectorQuery {
+	q.typed.Cascade(predicates...)
+	return q
+}
+
+// WhereFilms keeps only Director records that have a director.film
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *DirectorQuery) WhereFilms(filter string, params ...any) *DirectorQuery {
+	q.typed.WhereEdge("director.film", filter, params...)
+	return q
+}
+
+// Nodes executes the query and returns wrapped Director results.
+func (q *DirectorQuery) Nodes() ([]*Director, error) {
+	recs, err := q.typed.Nodes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Director, len(recs))
+	for i := range recs {
+		out[i] = WrapDirector(&recs[i])
+	}
+	return out, nil
+}
+
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Director, or nil if no rows matched.
+func (q *DirectorQuery) First() (*Director, error) {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
+		return nil, err
+	}
+	return WrapDirector(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Director values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *DirectorQuery) IterNodes() iter.Seq2[*Director, error] {
+	return func(yield func(*Director, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapDirector(s), nil) {
+				return
+			}
+		}
+	}
+}

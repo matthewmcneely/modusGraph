@@ -3,8 +3,15 @@
 package movies
 
 import (
+	"context"
+	"iter"
+	"slices"
+	"time"
+
+	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
 
+	dg "github.com/dolan-in/dgman/v2"
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
 
@@ -43,3 +50,540 @@ func (e *Studio) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
 func (e *Studio) SetDType(v []string) { e.Unwrap().DType = v }
+
+// Name returns the name field.
+func (e *Studio) Name() string { return e.Unwrap().Name }
+
+// SetName sets the name field.
+func (e *Studio) SetName(v string) { e.Unwrap().Name = v }
+
+// YearFounded returns the yearFounded field.
+func (e *Studio) YearFounded() int { return e.Unwrap().YearFounded }
+
+// SetYearFounded sets the yearFounded field.
+func (e *Studio) SetYearFounded(v int) { e.Unwrap().YearFounded = v }
+
+// Revenue returns the revenue field.
+func (e *Studio) Revenue() float64 { return e.Unwrap().Revenue }
+
+// SetRevenue sets the revenue field.
+func (e *Studio) SetRevenue(v float64) { e.Unwrap().Revenue = v }
+
+// Active returns the active field.
+func (e *Studio) Active() bool { return e.Unwrap().Active }
+
+// SetActive sets the active field.
+func (e *Studio) SetActive(v bool) { e.Unwrap().Active = v }
+
+// CreatedAt returns the createdAt field.
+func (e *Studio) CreatedAt() time.Time { return e.Unwrap().CreatedAt }
+
+// SetCreatedAt sets the createdAt field.
+func (e *Studio) SetCreatedAt(v time.Time) { e.Unwrap().CreatedAt = v }
+
+// Embedding returns the embedding field.
+func (e *Studio) Embedding() *dg.VectorFloat32 { return e.Unwrap().Embedding }
+
+// SetEmbedding sets the embedding field.
+func (e *Studio) SetEmbedding(v *dg.VectorFloat32) { e.Unwrap().Embedding = v }
+
+// Founder returns the wrapped Director, or nil if not set.
+// Shared state: mutations through the returned wrapper write through to e.
+func (e *Studio) Founder() *Director {
+	if e.Unwrap().Founder == nil {
+		return nil
+	}
+	return &Director{Wrapper: typed.WrapValue(e.Unwrap().Founder)}
+}
+
+// SetFounder sets or clears the Director edge.
+func (e *Studio) SetFounder(v *Director) {
+	if v == nil {
+		e.Unwrap().Founder = nil
+		return
+	}
+	e.Unwrap().Founder = v.Unwrap()
+}
+
+// Headquarters returns a wrapper over the value-typed schema field. The wrapper
+// shares state with e — mutations are visible to e immediately.
+func (e *Studio) Headquarters() *Country {
+	return &Country{Wrapper: typed.WrapValue(&e.Unwrap().Headquarters)}
+}
+
+// SetHeadquarters copies the value from v into the schema field. Note: this is
+// a value copy, so v and e.Headquarters() will not share state after this call.
+func (e *Studio) SetHeadquarters(v *Country) {
+	if v != nil {
+		e.Unwrap().Headquarters = *v.Unwrap()
+	}
+}
+
+// CurrentHead returns the wrapped first element of the singular-via-list edge,
+// or nil if the list is empty.
+func (e *Studio) CurrentHead() *Director {
+	if len(e.Unwrap().CurrentHead) == 0 || e.Unwrap().CurrentHead[0] == nil {
+		return nil
+	}
+	return &Director{Wrapper: typed.WrapValue(e.Unwrap().CurrentHead[0])}
+}
+
+// SetCurrentHead replaces the singular-via-list edge with v, or clears it if nil.
+func (e *Studio) SetCurrentHead(v *Director) {
+	if v == nil {
+		e.Unwrap().CurrentHead = nil
+		return
+	}
+	e.Unwrap().CurrentHead = []*schema.Director{v.Unwrap()}
+}
+
+// Ceo returns the wrapped first element of the singular-via-list edge,
+// or nil if the list is empty.
+func (e *Studio) Ceo() *Director {
+	if len(e.Unwrap().Ceo) == 0 || e.Unwrap().Ceo[0] == nil {
+		return nil
+	}
+	return &Director{Wrapper: typed.WrapValue(e.Unwrap().Ceo[0])}
+}
+
+// SetCeo replaces the singular-via-list edge with v, or clears it if nil.
+func (e *Studio) SetCeo(v *Director) {
+	if v == nil {
+		e.Unwrap().Ceo = nil
+		return
+	}
+	e.Unwrap().Ceo = []*schema.Director{v.Unwrap()}
+}
+
+// HomeBase returns the wrapped first element of the singular-via-list edge,
+// or nil if the list is empty.
+func (e *Studio) HomeBase() *Country {
+	if len(e.Unwrap().HomeBase) == 0 || e.Unwrap().HomeBase[0] == nil {
+		return nil
+	}
+	return &Country{Wrapper: typed.WrapValue(e.Unwrap().HomeBase[0])}
+}
+
+// SetHomeBase replaces the singular-via-list edge with v, or clears it if nil.
+func (e *Studio) SetHomeBase(v *Country) {
+	if v == nil {
+		e.Unwrap().HomeBase = nil
+		return
+	}
+	e.Unwrap().HomeBase = []*schema.Country{v.Unwrap()}
+}
+
+// ParentCompany returns the wrapped first element of the singular-via-list edge,
+// or nil if the list is empty.
+func (e *Studio) ParentCompany() *Country {
+	if len(e.Unwrap().ParentCompany) == 0 || e.Unwrap().ParentCompany[0] == nil {
+		return nil
+	}
+	return &Country{Wrapper: typed.WrapValue(e.Unwrap().ParentCompany[0])}
+}
+
+// SetParentCompany replaces the singular-via-list edge with v, or clears it if nil.
+func (e *Studio) SetParentCompany(v *Country) {
+	if v == nil {
+		e.Unwrap().ParentCompany = nil
+		return
+	}
+	e.Unwrap().ParentCompany = []*schema.Country{v.Unwrap()}
+}
+
+// Films returns a freshly allocated slice of wrappers over each
+// Film in the multi-edge.
+func (e *Studio) Films() []*Film {
+	out := make([]*Film, len(e.Unwrap().Films))
+	for i, x := range e.Unwrap().Films {
+		out[i] = &Film{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// FilmsSeq returns an iterator over the wrapped Films, avoiding
+// the allocation in Films().
+func (e *Studio) FilmsSeq() iter.Seq[*Film] {
+	return func(yield func(*Film) bool) {
+		for _, x := range e.Unwrap().Films {
+			if !yield(&Film{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetFilms replaces the multi-edge with the given items.
+func (e *Studio) SetFilms(items ...*Film) {
+	e.Unwrap().Films = make([]*schema.Film, len(items))
+	for i, x := range items {
+		e.Unwrap().Films[i] = x.Unwrap()
+	}
+}
+
+// AppendFilms appends items to the multi-edge.
+func (e *Studio) AppendFilms(items ...*Film) {
+	for _, x := range items {
+		e.Unwrap().Films = append(e.Unwrap().Films, x.Unwrap())
+	}
+}
+
+// RemoveFilms removes elements with any of the given UIDs from the multi-edge.
+func (e *Studio) RemoveFilms(uids ...string) {
+	e.Unwrap().Films = slices.DeleteFunc(e.Unwrap().Films, func(x *schema.Film) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// Advisors returns a freshly allocated slice of wrappers over each
+// Director in the multi-edge.
+func (e *Studio) Advisors() []*Director {
+	out := make([]*Director, len(e.Unwrap().Advisors))
+	for i, x := range e.Unwrap().Advisors {
+		out[i] = &Director{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// AdvisorsSeq returns an iterator over the wrapped Directors, avoiding
+// the allocation in Advisors().
+func (e *Studio) AdvisorsSeq() iter.Seq[*Director] {
+	return func(yield func(*Director) bool) {
+		for _, x := range e.Unwrap().Advisors {
+			if !yield(&Director{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetAdvisors replaces the multi-edge with the given items.
+func (e *Studio) SetAdvisors(items ...*Director) {
+	e.Unwrap().Advisors = make([]*schema.Director, len(items))
+	for i, x := range items {
+		e.Unwrap().Advisors[i] = x.Unwrap()
+	}
+}
+
+// AppendAdvisors appends items to the multi-edge.
+func (e *Studio) AppendAdvisors(items ...*Director) {
+	for _, x := range items {
+		e.Unwrap().Advisors = append(e.Unwrap().Advisors, x.Unwrap())
+	}
+}
+
+// RemoveAdvisors removes elements with any of the given UIDs from the multi-edge.
+func (e *Studio) RemoveAdvisors(uids ...string) {
+	e.Unwrap().Advisors = slices.DeleteFunc(e.Unwrap().Advisors, func(x *schema.Director) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// Tags returns the scalar slice.
+func (e *Studio) Tags() []string { return e.Unwrap().Tags }
+
+// SetTags sets the scalar slice.
+func (e *Studio) SetTags(v []string) { e.Unwrap().Tags = v }
+
+// AppendTags appends values to the scalar slice.
+func (e *Studio) AppendTags(v ...string) {
+	e.Unwrap().Tags = append(e.Unwrap().Tags, v...)
+}
+
+// RemoveTagsFunc removes all elements for which fn returns true.
+func (e *Studio) RemoveTagsFunc(fn func(string) bool) {
+	e.Unwrap().Tags = slices.DeleteFunc(e.Unwrap().Tags, fn)
+}
+
+// Scores returns the scalar slice.
+func (e *Studio) Scores() []int { return e.Unwrap().Scores }
+
+// SetScores sets the scalar slice.
+func (e *Studio) SetScores(v []int) { e.Unwrap().Scores = v }
+
+// AppendScores appends values to the scalar slice.
+func (e *Studio) AppendScores(v ...int) {
+	e.Unwrap().Scores = append(e.Unwrap().Scores, v...)
+}
+
+// RemoveScoresFunc removes all elements for which fn returns true.
+func (e *Studio) RemoveScoresFunc(fn func(int) bool) {
+	e.Unwrap().Scores = slices.DeleteFunc(e.Unwrap().Scores, fn)
+}
+
+// Weights returns the scalar slice.
+func (e *Studio) Weights() []float64 { return e.Unwrap().Weights }
+
+// SetWeights sets the scalar slice.
+func (e *Studio) SetWeights(v []float64) { e.Unwrap().Weights = v }
+
+// AppendWeights appends values to the scalar slice.
+func (e *Studio) AppendWeights(v ...float64) {
+	e.Unwrap().Weights = append(e.Unwrap().Weights, v...)
+}
+
+// RemoveWeightsFunc removes all elements for which fn returns true.
+func (e *Studio) RemoveWeightsFunc(fn func(float64) bool) {
+	e.Unwrap().Weights = slices.DeleteFunc(e.Unwrap().Weights, fn)
+}
+
+// Flags returns the scalar slice.
+func (e *Studio) Flags() []bool { return e.Unwrap().Flags }
+
+// SetFlags sets the scalar slice.
+func (e *Studio) SetFlags(v []bool) { e.Unwrap().Flags = v }
+
+// AppendFlags appends values to the scalar slice.
+func (e *Studio) AppendFlags(v ...bool) {
+	e.Unwrap().Flags = append(e.Unwrap().Flags, v...)
+}
+
+// RemoveFlagsFunc removes all elements for which fn returns true.
+func (e *Studio) RemoveFlagsFunc(fn func(bool) bool) {
+	e.Unwrap().Flags = slices.DeleteFunc(e.Unwrap().Flags, fn)
+}
+
+// Milestones returns the scalar slice.
+func (e *Studio) Milestones() []time.Time { return e.Unwrap().Milestones }
+
+// SetMilestones sets the scalar slice.
+func (e *Studio) SetMilestones(v []time.Time) { e.Unwrap().Milestones = v }
+
+// AppendMilestones appends values to the scalar slice.
+func (e *Studio) AppendMilestones(v ...time.Time) {
+	e.Unwrap().Milestones = append(e.Unwrap().Milestones, v...)
+}
+
+// RemoveMilestonesFunc removes all elements for which fn returns true.
+func (e *Studio) RemoveMilestonesFunc(fn func(time.Time) bool) {
+	e.Unwrap().Milestones = slices.DeleteFunc(e.Unwrap().Milestones, fn)
+}
+
+// WithStudioName sets the name field on a *Studio.
+func WithStudioName(v string) typed.Option[Studio] {
+	return func(e *Studio) { e.SetName(v) }
+}
+
+// WithStudioYearFounded sets the yearFounded field on a *Studio.
+func WithStudioYearFounded(v int) typed.Option[Studio] {
+	return func(e *Studio) { e.SetYearFounded(v) }
+}
+
+// WithStudioRevenue sets the revenue field on a *Studio.
+func WithStudioRevenue(v float64) typed.Option[Studio] {
+	return func(e *Studio) { e.SetRevenue(v) }
+}
+
+// WithStudioActive sets the active field on a *Studio.
+func WithStudioActive(v bool) typed.Option[Studio] {
+	return func(e *Studio) { e.SetActive(v) }
+}
+
+// WithStudioCreatedAt sets the createdAt field on a *Studio.
+func WithStudioCreatedAt(v time.Time) typed.Option[Studio] {
+	return func(e *Studio) { e.SetCreatedAt(v) }
+}
+
+// WithStudioEmbedding sets the embedding field on a *Studio.
+func WithStudioEmbedding(v *dg.VectorFloat32) typed.Option[Studio] {
+	return func(e *Studio) { e.SetEmbedding(v) }
+}
+
+// StudioClient provides CRUD/query operations over Studio wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
+type StudioClient struct {
+	typed *typed.Client[schema.Studio]
+}
+
+// NewStudioClient binds a StudioClient to conn.
+func NewStudioClient(conn modusgraph.Client) *StudioClient {
+	return &StudioClient{typed: typed.NewClient[schema.Studio](conn)}
+}
+
+// Get loads the Studio with the given UID and returns it wrapped.
+func (c *StudioClient) Get(ctx context.Context, uid string) (*Studio, error) {
+	s, err := c.typed.Get(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	return WrapStudio(s), nil
+}
+
+// Add inserts the schema struct backing w.
+func (c *StudioClient) Add(ctx context.Context, w *Studio) error {
+	return c.typed.Add(ctx, w.Unwrap())
+}
+
+// Update modifies the schema struct backing w (must have UID set).
+func (c *StudioClient) Update(ctx context.Context, w *Studio) error {
+	return c.typed.Update(ctx, w.Unwrap())
+}
+
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
+func (c *StudioClient) Upsert(ctx context.Context, w *Studio, predicates ...string) error {
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
+}
+
+// Delete removes the Studio with the given UID.
+func (c *StudioClient) Delete(ctx context.Context, uid string) error {
+	return c.typed.Delete(ctx, uid)
+}
+
+// Query returns a wrapper-side query builder for Studio.
+func (c *StudioClient) Query(ctx context.Context) *StudioQuery {
+	return &StudioQuery{typed: c.typed.Query(ctx)}
+}
+
+// StudioQuery is the wrapper-side fluent query builder for Studio. Builder
+// methods return *StudioQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
+type StudioQuery struct {
+	typed *typed.Query[schema.Studio]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *StudioQuery) Filter(filter string, params ...any) *StudioQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *StudioQuery) OrderAsc(clause string) *StudioQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *StudioQuery) OrderDesc(clause string) *StudioQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *StudioQuery) Limit(n int) *StudioQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *StudioQuery) Offset(n int) *StudioQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *StudioQuery) After(uid string) *StudioQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *StudioQuery) Cascade(predicates ...string) *StudioQuery {
+	q.typed.Cascade(predicates...)
+	return q
+}
+
+// WhereFounder keeps only Studio records that have a founder
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereFounder(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("founder", filter, params...)
+	return q
+}
+
+// WhereHeadquarters keeps only Studio records that have a headquarters
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereHeadquarters(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("headquarters", filter, params...)
+	return q
+}
+
+// WhereCurrentHead keeps only Studio records that have a currentHead
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereCurrentHead(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("currentHead", filter, params...)
+	return q
+}
+
+// WhereCeo keeps only Studio records that have a ceo
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereCeo(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("ceo", filter, params...)
+	return q
+}
+
+// WhereHomeBase keeps only Studio records that have a homeBase
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereHomeBase(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("homeBase", filter, params...)
+	return q
+}
+
+// WhereParentCompany keeps only Studio records that have a parentCompany
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereParentCompany(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("parentCompany", filter, params...)
+	return q
+}
+
+// WhereFilms keeps only Studio records that have a films
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereFilms(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("films", filter, params...)
+	return q
+}
+
+// WhereAdvisors keeps only Studio records that have a advisors
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *StudioQuery) WhereAdvisors(filter string, params ...any) *StudioQuery {
+	q.typed.WhereEdge("advisors", filter, params...)
+	return q
+}
+
+// Nodes executes the query and returns wrapped Studio results.
+func (q *StudioQuery) Nodes() ([]*Studio, error) {
+	recs, err := q.typed.Nodes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Studio, len(recs))
+	for i := range recs {
+		out[i] = WrapStudio(&recs[i])
+	}
+	return out, nil
+}
+
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Studio, or nil if no rows matched.
+func (q *StudioQuery) First() (*Studio, error) {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
+		return nil, err
+	}
+	return WrapStudio(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Studio values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *StudioQuery) IterNodes() iter.Seq2[*Studio, error] {
+	return func(yield func(*Studio, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapStudio(s), nil) {
+				return
+			}
+		}
+	}
+}

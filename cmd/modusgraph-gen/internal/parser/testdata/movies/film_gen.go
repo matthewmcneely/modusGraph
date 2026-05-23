@@ -3,6 +3,12 @@
 package movies
 
 import (
+	"context"
+	"iter"
+	"slices"
+	"time"
+
+	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
@@ -43,3 +49,483 @@ func (e *Film) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
 func (e *Film) SetDType(v []string) { e.Unwrap().DType = v }
+
+// Name returns the name field.
+func (e *Film) Name() string { return e.Unwrap().Name }
+
+// SetName sets the name field.
+func (e *Film) SetName(v string) { e.Unwrap().Name = v }
+
+// InitialReleaseDate returns the initialReleaseDate field.
+func (e *Film) InitialReleaseDate() time.Time { return e.Unwrap().InitialReleaseDate }
+
+// SetInitialReleaseDate sets the initialReleaseDate field.
+func (e *Film) SetInitialReleaseDate(v time.Time) { e.Unwrap().InitialReleaseDate = v }
+
+// Tagline returns the tagline field.
+func (e *Film) Tagline() string { return e.Unwrap().Tagline }
+
+// SetTagline sets the tagline field.
+func (e *Film) SetTagline(v string) { e.Unwrap().Tagline = v }
+
+// Genres returns a freshly allocated slice of wrappers over each
+// Genre in the multi-edge.
+func (e *Film) Genres() []*Genre {
+	out := make([]*Genre, len(e.Unwrap().Genres))
+	for i, x := range e.Unwrap().Genres {
+		out[i] = &Genre{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// GenresSeq returns an iterator over the wrapped Genres, avoiding
+// the allocation in Genres().
+func (e *Film) GenresSeq() iter.Seq[*Genre] {
+	return func(yield func(*Genre) bool) {
+		for _, x := range e.Unwrap().Genres {
+			if !yield(&Genre{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetGenres replaces the multi-edge with the given items.
+func (e *Film) SetGenres(items ...*Genre) {
+	e.Unwrap().Genres = make([]*schema.Genre, len(items))
+	for i, x := range items {
+		e.Unwrap().Genres[i] = x.Unwrap()
+	}
+}
+
+// AppendGenres appends items to the multi-edge.
+func (e *Film) AppendGenres(items ...*Genre) {
+	for _, x := range items {
+		e.Unwrap().Genres = append(e.Unwrap().Genres, x.Unwrap())
+	}
+}
+
+// RemoveGenres removes elements with any of the given UIDs from the multi-edge.
+func (e *Film) RemoveGenres(uids ...string) {
+	e.Unwrap().Genres = slices.DeleteFunc(e.Unwrap().Genres, func(x *schema.Genre) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// Countries returns a freshly allocated slice of wrappers over each
+// Country in the multi-edge.
+func (e *Film) Countries() []*Country {
+	out := make([]*Country, len(e.Unwrap().Countries))
+	for i, x := range e.Unwrap().Countries {
+		out[i] = &Country{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// CountriesSeq returns an iterator over the wrapped Countrys, avoiding
+// the allocation in Countries().
+func (e *Film) CountriesSeq() iter.Seq[*Country] {
+	return func(yield func(*Country) bool) {
+		for _, x := range e.Unwrap().Countries {
+			if !yield(&Country{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetCountries replaces the multi-edge with the given items.
+func (e *Film) SetCountries(items ...*Country) {
+	e.Unwrap().Countries = make([]*schema.Country, len(items))
+	for i, x := range items {
+		e.Unwrap().Countries[i] = x.Unwrap()
+	}
+}
+
+// AppendCountries appends items to the multi-edge.
+func (e *Film) AppendCountries(items ...*Country) {
+	for _, x := range items {
+		e.Unwrap().Countries = append(e.Unwrap().Countries, x.Unwrap())
+	}
+}
+
+// RemoveCountries removes elements with any of the given UIDs from the multi-edge.
+func (e *Film) RemoveCountries(uids ...string) {
+	e.Unwrap().Countries = slices.DeleteFunc(e.Unwrap().Countries, func(x *schema.Country) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// Ratings returns a freshly allocated slice of wrappers over each
+// Rating in the multi-edge.
+func (e *Film) Ratings() []*Rating {
+	out := make([]*Rating, len(e.Unwrap().Ratings))
+	for i, x := range e.Unwrap().Ratings {
+		out[i] = &Rating{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// RatingsSeq returns an iterator over the wrapped Ratings, avoiding
+// the allocation in Ratings().
+func (e *Film) RatingsSeq() iter.Seq[*Rating] {
+	return func(yield func(*Rating) bool) {
+		for _, x := range e.Unwrap().Ratings {
+			if !yield(&Rating{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetRatings replaces the multi-edge with the given items.
+func (e *Film) SetRatings(items ...*Rating) {
+	e.Unwrap().Ratings = make([]*schema.Rating, len(items))
+	for i, x := range items {
+		e.Unwrap().Ratings[i] = x.Unwrap()
+	}
+}
+
+// AppendRatings appends items to the multi-edge.
+func (e *Film) AppendRatings(items ...*Rating) {
+	for _, x := range items {
+		e.Unwrap().Ratings = append(e.Unwrap().Ratings, x.Unwrap())
+	}
+}
+
+// RemoveRatings removes elements with any of the given UIDs from the multi-edge.
+func (e *Film) RemoveRatings(uids ...string) {
+	e.Unwrap().Ratings = slices.DeleteFunc(e.Unwrap().Ratings, func(x *schema.Rating) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// ContentRatings returns a freshly allocated slice of wrappers over each
+// ContentRating in the multi-edge.
+func (e *Film) ContentRatings() []*ContentRating {
+	out := make([]*ContentRating, len(e.Unwrap().ContentRatings))
+	for i, x := range e.Unwrap().ContentRatings {
+		out[i] = &ContentRating{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// ContentRatingsSeq returns an iterator over the wrapped ContentRatings, avoiding
+// the allocation in ContentRatings().
+func (e *Film) ContentRatingsSeq() iter.Seq[*ContentRating] {
+	return func(yield func(*ContentRating) bool) {
+		for _, x := range e.Unwrap().ContentRatings {
+			if !yield(&ContentRating{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetContentRatings replaces the multi-edge with the given items.
+func (e *Film) SetContentRatings(items ...*ContentRating) {
+	e.Unwrap().ContentRatings = make([]*schema.ContentRating, len(items))
+	for i, x := range items {
+		e.Unwrap().ContentRatings[i] = x.Unwrap()
+	}
+}
+
+// AppendContentRatings appends items to the multi-edge.
+func (e *Film) AppendContentRatings(items ...*ContentRating) {
+	for _, x := range items {
+		e.Unwrap().ContentRatings = append(e.Unwrap().ContentRatings, x.Unwrap())
+	}
+}
+
+// RemoveContentRatings removes elements with any of the given UIDs from the multi-edge.
+func (e *Film) RemoveContentRatings(uids ...string) {
+	e.Unwrap().ContentRatings = slices.DeleteFunc(e.Unwrap().ContentRatings, func(x *schema.ContentRating) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// Starring returns a freshly allocated slice of wrappers over each
+// Performance in the multi-edge.
+func (e *Film) Starring() []*Performance {
+	out := make([]*Performance, len(e.Unwrap().Starring))
+	for i, x := range e.Unwrap().Starring {
+		out[i] = &Performance{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// StarringSeq returns an iterator over the wrapped Performances, avoiding
+// the allocation in Starring().
+func (e *Film) StarringSeq() iter.Seq[*Performance] {
+	return func(yield func(*Performance) bool) {
+		for _, x := range e.Unwrap().Starring {
+			if !yield(&Performance{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetStarring replaces the multi-edge with the given items.
+func (e *Film) SetStarring(items ...*Performance) {
+	e.Unwrap().Starring = make([]*schema.Performance, len(items))
+	for i, x := range items {
+		e.Unwrap().Starring[i] = x.Unwrap()
+	}
+}
+
+// AppendStarring appends items to the multi-edge.
+func (e *Film) AppendStarring(items ...*Performance) {
+	for _, x := range items {
+		e.Unwrap().Starring = append(e.Unwrap().Starring, x.Unwrap())
+	}
+}
+
+// RemoveStarring removes elements with any of the given UIDs from the multi-edge.
+func (e *Film) RemoveStarring(uids ...string) {
+	e.Unwrap().Starring = slices.DeleteFunc(e.Unwrap().Starring, func(x *schema.Performance) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// Directors returns a freshly allocated slice of wrappers over each
+// Director in the multi-edge.
+func (e *Film) Directors() []*Director {
+	out := make([]*Director, len(e.Unwrap().Directors))
+	for i, x := range e.Unwrap().Directors {
+		out[i] = &Director{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// DirectorsSeq returns an iterator over the wrapped Directors, avoiding
+// the allocation in Directors().
+func (e *Film) DirectorsSeq() iter.Seq[*Director] {
+	return func(yield func(*Director) bool) {
+		for _, x := range e.Unwrap().Directors {
+			if !yield(&Director{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetDirectors replaces the multi-edge with the given items.
+func (e *Film) SetDirectors(items ...*Director) {
+	e.Unwrap().Directors = make([]*schema.Director, len(items))
+	for i, x := range items {
+		e.Unwrap().Directors[i] = x.Unwrap()
+	}
+}
+
+// AppendDirectors appends items to the multi-edge.
+func (e *Film) AppendDirectors(items ...*Director) {
+	for _, x := range items {
+		e.Unwrap().Directors = append(e.Unwrap().Directors, x.Unwrap())
+	}
+}
+
+// RemoveDirectors removes elements with any of the given UIDs from the multi-edge.
+func (e *Film) RemoveDirectors(uids ...string) {
+	e.Unwrap().Directors = slices.DeleteFunc(e.Unwrap().Directors, func(x *schema.Director) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// WithFilmName sets the name field on a *Film.
+func WithFilmName(v string) typed.Option[Film] {
+	return func(e *Film) { e.SetName(v) }
+}
+
+// WithFilmInitialReleaseDate sets the initialReleaseDate field on a *Film.
+func WithFilmInitialReleaseDate(v time.Time) typed.Option[Film] {
+	return func(e *Film) { e.SetInitialReleaseDate(v) }
+}
+
+// WithFilmTagline sets the tagline field on a *Film.
+func WithFilmTagline(v string) typed.Option[Film] {
+	return func(e *Film) { e.SetTagline(v) }
+}
+
+// FilmClient provides CRUD/query operations over Film wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
+type FilmClient struct {
+	typed *typed.Client[schema.Film]
+}
+
+// NewFilmClient binds a FilmClient to conn.
+func NewFilmClient(conn modusgraph.Client) *FilmClient {
+	return &FilmClient{typed: typed.NewClient[schema.Film](conn)}
+}
+
+// Get loads the Film with the given UID and returns it wrapped.
+func (c *FilmClient) Get(ctx context.Context, uid string) (*Film, error) {
+	s, err := c.typed.Get(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	return WrapFilm(s), nil
+}
+
+// Add inserts the schema struct backing w.
+func (c *FilmClient) Add(ctx context.Context, w *Film) error {
+	return c.typed.Add(ctx, w.Unwrap())
+}
+
+// Update modifies the schema struct backing w (must have UID set).
+func (c *FilmClient) Update(ctx context.Context, w *Film) error {
+	return c.typed.Update(ctx, w.Unwrap())
+}
+
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
+func (c *FilmClient) Upsert(ctx context.Context, w *Film, predicates ...string) error {
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
+}
+
+// Delete removes the Film with the given UID.
+func (c *FilmClient) Delete(ctx context.Context, uid string) error {
+	return c.typed.Delete(ctx, uid)
+}
+
+// Query returns a wrapper-side query builder for Film.
+func (c *FilmClient) Query(ctx context.Context) *FilmQuery {
+	return &FilmQuery{typed: c.typed.Query(ctx)}
+}
+
+// FilmQuery is the wrapper-side fluent query builder for Film. Builder
+// methods return *FilmQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
+type FilmQuery struct {
+	typed *typed.Query[schema.Film]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *FilmQuery) Filter(filter string, params ...any) *FilmQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *FilmQuery) OrderAsc(clause string) *FilmQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *FilmQuery) OrderDesc(clause string) *FilmQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *FilmQuery) Limit(n int) *FilmQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *FilmQuery) Offset(n int) *FilmQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *FilmQuery) After(uid string) *FilmQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *FilmQuery) Cascade(predicates ...string) *FilmQuery {
+	q.typed.Cascade(predicates...)
+	return q
+}
+
+// WhereGenres keeps only Film records that have a genre
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *FilmQuery) WhereGenres(filter string, params ...any) *FilmQuery {
+	q.typed.WhereEdge("genre", filter, params...)
+	return q
+}
+
+// WhereCountries keeps only Film records that have a country
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *FilmQuery) WhereCountries(filter string, params ...any) *FilmQuery {
+	q.typed.WhereEdge("country", filter, params...)
+	return q
+}
+
+// WhereRatings keeps only Film records that have a rating
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *FilmQuery) WhereRatings(filter string, params ...any) *FilmQuery {
+	q.typed.WhereEdge("rating", filter, params...)
+	return q
+}
+
+// WhereContentRatings keeps only Film records that have a rated
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *FilmQuery) WhereContentRatings(filter string, params ...any) *FilmQuery {
+	q.typed.WhereEdge("rated", filter, params...)
+	return q
+}
+
+// WhereStarring keeps only Film records that have a starring
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *FilmQuery) WhereStarring(filter string, params ...any) *FilmQuery {
+	q.typed.WhereEdge("starring", filter, params...)
+	return q
+}
+
+// WhereDirectors keeps only Film records that have a directors
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *FilmQuery) WhereDirectors(filter string, params ...any) *FilmQuery {
+	q.typed.WhereEdge("directors", filter, params...)
+	return q
+}
+
+// Nodes executes the query and returns wrapped Film results.
+func (q *FilmQuery) Nodes() ([]*Film, error) {
+	recs, err := q.typed.Nodes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Film, len(recs))
+	for i := range recs {
+		out[i] = WrapFilm(&recs[i])
+	}
+	return out, nil
+}
+
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped Film, or nil if no rows matched.
+func (q *FilmQuery) First() (*Film, error) {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
+		return nil, err
+	}
+	return WrapFilm(s), nil
+}
+
+// IterNodes streams the query's results as wrapped Film values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *FilmQuery) IterNodes() iter.Seq2[*Film, error] {
+	return func(yield func(*Film, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapFilm(s), nil) {
+				return
+			}
+		}
+	}
+}

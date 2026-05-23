@@ -3,6 +3,11 @@
 package movies
 
 import (
+	"context"
+	"iter"
+	"slices"
+
+	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
@@ -43,3 +48,201 @@ func (e *ContentRating) DType() []string { return e.Unwrap().DType }
 
 // SetDType sets the entity's dgraph type list.
 func (e *ContentRating) SetDType(v []string) { e.Unwrap().DType = v }
+
+// Name returns the name field.
+func (e *ContentRating) Name() string { return e.Unwrap().Name }
+
+// SetName sets the name field.
+func (e *ContentRating) SetName(v string) { e.Unwrap().Name = v }
+
+// Films returns a freshly allocated slice of wrappers over each
+// Film in the multi-edge.
+func (e *ContentRating) Films() []*Film {
+	out := make([]*Film, len(e.Unwrap().Films))
+	for i, x := range e.Unwrap().Films {
+		out[i] = &Film{Wrapper: typed.WrapValue(x)}
+	}
+	return out
+}
+
+// FilmsSeq returns an iterator over the wrapped Films, avoiding
+// the allocation in Films().
+func (e *ContentRating) FilmsSeq() iter.Seq[*Film] {
+	return func(yield func(*Film) bool) {
+		for _, x := range e.Unwrap().Films {
+			if !yield(&Film{Wrapper: typed.WrapValue(x)}) {
+				return
+			}
+		}
+	}
+}
+
+// SetFilms replaces the multi-edge with the given items.
+func (e *ContentRating) SetFilms(items ...*Film) {
+	e.Unwrap().Films = make([]*schema.Film, len(items))
+	for i, x := range items {
+		e.Unwrap().Films[i] = x.Unwrap()
+	}
+}
+
+// AppendFilms appends items to the multi-edge.
+func (e *ContentRating) AppendFilms(items ...*Film) {
+	for _, x := range items {
+		e.Unwrap().Films = append(e.Unwrap().Films, x.Unwrap())
+	}
+}
+
+// RemoveFilms removes elements with any of the given UIDs from the multi-edge.
+func (e *ContentRating) RemoveFilms(uids ...string) {
+	e.Unwrap().Films = slices.DeleteFunc(e.Unwrap().Films, func(x *schema.Film) bool {
+		return x != nil && slices.Contains(uids, x.UID)
+	})
+}
+
+// WithContentRatingName sets the name field on a *ContentRating.
+func WithContentRatingName(v string) typed.Option[ContentRating] {
+	return func(e *ContentRating) { e.SetName(v) }
+}
+
+// ContentRatingClient provides CRUD/query operations over ContentRating wrapper values.
+// It composes over a typed.Client bound to the schema struct: reads wrap the
+// schema result, writes forward the wrapper's backing struct.
+type ContentRatingClient struct {
+	typed *typed.Client[schema.ContentRating]
+}
+
+// NewContentRatingClient binds a ContentRatingClient to conn.
+func NewContentRatingClient(conn modusgraph.Client) *ContentRatingClient {
+	return &ContentRatingClient{typed: typed.NewClient[schema.ContentRating](conn)}
+}
+
+// Get loads the ContentRating with the given UID and returns it wrapped.
+func (c *ContentRatingClient) Get(ctx context.Context, uid string) (*ContentRating, error) {
+	s, err := c.typed.Get(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	return WrapContentRating(s), nil
+}
+
+// Add inserts the schema struct backing w.
+func (c *ContentRatingClient) Add(ctx context.Context, w *ContentRating) error {
+	return c.typed.Add(ctx, w.Unwrap())
+}
+
+// Update modifies the schema struct backing w (must have UID set).
+func (c *ContentRatingClient) Update(ctx context.Context, w *ContentRating) error {
+	return c.typed.Update(ctx, w.Unwrap())
+}
+
+// Upsert inserts or updates the schema struct backing w, matching against
+// predicates. With no predicates, the first dgraph:"upsert" field wins.
+func (c *ContentRatingClient) Upsert(ctx context.Context, w *ContentRating, predicates ...string) error {
+	return c.typed.Upsert(ctx, w.Unwrap(), predicates...)
+}
+
+// Delete removes the ContentRating with the given UID.
+func (c *ContentRatingClient) Delete(ctx context.Context, uid string) error {
+	return c.typed.Delete(ctx, uid)
+}
+
+// Query returns a wrapper-side query builder for ContentRating.
+func (c *ContentRatingClient) Query(ctx context.Context) *ContentRatingQuery {
+	return &ContentRatingQuery{typed: c.typed.Query(ctx)}
+}
+
+// ContentRatingQuery is the wrapper-side fluent query builder for ContentRating. Builder
+// methods return *ContentRatingQuery for chaining; terminal methods (Nodes, First,
+// IterNodes) execute the query and wrap results.
+type ContentRatingQuery struct {
+	typed *typed.Query[schema.ContentRating]
+}
+
+// Filter adds a dgraph @filter expression. params bind to placeholders.
+func (q *ContentRatingQuery) Filter(filter string, params ...any) *ContentRatingQuery {
+	q.typed.Filter(filter, params...)
+	return q
+}
+
+// OrderAsc orders results ascending by clause.
+func (q *ContentRatingQuery) OrderAsc(clause string) *ContentRatingQuery {
+	q.typed.OrderAsc(clause)
+	return q
+}
+
+// OrderDesc orders results descending by clause.
+func (q *ContentRatingQuery) OrderDesc(clause string) *ContentRatingQuery {
+	q.typed.OrderDesc(clause)
+	return q
+}
+
+// Limit caps the number of results.
+func (q *ContentRatingQuery) Limit(n int) *ContentRatingQuery {
+	q.typed.Limit(n)
+	return q
+}
+
+// Offset skips the first n results.
+func (q *ContentRatingQuery) Offset(n int) *ContentRatingQuery {
+	q.typed.Offset(n)
+	return q
+}
+
+// After returns results with UID greater than uid (cursor pagination).
+func (q *ContentRatingQuery) After(uid string) *ContentRatingQuery {
+	q.typed.After(uid)
+	return q
+}
+
+// Cascade drops nodes missing any of the given predicates.
+func (q *ContentRatingQuery) Cascade(predicates ...string) *ContentRatingQuery {
+	q.typed.Cascade(predicates...)
+	return q
+}
+
+// WhereFilms keeps only ContentRating records that have a ~rated
+// edge whose target node matches the dgraph @filter expression. params bind to
+// $N placeholders. Multiple Where* calls are combined with AND.
+func (q *ContentRatingQuery) WhereFilms(filter string, params ...any) *ContentRatingQuery {
+	q.typed.WhereEdge("~rated", filter, params...)
+	return q
+}
+
+// Nodes executes the query and returns wrapped ContentRating results.
+func (q *ContentRatingQuery) Nodes() ([]*ContentRating, error) {
+	recs, err := q.typed.Nodes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*ContentRating, len(recs))
+	for i := range recs {
+		out[i] = WrapContentRating(&recs[i])
+	}
+	return out, nil
+}
+
+// First executes the query with an implicit Limit(1) and returns the first
+// wrapped ContentRating, or nil if no rows matched.
+func (q *ContentRatingQuery) First() (*ContentRating, error) {
+	s, err := q.typed.First()
+	if err != nil || s == nil {
+		return nil, err
+	}
+	return WrapContentRating(s), nil
+}
+
+// IterNodes streams the query's results as wrapped ContentRating values, paging
+// transparently. It is a terminal operation; see typed.Query.IterNodes.
+func (q *ContentRatingQuery) IterNodes() iter.Seq2[*ContentRating, error] {
+	return func(yield func(*ContentRating, error) bool) {
+		for s, err := range q.typed.IterNodes() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(WrapContentRating(s), nil) {
+				return
+			}
+		}
+	}
+}
