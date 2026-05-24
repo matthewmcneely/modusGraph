@@ -9,6 +9,7 @@ import (
 
 	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
+	"github.com/matthewmcneely/modusgraph/typed/filter"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
@@ -180,6 +181,30 @@ func (q *LocationQuery) After(uid string) *LocationQuery {
 // Cascade drops nodes missing any of the given predicates.
 func (q *LocationQuery) Cascade(predicates ...string) *LocationQuery {
 	q.typed.Cascade(predicates...)
+	return q
+}
+
+// ByName keeps only Location records whose name matches one
+// of filters. Terms within filters join with OR. Negated filters (Negated:true) become
+// NOT eq(...). An empty filters slice is a no-op.
+func (q *LocationQuery) ByName(filters ...filter.String) *LocationQuery {
+	var b filter.Builder
+	b.EqGroupString("name", filters)
+	if expr, params := b.Build(); expr != "" {
+		q.typed.Filter(expr, params...)
+	}
+	return q
+}
+
+// ByEmail keeps only Location records whose email matches one
+// of filters. Terms within filters join with OR. Negated filters (Negated:true) become
+// NOT eq(...). An empty filters slice is a no-op.
+func (q *LocationQuery) ByEmail(filters ...filter.String) *LocationQuery {
+	var b filter.Builder
+	b.EqGroupString("email", filters)
+	if expr, params := b.Build(); expr != "" {
+		q.typed.Filter(expr, params...)
+	}
 	return q
 }
 

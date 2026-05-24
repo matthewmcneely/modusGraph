@@ -10,6 +10,7 @@ import (
 
 	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
+	"github.com/matthewmcneely/modusgraph/typed/filter"
 
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
 )
@@ -488,6 +489,18 @@ func (q *FilmQuery) WhereStarring(filter string, params ...any) *FilmQuery {
 // $N placeholders. Multiple Where* calls are combined with AND.
 func (q *FilmQuery) WhereDirectors(filter string, params ...any) *FilmQuery {
 	q.typed.WhereEdge("directors", filter, params...)
+	return q
+}
+
+// ByName keeps only Film records whose name matches one
+// of filters. Terms within filters join with OR. Negated filters (Negated:true) become
+// NOT eq(...). An empty filters slice is a no-op.
+func (q *FilmQuery) ByName(filters ...filter.String) *FilmQuery {
+	var b filter.Builder
+	b.EqGroupString("name", filters)
+	if expr, params := b.Build(); expr != "" {
+		q.typed.Filter(expr, params...)
+	}
 	return q
 }
 

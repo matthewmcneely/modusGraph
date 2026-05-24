@@ -78,7 +78,7 @@ func TestGenImports_EntitySide(t *testing.T) {
 
 func TestGenImports_ClientSide(t *testing.T) {
 	g := newGenImports()
-	g.addClientSideImports("example.com/proj/schema")
+	g.addClientSideImports("example.com/proj/schema", model.Entity{})
 	block := g.block()
 	for _, want := range []string{
 		`"context"`,

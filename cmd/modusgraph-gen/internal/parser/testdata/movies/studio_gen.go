@@ -10,6 +10,7 @@ import (
 
 	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
+	"github.com/matthewmcneely/modusgraph/typed/filter"
 
 	dg "github.com/dolan-in/dgman/v2"
 	"github.com/matthewmcneely/modusgraph/cmd/modusgraph-gen/internal/parser/testdata/movies/schema"
@@ -546,6 +547,18 @@ func (q *StudioQuery) WhereFilms(filter string, params ...any) *StudioQuery {
 // $N placeholders. Multiple Where* calls are combined with AND.
 func (q *StudioQuery) WhereAdvisors(filter string, params ...any) *StudioQuery {
 	q.typed.WhereEdge("advisors", filter, params...)
+	return q
+}
+
+// ByName keeps only Studio records whose name matches one
+// of filters. Terms within filters join with OR. Negated filters (Negated:true) become
+// NOT eq(...). An empty filters slice is a no-op.
+func (q *StudioQuery) ByName(filters ...filter.String) *StudioQuery {
+	var b filter.Builder
+	b.EqGroupString("name", filters)
+	if expr, params := b.Build(); expr != "" {
+		q.typed.Filter(expr, params...)
+	}
 	return q
 }
 
