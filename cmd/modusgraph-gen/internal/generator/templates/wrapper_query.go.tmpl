@@ -59,6 +59,20 @@ func (q *{{ $E }}Query) Where{{ accessorName . }}(filter string, params ...any) 
 	return q
 }
 {{- end }}
+{{- range filterableScalarFields .Entity.Fields }}
+
+// By{{ accessorName . }} keeps only {{ $E }} records whose {{ .Predicate }} matches one
+// of filters. Terms within filters join with OR. Negated filters (Negated:true) become
+// NOT eq(...). An empty filters slice is a no-op.
+func (q *{{ $E }}Query) By{{ accessorName . }}(filters ...filter.{{ filterTermType . }}) *{{ $E }}Query {
+	var b filter.Builder
+	b.{{ filterGroupMethod . }}("{{ .Predicate }}", filters)
+	if expr, params := b.Build(); expr != "" {
+		q.typed.Filter(expr, params...)
+	}
+	return q
+}
+{{- end }}
 
 // Nodes executes the query and returns wrapped {{ $E }} results.
 func (q *{{ $E }}Query) Nodes() ([]*{{ $E }}, error) {

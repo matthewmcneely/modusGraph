@@ -272,7 +272,7 @@ func Generate(pkg *model.Package, cfg Config) error {
 			// Default layout: all five fragments in one file.
 			imps := newGenImports()
 			imps.addEntitySideImports(entity, pkg.Imports, schemaImportPath)
-			imps.addClientSideImports(schemaImportPath)
+			imps.addClientSideImports(schemaImportPath, entity)
 			content := assembleGenFile(entityPkg, imps.block(),
 				entityBody, accessorsBody, optionsBody, clientBody, queryBody)
 			if err := writeGoFile(filepath.Join(cfg.EntityDir, snake+"_gen.go"), content); err != nil {
@@ -292,7 +292,7 @@ func Generate(pkg *model.Package, cfg Config) error {
 		}
 
 		clientImps := newGenImports()
-		clientImps.addClientSideImports(schemaImportPath)
+		clientImps.addClientSideImports(schemaImportPath, entity)
 		clientContent := assembleGenFile(entityClientPkg, clientImps.block(), clientBody, queryBody)
 		if err := writeGoFile(filepath.Join(cfg.EntityClientDir, snake+"_gen.go"), clientContent); err != nil {
 			return err
@@ -802,13 +802,17 @@ func (g *genImports) addEntitySideImports(e model.Entity, imports map[string]str
 }
 
 // addClientSideImports adds the imports needed by the wrapper-client and
-// wrapper-query fragments. These fragments are emitted for every entity and
-// unconditionally reference all five of these imports.
-func (g *genImports) addClientSideImports(schemaPath string) {
+// wrapper-query fragments. The wrapper-query fragment also emits By<Field>
+// methods for filterable scalar predicates; the typed/filter package is
+// added only when the entity has at least one such field.
+func (g *genImports) addClientSideImports(schemaPath string, entity model.Entity) {
 	g.std["context"] = true
 	g.std["iter"] = true
 	g.mg["github.com/matthewmcneely/modusgraph"] = true
 	g.mg["github.com/matthewmcneely/modusgraph/typed"] = true
+	if len(filterableScalarFields(entity.Fields)) > 0 {
+		g.mg["github.com/matthewmcneely/modusgraph/typed/filter"] = true
+	}
 	g.other[schemaPath] = ImportSpec{Path: schemaPath}
 }
 
