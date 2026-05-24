@@ -1217,3 +1217,141 @@ type Studio struct {
 		t.Errorf("CLI imports the truncated (wrong) schema path example.com/proj/schema")
 	}
 }
+
+// TestGenerate_WrapperQueryByField checks that <Entity>Query gains a
+// By<Field> method for each indexed scalar field whose Go type maps to a
+// known filter type (string, scalars.UUID), uses the matching filter import,
+// and skips unindexed scalars + unsupported types.
+func TestGenerate_WrapperQueryByField(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"),
+		[]byte("module example.com/test\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+	// Widget has:
+	//   - Title: string with index=hash → expect ByTitle(filter.String)
+	//   - Slug: string with NO index → expect no ByMethod
+	//   - Count: int64 with index=int → expect no method (v1 skips non-string types)
+	src := "package schema\n\n" +
+		"type Widget struct {\n" +
+		"\tUID   string   `json:\"uid,omitempty\"`\n" +
+		"\tDType []string `json:\"dgraph.type,omitempty\"`\n" +
+		"\tTitle string   `json:\"title,omitempty\" dgraph:\"index=hash\"`\n" +
+		"\tSlug  string   `json:\"slug,omitempty\"`\n" +
+		"\tCount int64    `json:\"count,omitempty\" dgraph:\"index=int\"`\n" +
+		"}\n"
+	if err := os.WriteFile(filepath.Join(srcDir, "schema.go"), []byte(src), 0o644); err != nil {
+		t.Fatalf("writing schema.go: %v", err)
+	}
+	pkg, err := parser.Parse(srcDir)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	entityDir := filepath.Join(t.TempDir(), "entity")
+	if err := os.MkdirAll(entityDir, 0o755); err != nil {
+		t.Fatalf("mkdir entityDir: %v", err)
+	}
+	cfg := Config{
+		SchemaDir:               srcDir,
+		SchemaClientDir:         srcDir,
+		EntityDir:               entityDir,
+		EntityClientDir:         entityDir,
+		EntityPackageName:       "entity",
+		EntityClientPackageName: "entity",
+		SchemaClientPackageName: "schema",
+		SchemaAlias:             "schema",
+		SchemaImportPath:        "example.com/test",
+		CLIName:                 "test",
+	}
+	if err := Generate(pkg, cfg); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	widget := mustReadGen(t, entityDir, "widget_gen.go")
+
+	// Title is indexed and string-typed → ByTitle is emitted, takes filter.String.
+	for _, want := range []string{
+		`func (q *WidgetQuery) ByTitle(filters ...filter.String) *WidgetQuery`,
+		`b.EqGroupString("title", filters)`,
+		`"github.com/matthewmcneely/modusgraph/typed/filter"`,
+	} {
+		if !strings.Contains(widget, want) {
+			t.Errorf("widget_gen.go missing %q; got:\n%s", want, widget)
+		}
+	}
+
+	// Slug is string but unindexed → no BySlug.
+	if strings.Contains(widget, "BySlug") {
+		t.Errorf("widget_gen.go should NOT have a BySlug method (Slug is unindexed); got:\n%s", widget)
+	}
+
+	// Count is int64 → unsupported in v1, no ByCount even though it's indexed.
+	if strings.Contains(widget, "ByCount") {
+		t.Errorf("widget_gen.go should NOT have a ByCount method (int64 unsupported in v1); got:\n%s", widget)
+	}
+}
+
+// TestGenerate_WrapperQueryByField_UUIDType checks that a scalars.UUID-typed
+// indexed field gets a By<Field> method using filter.UUID.
+func TestGenerate_WrapperQueryByField_UUIDType(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"),
+		[]byte("module example.com/test\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+	// A minimal scalars package providing the UUID alias the field references.
+	scalarsDir := filepath.Join(srcDir, "scalars")
+	if err := os.MkdirAll(scalarsDir, 0o755); err != nil {
+		t.Fatalf("mkdir scalars: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(scalarsDir, "scalars.go"),
+		[]byte("package scalars\n\ntype UUID = string\n"), 0o644); err != nil {
+		t.Fatalf("writing scalars.go: %v", err)
+	}
+	src := "package schema\n\n" +
+		"import \"example.com/test/scalars\"\n\n" +
+		"type Widget struct {\n" +
+		"\tUID   string       `json:\"uid,omitempty\"`\n" +
+		"\tDType []string     `json:\"dgraph.type,omitempty\"`\n" +
+		"\tID    scalars.UUID `json:\"id,omitempty\" dgraph:\"index=hash upsert\"`\n" +
+		"}\n"
+	if err := os.WriteFile(filepath.Join(srcDir, "schema.go"), []byte(src), 0o644); err != nil {
+		t.Fatalf("writing schema.go: %v", err)
+	}
+	pkg, err := parser.Parse(srcDir)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	entityDir := filepath.Join(t.TempDir(), "entity")
+	if err := os.MkdirAll(entityDir, 0o755); err != nil {
+		t.Fatalf("mkdir entityDir: %v", err)
+	}
+	cfg := Config{
+		SchemaDir:               srcDir,
+		SchemaClientDir:         srcDir,
+		EntityDir:               entityDir,
+		EntityClientDir:         entityDir,
+		EntityPackageName:       "entity",
+		EntityClientPackageName: "entity",
+		SchemaClientPackageName: "schema",
+		SchemaAlias:             "schema",
+		SchemaImportPath:        "example.com/test",
+		CLIName:                 "test",
+	}
+	if err := Generate(pkg, cfg); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	widget := mustReadGen(t, entityDir, "widget_gen.go")
+
+	// Note: the UID field is recognised as the entity UID and skipped; the
+	// scalars.UUID-typed ID field is what the test exercises.
+	for _, want := range []string{
+		`func (q *WidgetQuery) ByID(filters ...filter.UUID) *WidgetQuery`,
+		`b.EqGroupUUID("id", filters)`,
+	} {
+		if !strings.Contains(widget, want) {
+			t.Errorf("widget_gen.go missing %q; got:\n%s", want, widget)
+		}
+	}
+}
