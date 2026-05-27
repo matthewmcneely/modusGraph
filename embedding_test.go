@@ -202,6 +202,64 @@ func TestUpdateWithEmbedding(t *testing.T) {
 	require.Equal(t, "updated text", provider.callLog[1])
 }
 
+// TestPartialUpdatePreservesShadowVector is a regression test for the
+// omitempty-aware skip in injectShadowVectors. A partial Update of a struct
+// that contains a SimString field (e.g. setting only UID + a non-SimString
+// field) must not delete the existing shadow vector. The primary predicate
+// is preserved by omitempty — Dgraph never sees the SimString in the mutation
+// NQuads — so the shadow path must follow the same lifecycle.
+//
+// Real-world failure that motivated this test: codebase-graph's indexer
+// upserts a Function with its doc comment in pass A, then issues a partial
+// `cli.Update(&Function{UID, Calls})` in pass B to add CALLS edges. Without
+// the omitempty skip, every pass-B Update silently wiped the doc-comment
+// vector written in pass A, leaving the shadow predicate sparse and breaking
+// similarity ranking once `similar_to`'s k saturated the candidate count.
+func TestPartialUpdatePreservesShadowVector(t *testing.T) {
+	const dims = 4
+	provider := newMockProvider(dims)
+	origVec := []float32{1.0, 0.0, 0.0, 0.0}
+	provider.register("the original description", origVec)
+
+	client, cleanup := createEmbeddingClient(t, provider)
+	defer cleanup()
+	ctx := context.Background()
+
+	p := &embeddableProduct{Name: "Thing", Description: "the original description"}
+	require.NoError(t, client.Insert(ctx, p))
+	require.NotEmpty(t, p.UID)
+	require.Len(t, provider.callLog, 1, "Insert should embed once")
+
+	findByOrigVec := func(t *testing.T) string {
+		t.Helper()
+		dgoClient, cleanupDgo, err := client.DgraphClient()
+		require.NoError(t, err)
+		defer cleanupDgo()
+		var result embeddableProduct
+		tx := dg.NewReadOnlyTxn(dgoClient)
+		err = mg.SimilarTo(tx, &result, "description", origVec, 1).Scan()
+		require.NoError(t, err)
+		return result.UID
+	}
+
+	// Sanity: shadow vec is reachable after Insert.
+	require.Equal(t, p.UID, findByOrigVec(t),
+		"shadow vec should be present after Insert")
+
+	// Partial Update: only UID + a non-SimString field. Description is the
+	// zero value and is omitted from the mutation by omitempty — the primary
+	// predicate is preserved, and the shadow vec must be too.
+	require.NoError(t, client.Update(ctx, &embeddableProduct{UID: p.UID, Name: "Thing v2"}))
+
+	// Provider must NOT be re-invoked — there's nothing to embed.
+	require.Len(t, provider.callLog, 1,
+		"partial Update must not re-embed when SimString is unset")
+
+	// Shadow vec must survive the partial update — this is the regression assertion.
+	require.Equal(t, p.UID, findByOrigVec(t),
+		"shadow vec must survive partial Update of unrelated fields")
+}
+
 func TestSimilarToQuery(t *testing.T) {
 	const dims = 5
 	provider := newMockProvider(dims)
