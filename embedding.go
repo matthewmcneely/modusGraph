@@ -382,16 +382,35 @@ func injectShadowVectors(ctx context.Context,
 			}
 
 			jsonTag := field.Tag.Get("json")
-			predicate := strings.Split(jsonTag, ",")[0]
+			jsonParts := strings.Split(jsonTag, ",")
+			predicate := jsonParts[0]
 			if predicate == "" {
 				predicate = field.Name
+			}
+			hasOmitempty := false
+			for _, opt := range jsonParts[1:] {
+				if opt == "omitempty" {
+					hasOmitempty = true
+					break
+				}
 			}
 			vecPred := vecShadowPredicate(predicate)
 
 			textVal := string(sv.Field(i).Interface().(SimString))
 			_, _, threshold := parseEmbeddingTag(dgraphTag)
 
-			// Below threshold (or empty): delete the shadow vector to avoid stale data.
+			// Empty + omitempty means the caller didn't set this field on a partial
+			// update. The primary predicate is omitted from the JSON mutation (so
+			// Dgraph never sees `fn_doc` and the existing string is preserved); the
+			// shadow vector must follow the same lifecycle, otherwise partial Updates
+			// (e.g. setting just an edge predicate) silently wipe vectors written by
+			// a prior Insert/Upsert. To explicitly clear a SimString, drop omitempty
+			// so the empty value reaches Dgraph and we delete the shadow vec below.
+			if textVal == "" && hasOmitempty {
+				continue
+			}
+
+			// Below threshold (or explicitly cleared): delete the shadow vector to avoid stale data.
 			if textVal == "" || (threshold > 0 && len([]rune(textVal)) < threshold) {
 				delNquads = append(delNquads, &api.NQuad{
 					Subject:     uid,
