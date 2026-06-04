@@ -486,6 +486,7 @@ func (c client) validateStruct(ctx context.Context, obj any) error {
 // Insert implements inserting an object or slice of objects in the database.
 // Passed object must be a pointer to a struct with appropriate dgraph tags.
 func (c client) Insert(ctx context.Context, obj any) error {
+	obj = UnwrapSchema(obj)
 	// Validate struct before insertion
 	if err := c.validateStruct(ctx, obj); err != nil {
 		return err
@@ -503,6 +504,7 @@ func (c client) Insert(ctx context.Context, obj any) error {
 //
 // Deprecated: InsertRaw is now identical to Insert. Use Insert instead.
 func (c client) InsertRaw(ctx context.Context, obj any) error {
+	obj = UnwrapSchema(obj)
 	// Validate struct before insertion
 	if err := c.validateStruct(ctx, obj); err != nil {
 		return err
@@ -518,6 +520,7 @@ func (c client) InsertRaw(ctx context.Context, obj any) error {
 // to be used for upserting. If none are specified, the first predicate with the `upsert` tag
 // will be used.
 func (c client) Upsert(ctx context.Context, obj any, predicates ...string) error {
+	obj = UnwrapSchema(obj)
 	// Validate struct before upsert
 	if err := c.validateStruct(ctx, obj); err != nil {
 		return err
@@ -531,6 +534,7 @@ func (c client) Upsert(ctx context.Context, obj any, predicates ...string) error
 // Update implements updating an existing object in the database.
 // Passed object must be a pointer to a struct.
 func (c client) Update(ctx context.Context, obj any) error {
+	obj = UnwrapSchema(obj)
 	// Validate struct before update
 	if err := c.validateStruct(ctx, obj); err != nil {
 		return err
@@ -557,6 +561,7 @@ func (c client) Delete(ctx context.Context, uids []string) error {
 // Get implements retrieving a single object by its UID.
 // Passed object must be a pointer to a struct.
 func (c client) Get(ctx context.Context, obj any, uid string) error {
+	obj = UnwrapSchema(obj)
 	err := checkPointer(obj)
 	if err != nil {
 		return err
@@ -575,6 +580,7 @@ func (c client) Get(ctx context.Context, obj any, uid string) error {
 // Returns a *dg.Query that can be further refined with filters, pagination, etc.
 // The returned query will be limited to the maximum number of edges specified in the options.
 func (c client) Query(ctx context.Context, model any) *dg.Query {
+	model = UnwrapSchema(model)
 	client, err := c.pool.get()
 	if err != nil {
 		return nil
@@ -590,6 +596,9 @@ func (c client) Query(ctx context.Context, model any) *dg.Query {
 // If any object contains SimString fields tagged `dgraph:"embedding"`, the
 // corresponding shadow float32vector predicates (<field>__vec) are also registered.
 func (c client) UpdateSchema(ctx context.Context, obj ...any) error {
+	for i := range obj {
+		obj[i] = UnwrapSchema(obj[i])
+	}
 	dgClient, err := c.pool.get()
 	if err != nil {
 		c.logger.Error(err, "Failed to get client from pool")
