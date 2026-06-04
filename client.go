@@ -23,6 +23,8 @@ import (
 	"github.com/go-playground/validator/v10"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/matthewmcneely/modusgraph/load"
 )
 
 // Client provides an interface for ModusGraph operations
@@ -87,6 +89,10 @@ type Client interface {
 	// DgraphClient returns a gRPC Dgraph client from the connection pool and a cleanup function.
 	// The cleanup function must be called when finished with the client to return it to the pool.
 	DgraphClient() (*dgo.Dgraph, func(), error)
+
+	// LoadData bulk-loads RDF or JSON data files from dataDir into the database,
+	// configured by the given options. It replaces the previous live-loader.
+	LoadData(ctx context.Context, dataDir string, opts ...load.Option) error
 }
 
 const (
