@@ -19,3 +19,16 @@ go.work.sum
 .env
 
 cpu_profile.prof
+
+# IDE config
+.idea/
+.vscode/
+
+# Built query binary
+/query
+
+# Benchmark result files
+load_test/*.json
+
+# git worktrees
+.worktrees/
