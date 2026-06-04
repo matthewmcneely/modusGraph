@@ -87,6 +87,9 @@ type Client interface {
 	// DgraphClient returns a gRPC Dgraph client from the connection pool and a cleanup function.
 	// The cleanup function must be called when finished with the client to return it to the pool.
 	DgraphClient() (*dgo.Dgraph, func(), error)
+
+	// WithRetry executes fn, retrying on aborted transactions per policy.
+	WithRetry(ctx context.Context, policy RetryPolicy, fn func() error) error
 }
 
 const (
