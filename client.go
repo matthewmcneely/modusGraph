@@ -127,6 +127,7 @@ type clientOptions struct {
 	maxEdgeTraversal  int
 	cacheSizeMB       int
 	maxRecvMsgSize    int
+	grpcDialOptions   []grpc.DialOption
 	namespace         string
 	logger            logr.Logger
 	validator         StructValidator
@@ -189,6 +190,18 @@ func WithCacheSizeMB(size int) ClientOpt {
 func WithMaxRecvMsgSize(size int) ClientOpt {
 	return func(o *clientOptions) {
 		o.maxRecvMsgSize = size
+	}
+}
+
+// WithGRPCDialOption appends a custom grpc.DialOption applied when opening a
+// remote (dgraph://) connection. It is the general escape hatch for gRPC dial
+// settings the dedicated options do not cover — TLS transport credentials,
+// interceptors, keepalive parameters, and so on. May be supplied multiple
+// times; the options are applied in the order given, after any option implied
+// by WithMaxRecvMsgSize. Ignored for embedded (file://) URIs.
+func WithGRPCDialOption(opt grpc.DialOption) ClientOpt {
+	return func(o *clientOptions) {
+		o.grpcDialOptions = append(o.grpcDialOptions, opt)
 	}
 }
 
@@ -282,16 +295,26 @@ func NewClient(uri string, opts ...ClientOpt) (Client, error) {
 			client.logger.V(2).Info("Opening new Dgraph connection", "uri", uri)
 			return dgo.Open(uri)
 		}
+		// Assemble any custom gRPC dial options. maxRecvMsgSize is folded
+		// into the same mechanism as WithGRPCDialOption so the two compose.
+		var dialOpts []grpc.DialOption
 		if options.maxRecvMsgSize > 0 {
+			dialOpts = append(dialOpts,
+				grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(options.maxRecvMsgSize)))
+		}
+		dialOpts = append(dialOpts, options.grpcDialOptions...)
+		if len(dialOpts) > 0 {
 			endpoint, dgoOpts, err := parseDgraphURI(uri)
 			if err != nil {
 				return nil, err
 			}
-			dgoOpts = append(dgoOpts, dgo.WithGrpcOption(
-				grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(options.maxRecvMsgSize))))
+			for _, opt := range dialOpts {
+				dgoOpts = append(dgoOpts, dgo.WithGrpcOption(opt))
+			}
 			factory = func() (*dgo.Dgraph, error) {
 				client.logger.V(2).Info("Opening new Dgraph connection",
-					"uri", uri, "maxRecvMsgSize", options.maxRecvMsgSize)
+					"uri", uri, "maxRecvMsgSize", options.maxRecvMsgSize,
+					"grpcDialOptions", len(options.grpcDialOptions))
 				return dgo.NewClient(endpoint, dgoOpts...)
 			}
 		}
@@ -433,9 +456,9 @@ func (c client) key() string {
 	if c.options.embeddingProvider != nil {
 		embeddingKey = fmt.Sprintf("%p", c.options.embeddingProvider)
 	}
-	return fmt.Sprintf("%s:%t:%d:%d:%d:%d:%s:%s:%s", c.uri, c.options.autoSchema, c.options.poolSize,
+	return fmt.Sprintf("%s:%t:%d:%d:%d:%d:%s:%s:%s:%d", c.uri, c.options.autoSchema, c.options.poolSize,
 		c.options.maxEdgeTraversal, c.options.cacheSizeMB, c.options.maxRecvMsgSize,
-		c.options.namespace, validatorKey, embeddingKey)
+		c.options.namespace, validatorKey, embeddingKey, len(c.options.grpcDialOptions))
 }
 
 // embeddingProvider implements the embeddingClient interface, exposing the
