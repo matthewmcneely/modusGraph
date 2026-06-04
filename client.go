@@ -69,6 +69,12 @@ type Client interface {
 	// Pass one or more objects that will be used as templates for the schema.
 	UpdateSchema(context.Context, ...any) error
 
+	// AlterSchema applies a raw Dgraph Schema Definition Language string directly,
+	// bypassing the object-template inference of UpdateSchema. Use it when you need
+	// full control over predicate types, indexes, and directives — for example,
+	// schema migrations that declare predicates no Go type models yet.
+	AlterSchema(ctx context.Context, schema string) error
+
 	// GetSchema retrieves the current schema definition from the database.
 	// Returns a string containing the full schema in Dgraph Schema Definition Language.
 	GetSchema(context.Context) (string, error)
@@ -640,6 +646,19 @@ func (c client) Query(ctx context.Context, model any) *dg.Query {
 
 	txn := dg.NewReadOnlyTxnContext(ctx, client)
 	return txn.Get(model).All(c.options.maxEdgeTraversal)
+}
+
+// AlterSchema applies a raw DQL schema string directly via Dgraph Alter,
+// without the object-template inference performed by UpdateSchema.
+func (c client) AlterSchema(ctx context.Context, schema string) error {
+	dgClient, err := c.pool.get()
+	if err != nil {
+		c.logger.Error(err, "Failed to get client from pool")
+		return err
+	}
+	defer c.pool.put(dgClient)
+
+	return dgClient.Alter(ctx, &api.Operation{Schema: schema})
 }
 
 // UpdateSchema implements updating the Dgraph schema. Pass one or more

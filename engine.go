@@ -271,6 +271,25 @@ func (engine *Engine) dropData(ctx context.Context, ns *Namespace) error {
 	return nil
 }
 
+// dropPredicate deletes a single predicate (and its data) from the embedded
+// engine — the in-process equivalent of a gRPC Alter with DropAttr set.
+func (engine *Engine) dropPredicate(ctx context.Context, ns *Namespace, pred string) error {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+
+	if !engine.isOpen.Load() {
+		return ErrClosedEngine
+	}
+
+	startTs, err := engine.z.nextTs()
+	if err != nil {
+		return err
+	}
+
+	nsAttr := x.NamespaceAttr(ns.ID(), pred)
+	return posting.DeletePredicate(ctx, nsAttr, startTs)
+}
+
 func (engine *Engine) alterSchema(ctx context.Context, ns *Namespace, sch string) error {
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()

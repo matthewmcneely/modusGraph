@@ -146,6 +146,12 @@ func (c *embeddedDgraphClient) Alter(
 		}
 		return &api.Payload{}, nil
 	}
+	if in.DropAttr != "" {
+		if err := c.engine.dropPredicate(ctx, c.ns, in.DropAttr); err != nil {
+			return nil, err
+		}
+		return &api.Payload{}, nil
+	}
 	if in.Schema != "" {
 		if err := c.engine.alterSchema(ctx, c.ns, in.Schema); err != nil {
 			return nil, err
