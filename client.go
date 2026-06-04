@@ -109,6 +109,20 @@ type StructValidator interface {
 	StructCtx(ctx context.Context, s interface{}) error
 }
 
+// SelfValidator lets a type drive its own validation. When a value passed to
+// Insert, Upsert, or Update implements SelfValidator, the client calls
+// ValidateWith instead of handing the value straight to the configured
+// StructValidator.
+//
+// This is the seam for validation that struct tags cannot express on their own:
+// cross-field rules (one field constrained by another), conditional rules,
+// checks on computed or setter-derived values, and broader business rules.
+// ValidateWith receives the configured StructValidator, so an implementation can
+// still run ordinary tag-based validation and then layer custom logic on top.
+type SelfValidator interface {
+	ValidateWith(ctx context.Context, v StructValidator) error
+}
+
 // clientOptions holds configuration options for the client.
 //
 // autoSchema: whether to automatically manage the schema.
@@ -472,15 +486,31 @@ func (c client) validateStruct(ctx context.Context, obj any) error {
 				}
 				elem = elem.Elem()
 			}
-			if err := c.options.validator.StructCtx(ctx, elem.Interface()); err != nil {
+			if err := c.validateOne(ctx, elem); err != nil {
 				return err
 			}
 		}
 	} else {
-		return c.options.validator.StructCtx(ctx, obj)
+		return c.validateOne(ctx, val)
 	}
 
 	return nil
+}
+
+// validateOne validates a single struct value. If the value (or its address)
+// implements SelfValidator, validation is delegated to ValidateWith so the type
+// can apply custom rules — cross-field, conditional, computed-value, or other
+// logic beyond struct tags. Otherwise the value is validated by the configured
+// StructValidator as usual.
+func (c client) validateOne(ctx context.Context, val reflect.Value) error {
+	iface := val.Interface()
+	if val.CanAddr() {
+		iface = val.Addr().Interface()
+	}
+	if sv, ok := iface.(SelfValidator); ok {
+		return sv.ValidateWith(ctx, c.options.validator)
+	}
+	return c.options.validator.StructCtx(ctx, iface)
 }
 
 // Insert implements inserting an object or slice of objects in the database.
