@@ -46,6 +46,11 @@ type Client interface {
 	// will be used.
 	Upsert(context.Context, any, ...string) error
 
+	// LoadOrStore stores the object only if no node matches the upsert
+	// predicates, returning loaded=true when an existing node already matched
+	// (the object is then populated from it). Insert-if-absent.
+	LoadOrStore(ctx context.Context, obj any, predicates ...string) (loaded bool, err error)
+
 	// Update modifies an existing object in the database.
 	// The object must be a pointer to a struct and must have a UID field set.
 	Update(context.Context, any) error
@@ -620,6 +625,36 @@ func (c client) Upsert(ctx context.Context, obj any, predicates ...string) error
 	return c.process(ctx, obj, "Upsert", func(tx *dg.TxnContext, obj any) ([]string, error) {
 		return tx.Upsert(obj, predicates...)
 	})
+}
+
+// LoadOrStore stores obj only if no node already matches the upsert predicates,
+// reporting whether one already existed (loaded == true). Built on dgman
+// MutateOrGet, which returns the UIDs of newly created nodes only: an empty
+// result means an existing node matched, and obj is populated with its fields.
+// With no predicates, the first field tagged dgraph:"upsert" is used.
+func (c client) LoadOrStore(ctx context.Context, obj any, predicates ...string) (loaded bool, err error) {
+	obj = UnwrapSchema(obj)
+	if err := c.validateStruct(ctx, obj); err != nil {
+		return false, err
+	}
+
+	dgClient, err := c.pool.get()
+	if err != nil {
+		c.logger.Error(err, "Failed to get client from pool")
+		return false, err
+	}
+	defer c.pool.put(dgClient)
+
+	tx := dg.NewTxnContext(ctx, dgClient).SetCommitNow()
+	uids, err := tx.MutateOrGet(obj, predicates...)
+	if err != nil {
+		if uniqueErr := parseUniqueError(err); uniqueErr != nil {
+			return false, uniqueErr
+		}
+		return false, err
+	}
+	// MutateOrGet returns created UIDs only; empty => an existing node matched.
+	return len(uids) == 0, nil
 }
 
 // Update implements updating an existing object in the database.
