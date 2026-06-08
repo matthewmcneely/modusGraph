@@ -7,6 +7,7 @@ package typed_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/matthewmcneely/modusgraph"
@@ -85,5 +86,40 @@ func TestTypedLoadAndDelete(t *testing.T) {
 	}
 	if loaded || rec != nil {
 		t.Fatalf("second: want (nil, false), got (%v, %v)", rec, loaded)
+	}
+}
+
+func TestLoadAndDeleteSingleWinner(t *testing.T) {
+	c := typed.NewClient[state](newTypedConn(t))
+	ctx := context.Background()
+	if err := c.Add(ctx, &state{State: "race", Secret: "one"}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	const racers = 8
+	var wg sync.WaitGroup
+	wins := make([]bool, racers)
+	wg.Add(racers)
+	for i := 0; i < racers; i++ {
+		go func(i int) {
+			defer wg.Done()
+			_, loaded, err := c.LoadAndDelete(ctx, "race", "state")
+			if err != nil {
+				t.Errorf("racer %d: %v", i, err)
+				return
+			}
+			wins[i] = loaded
+		}(i)
+	}
+	wg.Wait()
+
+	won := 0
+	for _, w := range wins {
+		if w {
+			won++
+		}
+	}
+	if won != 1 {
+		t.Fatalf("want exactly one winner, got %d", won)
 	}
 }
