@@ -57,6 +57,20 @@ func (c *Client[T]) Upsert(ctx context.Context, rec *T, predicates ...string) (e
 	return c.conn.Upsert(ctx, rec, predicates...)
 }
 
+// LoadOrStore stores rec only if no node matches the upsert predicates,
+// returning the resulting record and loaded=true when one already existed.
+// Insert-if-absent (compare sync.Map.LoadOrStore). With no predicates, the
+// first field tagged dgraph:"upsert" is used.
+func (c *Client[T]) LoadOrStore(ctx context.Context, rec *T, predicates ...string) (out *T, loaded bool, err error) {
+	ctx, span := tracer.StartSpan(ctx, "loadOrStore", entityName[T]())
+	defer func() { span.End(err) }()
+	loaded, err = c.conn.LoadOrStore(ctx, rec, predicates...)
+	if err != nil {
+		return nil, false, err
+	}
+	return rec, loaded, nil
+}
+
 // Delete removes the T with the given UID.
 func (c *Client[T]) Delete(ctx context.Context, uid string) (err error) {
 	ctx, span := currentTracer().StartSpan(ctx, "delete", entityName[T]())
