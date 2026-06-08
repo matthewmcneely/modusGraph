@@ -52,3 +52,38 @@ func TestTypedLoadOrStore(t *testing.T) {
 		t.Fatal("second: want loaded=true")
 	}
 }
+
+type state struct {
+	UID    string   `json:"uid,omitempty"`
+	DType  []string `json:"dgraph.type,omitempty"`
+	State  string   `json:"state,omitempty" dgraph:"index=hash upsert"`
+	Secret string   `json:"secret,omitempty"`
+}
+
+func TestTypedLoadAndDelete(t *testing.T) {
+	c := typed.NewClient[state](newTypedConn(t))
+	ctx := context.Background()
+
+	if err := c.Add(ctx, &state{State: "s1", Secret: "shh"}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	rec, loaded, err := c.LoadAndDelete(ctx, "s1", "state")
+	if err != nil {
+		t.Fatalf("LoadAndDelete: %v", err)
+	}
+	if !loaded {
+		t.Fatal("first: want loaded=true")
+	}
+	if rec.Secret != "shh" {
+		t.Fatalf("want secret %q, got %q", "shh", rec.Secret)
+	}
+
+	rec, loaded, err = c.LoadAndDelete(ctx, "s1", "state")
+	if err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	if loaded || rec != nil {
+		t.Fatalf("second: want (nil, false), got (%v, %v)", rec, loaded)
+	}
+}
