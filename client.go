@@ -293,9 +293,10 @@ func NewClient(uri string, opts ...ClientOpt) (Client, error) {
 	}
 
 	client := client{
-		uri:     uri,
-		options: options,
-		logger:  options.logger,
+		uri:       uri,
+		options:   options,
+		logger:    options.logger,
+		consumeMu: &sync.Mutex{},
 	}
 
 	clientMapLock.Lock()
@@ -461,6 +462,15 @@ type client struct {
 	options clientOptions
 	pool    *clientPool
 	logger  logr.Logger
+	// consumeMu serializes LoadAndDelete's read-then-delete critical section so
+	// exactly one in-process caller consumes a given node. The client value is
+	// copied (value receivers, cached by value in clientMap), so the mutex is a
+	// pointer shared across every copy that shares this client's connection.
+	// Against a real Dgraph cluster the shared read-write transaction would also
+	// abort losers on commit conflict; this lock additionally guarantees
+	// single-winner semantics against the embedded engine, whose commit path
+	// performs no optimistic-concurrency conflict check.
+	consumeMu *sync.Mutex
 }
 
 func (c client) key() string {
@@ -701,6 +711,17 @@ func (c client) LoadAndDelete(ctx context.Context, obj any, key any, predicates 
 		return false, err
 	}
 	defer c.pool.put(dgClient)
+
+	// Serialize the read-then-delete critical section across in-process callers.
+	// The shared read-write transaction already elects one winner against a real
+	// Dgraph cluster (the loser aborts on commit), but the embedded engine does
+	// no commit-time conflict check, so without this lock concurrent callers
+	// would each read the node and each report loaded=true. The lock makes
+	// read-and-consume atomic regardless of backend.
+	if c.consumeMu != nil {
+		c.consumeMu.Lock()
+		defer c.consumeMu.Unlock()
+	}
 
 	// Bounded retry: Dgraph aborts the loser of a commit conflict; the retry
 	// reads the node already gone and reports not-found.
