@@ -71,6 +71,21 @@ func (c *Client[T]) LoadOrStore(ctx context.Context, rec *T, predicates ...strin
 	return rec, loaded, nil
 }
 
+// LoadAndDelete atomically reads the T whose key predicate equals key and
+// deletes it, returning (nil, false, nil) when none matched. Read-and-consume
+// (compare sync.Map.LoadAndDelete). With no predicates, the first field tagged
+// dgraph:"upsert" is used.
+func (c *Client[T]) LoadAndDelete(ctx context.Context, key any, predicates ...string) (rec *T, loaded bool, err error) {
+	ctx, span := tracer.StartSpan(ctx, "loadAndDelete", entityName[T]())
+	defer func() { span.End(err) }()
+	var out T
+	loaded, err = c.conn.LoadAndDelete(ctx, &out, key, predicates...)
+	if err != nil || !loaded {
+		return nil, loaded, err
+	}
+	return &out, true, nil
+}
+
 // Delete removes the T with the given UID.
 func (c *Client[T]) Delete(ctx context.Context, uid string) (err error) {
 	ctx, span := currentTracer().StartSpan(ctx, "delete", entityName[T]())
