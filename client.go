@@ -51,6 +51,11 @@ type Client interface {
 	// (the object is then populated from it). Insert-if-absent.
 	LoadOrStore(ctx context.Context, obj any, predicates ...string) (loaded bool, err error)
 
+	// LoadAndDelete atomically reads the node whose key predicate equals key
+	// into obj and deletes it, returning loaded=false when none matched.
+	// Read-and-consume; concurrent callers elect one winner.
+	LoadAndDelete(ctx context.Context, obj any, key any, predicates ...string) (loaded bool, err error)
+
 	// Update modifies an existing object in the database.
 	// The object must be a pointer to a struct and must have a UID field set.
 	Update(context.Context, any) error
@@ -621,6 +626,137 @@ func (c client) LoadOrStore(ctx context.Context, obj any, predicates ...string) 
 	}
 	// MutateOrGet returns created UIDs only; empty => an existing node matched.
 	return len(uids) == 0, nil
+}
+
+// firstUpsertPredicate returns the Dgraph predicate name of the first field
+// tagged dgraph:"...upsert...". The predicate defaults to the json tag name
+// unless an explicit predicate= token is present. It returns "" if no upsert
+// field exists.
+func firstUpsertPredicate(obj any) string {
+	v := reflect.ValueOf(obj)
+	for v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		dgTag := f.Tag.Get("dgraph")
+		if !strings.Contains(dgTag, "upsert") {
+			continue
+		}
+		// Explicit predicate=<name> wins.
+		for _, directive := range strings.Fields(dgTag) {
+			if strings.HasPrefix(directive, "predicate=") {
+				return strings.TrimPrefix(directive, "predicate=")
+			}
+		}
+		// Otherwise fall back to the json tag name.
+		if jsonTag := f.Tag.Get("json"); jsonTag != "" {
+			return strings.Split(jsonTag, ",")[0]
+		}
+		return f.Name
+	}
+	return ""
+}
+
+// uidOf reflects out the UID field of a dgraph struct pointer.
+func uidOf(obj any) string {
+	v := reflect.ValueOf(obj)
+	for v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	f := v.FieldByName("UID")
+	if f.IsValid() && f.Kind() == reflect.String {
+		return f.String()
+	}
+	return ""
+}
+
+// LoadAndDelete atomically reads the node whose key predicate equals key into
+// obj and deletes it, returning loaded=false (and leaving obj zero) when no
+// node matched. The read and delete share one transaction with no CommitNow,
+// so two concurrent callers conflict on commit: exactly one wins (loaded=true),
+// the loser aborts and retries into not-found (loaded=false). This reproduces
+// PostgreSQL's DELETE … RETURNING. With no predicates, the first dgraph:"upsert"
+// field is used.
+func (c client) LoadAndDelete(ctx context.Context, obj any, key any, predicates ...string) (loaded bool, err error) {
+	obj = UnwrapSchema(obj)
+	if err := checkPointer(obj); err != nil {
+		return false, err
+	}
+
+	pred := ""
+	if len(predicates) > 0 {
+		pred = predicates[0]
+	} else {
+		pred = firstUpsertPredicate(obj)
+	}
+	if pred == "" {
+		return false, fmt.Errorf("LoadAndDelete: no key predicate (pass one or tag a field dgraph:\"upsert\")")
+	}
+
+	dgClient, err := c.pool.get()
+	if err != nil {
+		c.logger.Error(err, "Failed to get client from pool")
+		return false, err
+	}
+	defer c.pool.put(dgClient)
+
+	// Bounded retry: Dgraph aborts the loser of a commit conflict; the retry
+	// reads the node already gone and reports not-found.
+	const maxAttempts = 10
+	for attempt := 0; ; attempt++ {
+		tx := dg.NewTxnContext(ctx, dgClient)
+		getErr := tx.Get(obj).
+			Filter("eq("+pred+", $1)", key).
+			All(c.options.maxEdgeTraversal).
+			Node()
+		if getErr != nil {
+			_ = tx.Discard()
+			// dgman returns ErrNodeNotFound when nothing matches.
+			if errors.Is(getErr, dg.ErrNodeNotFound) {
+				return false, nil
+			}
+			return false, getErr
+		}
+
+		uid := uidOf(obj)
+		if uid == "" {
+			_ = tx.Discard()
+			return false, nil
+		}
+
+		if delErr := tx.DeleteNode(uid); delErr != nil {
+			_ = tx.Discard()
+			return false, delErr
+		}
+
+		if cErr := tx.Commit(); cErr != nil {
+			_ = tx.Discard()
+			if isAbortedErr(cErr) {
+				// Lost the race or a concurrent change; retry — the winner has
+				// already deleted the node, so the retry reads not-found.
+				if attempt < maxAttempts {
+					continue
+				}
+			}
+			return false, cErr
+		}
+		return true, nil
+	}
+}
+
+// isAbortedErr reports whether err is a Dgraph transaction-conflict abort,
+// matching both dgo's ErrAborted sentinel and the underlying message in case a
+// wrapped or stringified form reaches us.
+func isAbortedErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, dgo.ErrAborted) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "aborted")
 }
 
 // Update implements updating an existing object in the database.
