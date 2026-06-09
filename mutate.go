@@ -76,12 +76,12 @@ func (c client) process(ctx context.Context,
 			return fmt.Errorf("failed to get current schema: %w", err)
 		}
 
-		// Get the type name from the object
-		schemaObjVal := reflect.ValueOf(schemaObj)
-		if schemaObjVal.Kind() == reflect.Ptr {
-			schemaObjVal = schemaObjVal.Elem()
-		}
-		typeName := schemaObjVal.Type().Name()
+		// Resolve the Dgraph type name the same way mutations and schema
+		// generation do (the DType tag, falling back to the Go struct name).
+		// Using the raw Go struct name here would reject types whose Dgraph
+		// name differs from the struct name, e.g. a `migrationLock` struct
+		// declared as `dgraph:"MigrationLock"`.
+		typeName := getNodeType(schemaObj)
 
 		// When AutoSchema is disabled, validate that required schema exists
 		// Fail if user schema for the type doesn't exist, even if only system schema exists
