@@ -54,6 +54,26 @@ func TestRetryPolicyDelayWithJitter(t *testing.T) {
 	}
 }
 
+// TestRetryPolicyDelayJitterNeverExceedsMaxCap pins the documented invariant:
+// even when the exponential delay sits at or above MaxDelay and jitter is
+// large, no single delay exceeds MaxDelay. Jitter is added before the final
+// clamp, so the result stays within the cap.
+func TestRetryPolicyDelayJitterNeverExceedsMaxCap(t *testing.T) {
+	p := RetryPolicy{
+		BaseDelay: 8 * time.Second,
+		MaxDelay:  10 * time.Second,
+		Jitter:    0.5, // up to +50% would overshoot MaxDelay without the clamp
+	}
+	for attempt := range 6 {
+		for range 100 {
+			d := p.delay(attempt)
+			assert.LessOrEqual(t, d, p.MaxDelay,
+				"attempt %d: delay %v exceeded MaxDelay %v", attempt, d, p.MaxDelay)
+			assert.Positive(t, d, "attempt %d: delay should be positive", attempt)
+		}
+	}
+}
+
 func TestRetryPolicyDelayZeroJitter(t *testing.T) {
 	p := RetryPolicy{
 		BaseDelay: 100 * time.Millisecond,

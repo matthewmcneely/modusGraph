@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dgraph-io/dgo/v250"
 	"github.com/matthewmcneely/modusgraph"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -114,20 +115,15 @@ func TestWithRetryContextCancellation(t *testing.T) {
 	callCount := 0
 	err := client.WithRetry(ctx, slowPolicy, func() error {
 		callCount++
-		// Always return an error that looks like an abort to trigger retry.
-		// We simulate this by inserting a duplicate to get a UniqueError,
-		// but that won't be retried. Instead, use a real insert to a fresh
-		// entity so the first call succeeds.
-		// Actually, to test the cancellation path we need the fn to always
-		// fail with an aborted error. Since we can't easily manufacture
-		// dgo.ErrAborted, test that context cancellation returns ctx.Err()
-		// by having fn block until context is done.
-		<-ctx.Done()
-		return ctx.Err()
+		// Return a real abort so WithRetry enters the retry path and sleeps for
+		// the 1s backoff. The 50ms context deadline fires during that sleep, so
+		// WithRetry must return from the ctx.Done() branch of the backoff select
+		// — the path this test exists to cover.
+		return dgo.ErrAborted
 	})
 
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.Equal(t, 1, callCount, "fn should be called once before context expires")
+	assert.Equal(t, 1, callCount, "fn runs once, then the context expires during backoff")
 }
 
 // TestRetryPolicyDelay verifies the exponential backoff calculation.
@@ -194,4 +190,25 @@ func TestWithRetryMaxRetriesZero(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Equal(t, 1, callCount, "MaxRetries=0 should call fn exactly once")
+}
+
+// TestWithRetryNegativeMaxRetries verifies that a negative MaxRetries still
+// calls fn exactly once and returns its error, rather than skipping the loop
+// and panicking.
+func TestWithRetryNegativeMaxRetries(t *testing.T) {
+	uri := "file://" + GetTempDir(t)
+	client, cleanup := CreateTestClient(t, uri)
+	defer cleanup()
+
+	policy := modusgraph.RetryPolicy{MaxRetries: -1}
+	callCount := 0
+	expectedErr := fmt.Errorf("boom")
+
+	err := client.WithRetry(context.Background(), policy, func() error {
+		callCount++
+		return expectedErr
+	})
+
+	assert.ErrorIs(t, err, expectedErr)
+	assert.Equal(t, 1, callCount, "negative MaxRetries should still call fn once")
 }
