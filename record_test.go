@@ -61,6 +61,28 @@ func TestUnwrapSchema_NilInput(t *testing.T) {
 	}
 }
 
+func TestUnwrapSchema_TypedNilPointerDoesNotPanic(t *testing.T) {
+	// fakeWrapper.Unwrap dereferences its receiver, so invoking it on a typed
+	// nil pointer would panic. UnwrapSchema must return the value untouched.
+	var w *fakeWrapper
+	out := UnwrapSchema(w)
+	if out != any(w) {
+		t.Fatalf("expected typed nil pointer passthrough, got %T (%v)", out, out)
+	}
+}
+
+func TestUnwrapSchema_PointerReceiverUnwrapOnValue(t *testing.T) {
+	// fakeWrapper.Unwrap has a pointer receiver. Passing the wrapper by value
+	// must still unwrap: a value's method set excludes pointer-receiver methods,
+	// so UnwrapSchema looks Unwrap up on an addressable copy.
+	inner := &fakeRecord{name: "Studio"}
+	w := fakeWrapper{inner: inner}
+	out := UnwrapSchema(w)
+	if out != any(inner) {
+		t.Fatalf("expected unwrapped inner from value wrapper, got %T (%v)", out, out)
+	}
+}
+
 // recordingClient is the minimal surface needed to verify that wrappers
 // passed to the Client interface get unwrapped before reaching internal
 // reflection. It records whatever it received and returns nil. Each method
