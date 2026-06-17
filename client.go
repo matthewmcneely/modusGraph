@@ -647,6 +647,12 @@ func firstUpsertPredicate(obj any) string {
 	for v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
+	// A nil pointer (or nil interface) dereferences to an invalid Value, and a
+	// non-struct has no fields; either way there is no upsert predicate, and
+	// calling Type()/NumField() on them would panic.
+	if !v.IsValid() || v.Kind() != reflect.Struct {
+		return ""
+	}
 	t := v.Type()
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
@@ -716,9 +722,12 @@ func (c client) LoadAndDelete(ctx context.Context, obj any, key any, predicates 
 	// The shared read-write transaction already elects one winner against a real
 	// Dgraph cluster (the loser aborts on commit), but the embedded engine does
 	// no commit-time conflict check, so without this lock concurrent callers
-	// would each read the node and each report loaded=true. The lock makes
-	// read-and-consume atomic regardless of backend.
-	if c.consumeMu != nil {
+	// would each read the node and each report loaded=true. A real Dgraph
+	// cluster aborts the loser of a commit conflict and the bounded retry below
+	// already elects a single winner, so the lock is needed — and taken — only
+	// for the embedded engine. Taking it for remote clusters would needlessly
+	// serialize consumers operating on unrelated keys.
+	if c.engine != nil && c.consumeMu != nil {
 		c.consumeMu.Lock()
 		defer c.consumeMu.Unlock()
 	}

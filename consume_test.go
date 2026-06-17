@@ -49,6 +49,15 @@ func TestLoadOrStore(t *testing.T) {
 	if !loaded {
 		t.Fatal("second store: want loaded=true (already existed)")
 	}
+	// On the loaded=true path, LoadOrStore must hydrate the passed object with
+	// the existing record. Assert it carries the existing node's UID, so a
+	// regression that returns loaded=true without populating fields is caught.
+	if second.UID == "" {
+		t.Fatal("second store: loaded record was not hydrated (UID empty)")
+	}
+	if second.UID != first.UID {
+		t.Fatalf("second store: want existing node UID %q, got %q", first.UID, second.UID)
+	}
 }
 
 type consumeState struct {
