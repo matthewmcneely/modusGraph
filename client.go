@@ -456,9 +456,34 @@ func (c client) key() string {
 	if c.options.embeddingProvider != nil {
 		embeddingKey = fmt.Sprintf("%p", c.options.embeddingProvider)
 	}
-	return fmt.Sprintf("%s:%t:%d:%d:%d:%d:%s:%s:%s:%d", c.uri, c.options.autoSchema, c.options.poolSize,
+	// Custom gRPC dial options only apply to remote (dgraph://) connections;
+	// they are ignored for embedded (file://) URIs, so they only contribute to
+	// the dedup key for remote clients — matching that documented behavior.
+	dialKey := "0"
+	if strings.HasPrefix(c.uri, dgraphURIPrefix) {
+		dialKey = dialOptionsKey(c.options.grpcDialOptions)
+	}
+	return fmt.Sprintf("%s:%t:%d:%d:%d:%d:%s:%s:%s:%s", c.uri, c.options.autoSchema, c.options.poolSize,
 		c.options.maxEdgeTraversal, c.options.cacheSizeMB, c.options.maxRecvMsgSize,
-		c.options.namespace, validatorKey, embeddingKey, len(c.options.grpcDialOptions))
+		c.options.namespace, validatorKey, embeddingKey, dialKey)
+}
+
+// dialOptionsKey identifies a set of custom gRPC dial options for the client
+// dedup cache. grpc.DialOption values are opaque and not comparable, so the key
+// uses each option's runtime identity rather than just the count: two clients
+// configured with different options get different keys and are never merged.
+// Two clients built from separately-constructed but equivalent options also
+// differ, which is safe — the cache errs toward keeping them apart rather than
+// merging connections that were configured differently.
+func dialOptionsKey(opts []grpc.DialOption) string {
+	if len(opts) == 0 {
+		return "0"
+	}
+	parts := make([]string, len(opts))
+	for i, opt := range opts {
+		parts[i] = fmt.Sprintf("%p", opt)
+	}
+	return strings.Join(parts, ",")
 }
 
 // embeddingProvider implements the embeddingClient interface, exposing the
