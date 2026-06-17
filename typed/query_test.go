@@ -752,7 +752,7 @@ func TestIterNodes_RespectsOffset(t *testing.T) {
 			t.Fatalf("Add %d: %v", i, err)
 		}
 	}
-	var got []int
+	got := make([]int, 0, n-3) // offset 3 of n records
 	for w, err := range c.Query(ctx).OrderAsc("qty").Offset(3).IterNodes() {
 		if err != nil {
 			t.Fatalf("IterNodes yielded error: %v", err)
@@ -780,7 +780,7 @@ func TestIterNodes_RespectsOffsetAndLimit(t *testing.T) {
 			t.Fatalf("Add %d: %v", i, err)
 		}
 	}
-	var got []int
+	got := make([]int, 0, 120) // Limit(120)
 	for w, err := range c.Query(ctx).OrderAsc("qty").Offset(60).Limit(120).IterNodes() {
 		if err != nil {
 			t.Fatalf("IterNodes yielded error: %v", err)
@@ -1078,7 +1078,9 @@ func TestRawQuery_CarriesEarlierBuilders(t *testing.T) {
 // map entry is one owner owning one pet of the given name; the pet is inserted
 // first so the owner's edge links an already-persisted node. It returns an
 // owner client bound to conn.
-func seedOwners(ctx context.Context, t *testing.T, conn modusgraph.Client, ownerToPet map[string]string) *typed.Client[owner] {
+func seedOwners(
+	ctx context.Context, t *testing.T, conn modusgraph.Client, ownerToPet map[string]string,
+) *typed.Client[owner] {
 	t.Helper()
 	pets := typed.NewClient[pet](conn)
 	owners := typed.NewClient[owner](conn)
