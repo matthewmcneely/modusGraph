@@ -85,7 +85,9 @@ func (mq *MultiQuery[T]) Execute(ctx context.Context) (map[string][]T, error) {
 	for _, name := range mq.names {
 		block := mq.blocks[name]
 		if len(block.edges) != 0 {
-			return nil, fmt.Errorf("multi_query: block %q carries WhereEdge constraints; MultiQuery cannot batch edge-filtered blocks", name)
+			return nil, fmt.Errorf(
+				"multi_query: block %q carries WhereEdge constraints; "+
+					"MultiQuery cannot batch edge-filtered blocks", name)
 		}
 		// Name the underlying dgman query so blocks do not collide on the
 		// default "data" name and so the response JSON keys are predictable.
