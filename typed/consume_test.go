@@ -45,12 +45,17 @@ func TestTypedLoadOrStore(t *testing.T) {
 		t.Fatal("first: want a UID assigned")
 	}
 
-	_, loaded, err = c.LoadOrStore(ctx, &jti{JTI: "abc"}, "jti")
+	rec2, loaded, err := c.LoadOrStore(ctx, &jti{JTI: "abc"}, "jti")
 	if err != nil {
 		t.Fatalf("second: %v", err)
 	}
 	if !loaded {
 		t.Fatal("second: want loaded=true")
+	}
+	// The loaded=true path must return the existing record, not the freshly
+	// passed (un-stored) one — assert it carries the original node's UID.
+	if rec2 == nil || rec2.UID != rec.UID {
+		t.Fatalf("second: want existing record with UID %q, got %+v", rec.UID, rec2)
 	}
 }
 
