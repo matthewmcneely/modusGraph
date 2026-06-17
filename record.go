@@ -42,7 +42,20 @@ func UnwrapSchema(obj any) any {
 	if !v.IsValid() {
 		return obj
 	}
+	// A typed nil pointer has a valid method set, but invoking Unwrap on a nil
+	// receiver would panic if the method dereferences it. Leave it untouched.
+	if v.Kind() == reflect.Pointer && v.IsNil() {
+		return obj
+	}
 	m := v.MethodByName("Unwrap")
+	if !m.IsValid() && v.Kind() != reflect.Pointer {
+		// Unwrap may be declared with a pointer receiver while obj was passed by
+		// value; a value's method set excludes pointer-receiver methods, so look
+		// it up on an addressable copy.
+		pv := reflect.New(v.Type())
+		pv.Elem().Set(v)
+		m = pv.MethodByName("Unwrap")
+	}
 	if !m.IsValid() {
 		return obj
 	}
