@@ -1,7 +1,6 @@
 package filter_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/matthewmcneely/modusgraph/typed/filter"
@@ -111,8 +110,21 @@ func TestBuilder_PositionalParamsAreSequential(t *testing.T) {
 	var b filter.Builder
 	b.EqGroupUUID("id", []filter.UUID{{Value: "a"}, {Value: "b"}})
 	b.EqGroupString("name", []filter.String{{Value: "c"}})
-	expr, _ := b.Build()
-	if !strings.Contains(expr, "$1") || !strings.Contains(expr, "$2") || !strings.Contains(expr, "$3") {
-		t.Errorf("expected $1, $2, $3 in expr; got %q", expr)
+	expr, params := b.Build()
+	// Assert the exact expression: placeholders must be numbered $1..$N in
+	// emission order and bound to the matching params. A substring check would
+	// pass even if the numbering were scrambled (e.g. "$3 ... $1 ... $2").
+	const want = "(eq(id, $1) OR eq(id, $2)) AND (eq(name, $3))"
+	if expr != want {
+		t.Errorf("expr = %q, want %q", expr, want)
+	}
+	wantParams := []any{"a", "b", "c"}
+	if len(params) != len(wantParams) {
+		t.Fatalf("params = %v, want %v", params, wantParams)
+	}
+	for i, p := range wantParams {
+		if params[i] != p {
+			t.Errorf("param[%d] = %v, want %v", i, params[i], p)
+		}
 	}
 }

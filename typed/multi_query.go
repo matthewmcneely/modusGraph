@@ -36,12 +36,19 @@ func NewMultiQuery[T any](conn modusgraph.Client) *MultiQuery[T] {
 	}
 }
 
-// Add registers a named block. Names must be unique within one MultiQuery.
-// Panics on duplicate name — the call site is a programming error, not a
-// runtime condition.
+// Add registers a named block. Names must be unique within one MultiQuery, and
+// each *Query[T] may be added only once: Execute names the block's underlying
+// dgman query in place, so registering the same Query pointer under two names
+// would make both blocks render with whichever name was applied last. Both
+// conditions are programming errors and panic rather than fail at runtime.
 func (mq *MultiQuery[T]) Add(name string, q *Query[T]) *MultiQuery[T] {
 	if _, exists := mq.blocks[name]; exists {
 		panic(fmt.Sprintf("multi_query: duplicate block name %q", name))
+	}
+	for existingName, existing := range mq.blocks {
+		if existing == q {
+			panic(fmt.Sprintf("multi_query: Query already added as %q; build a separate Query per block", existingName))
+		}
 	}
 	mq.names = append(mq.names, name)
 	mq.blocks[name] = q
@@ -130,7 +137,7 @@ func (mq *MultiQuery[T]) Execute(ctx context.Context) (map[string][]T, error) {
 // of the same name; we need our own because the multi-block response from
 // QueryRaw bypasses dgman's scan path.
 func buildPredicateToJSONMap(t reflect.Type) map[string]string {
-	for t != nil && t.Kind() == reflect.Ptr {
+	for t != nil && t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t == nil || t.Kind() != reflect.Struct {
@@ -152,9 +159,9 @@ func buildPredicateToJSONMap(t reflect.Type) map[string]string {
 			continue
 		}
 		var predName string
-		for _, part := range strings.Fields(dgraphTag) {
-			if strings.HasPrefix(part, "predicate=") {
-				predName = strings.TrimPrefix(part, "predicate=")
+		for part := range strings.FieldsSeq(dgraphTag) {
+			if p, ok := strings.CutPrefix(part, "predicate="); ok {
+				predName = p
 				break
 			}
 		}

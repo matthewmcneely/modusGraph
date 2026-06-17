@@ -3,10 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Package typed binds a Go type to the otherwise any-typed modusgraph.Client,
-// providing generic, type-safe CRUD and query operations without per-entity
-// code generation. It is the handwritten substrate that modusgraph-gen's
-// generated clients compose over.
 package typed
 
 import (

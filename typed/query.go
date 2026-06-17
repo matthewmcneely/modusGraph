@@ -42,6 +42,11 @@ type Query[T any] struct {
 	offset  int               // caller-set starting offset; 0 = none
 	edges   []edgeFilter      // accumulated WhereEdge constraints; empty = none
 	filters []filterFrag      // accumulated @filter fragments, ANDed; empty = none
+
+	// customRoot records that the caller narrowed the root with UID or
+	// RootFunc. The WhereEdge pre-pass then intersects with that root instead
+	// of overwriting it (see resolveRoots).
+	customRoot bool
 }
 
 // edgeFilter is one accumulated WhereEdge constraint: a dgraph @filter
@@ -93,7 +98,10 @@ func (qb *Query[T]) addFilter(expr string, params []any) {
 }
 
 // combineAnd joins fragments with AND, renumbering each fragment's ordinal
-// placeholders against the concatenated params slice.
+// placeholders against the concatenated params slice. Each fragment is wrapped
+// in its own parentheses so a fragment that itself contains OR keeps its
+// intended precedence: without the parens, "a OR b" ANDed with "c" would parse
+// as "a OR (b AND c)" because dgraph binds AND tighter than OR.
 func combineAnd(frags []filterFrag) (string, []any) {
 	parts := make([]string, 0, len(frags))
 	var params []any
@@ -101,7 +109,7 @@ func combineAnd(frags []filterFrag) (string, []any) {
 		if f.expr == "" {
 			continue
 		}
-		parts = append(parts, shiftPlaceholders(f.expr, len(params)))
+		parts = append(parts, "("+shiftPlaceholders(f.expr, len(params))+")")
 		params = append(params, f.params...)
 	}
 	if len(parts) == 0 {
@@ -186,6 +194,7 @@ func (qb *Query[T]) Cascade(predicates ...string) *Query[T] {
 // is type(<NodeType>); RootFunc replaces it with an expression such as
 // eq(name, "Alice") or has(email). Repeated calls overwrite.
 func (qb *Query[T]) RootFunc(rootFunc string) *Query[T] {
+	qb.customRoot = true
 	qb.q.RootFunc(rootFunc)
 	return qb
 }
@@ -370,6 +379,7 @@ func (qb *Query[T]) Raw() *dg.Query {
 
 // UID roots the query at a specific node UID. Results still decode into []T.
 func (qb *Query[T]) UID(uid string) *Query[T] {
+	qb.customRoot = true
 	qb.q.UID(uid)
 	return qb
 }
@@ -385,7 +395,9 @@ func (qb *Query[T]) All(depth int) *Query[T] {
 // NodesAndCount executes the query and returns the matching records together
 // with the total count (useful for pagination totals). Like Nodes, it runs the
 // WhereEdge pre-pass first when edge constraints are present.
-func (qb *Query[T]) NodesAndCount() ([]T, int, error) {
+func (qb *Query[T]) NodesAndCount() (out []T, count int, err error) {
+	_, span := tracer.StartSpan(qb.ctx, "query", entityName[T]())
+	defer func() { span.End(err) }()
 	matched, err := qb.resolveRoots()
 	if err != nil {
 		return nil, 0, err
@@ -393,8 +405,7 @@ func (qb *Query[T]) NodesAndCount() ([]T, int, error) {
 	if !matched {
 		return nil, 0, nil
 	}
-	var out []T
-	count, err := qb.q.NodesAndCount(&out)
+	count, err = qb.q.NodesAndCount(&out)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -468,10 +479,17 @@ func (r *RawQuery) GroupBy(predicate string) *RawQuery {
 }
 
 // resolveRoots runs the WhereEdge pre-pass when the query carries edge
-// constraints, rewriting the main query's root function to the matching UIDs.
+// constraints, narrowing the main query to the UIDs whose edges matched.
 // It returns matched=false when constraints are present but no root satisfied
 // them — callers then return an empty result without running the main query.
 // With no edge constraints it is a no-op returning matched=true.
+//
+// When the caller has not narrowed the root, the matched UIDs become the root
+// function directly (the efficient path: the main query scans only those
+// nodes). When the caller already narrowed the root with UID or RootFunc, the
+// matched UIDs are added as a uid() @filter instead, so the result is the
+// intersection of the caller's root and the edge constraints rather than
+// silently discarding the caller's narrowing.
 func (qb *Query[T]) resolveRoots() (matched bool, err error) {
 	if len(qb.edges) == 0 {
 		return true, nil
@@ -483,7 +501,12 @@ func (qb *Query[T]) resolveRoots() (matched bool, err error) {
 	if len(uids) == 0 {
 		return false, nil
 	}
-	qb.q.RootFunc("uid(" + strings.Join(uids, ", ") + ")")
+	uidExpr := "uid(" + strings.Join(uids, ", ") + ")"
+	if qb.customRoot {
+		qb.addFilter(uidExpr, nil)
+	} else {
+		qb.q.RootFunc(uidExpr)
+	}
 	return true, nil
 }
 

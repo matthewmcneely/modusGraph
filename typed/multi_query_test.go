@@ -38,6 +38,21 @@ func TestMultiQueryAddRejectsDuplicateName(t *testing.T) {
 	mq.Add("byName", q)
 }
 
+func TestMultiQueryAddRejectsSameQueryTwice(t *testing.T) {
+	conn := newConn(t)
+	mq := typed.NewMultiQuery[widget](conn)
+	q := typed.NewClient[widget](conn).Query(context.Background())
+	mq.Add("first", q)
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic when the same Query is added under two names")
+		}
+	}()
+	// Execute names the block's underlying query in place, so reusing one Query
+	// pointer would corrupt block composition; Add must reject it up front.
+	mq.Add("second", q)
+}
+
 func TestMultiQueryExecuteReturnsPerBlockResults(t *testing.T) {
 	ctx := context.Background()
 	conn := newConn(t)
