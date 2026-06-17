@@ -48,15 +48,18 @@ var DefaultRetryPolicy = RetryPolicy{
 // cap would let the delay overshoot it.
 func (p RetryPolicy) delay(attempt int) time.Duration {
 	// Cap the exponential before jitter so a large attempt cannot overflow the
-	// shift. exp <= 0 means the shift overflowed; treat that as the cap too.
+	// shift. attempt comes from a range loop (>= 0) and is bounded below 63;
+	// exp <= 0 means the shift overflowed anyway, which we treat as the cap.
 	d := p.MaxDelay
-	if attempt < 63 {
-		if exp := p.BaseDelay << uint(attempt); exp > 0 && exp < p.MaxDelay {
+	if attempt >= 0 && attempt < 63 {
+		if exp := p.BaseDelay << attempt; exp > 0 && exp < p.MaxDelay {
 			d = exp
 		}
 	}
 	if p.Jitter > 0 {
-		d += time.Duration(float64(d) * p.Jitter * rand.Float64())
+		// Backoff jitter spreads retriers apart; it does not need a
+		// cryptographic RNG, so math/rand/v2 is appropriate here.
+		d += time.Duration(float64(d) * p.Jitter * rand.Float64()) //nolint:gosec // G404: jitter is not security-sensitive
 		if d > p.MaxDelay {
 			d = p.MaxDelay
 		}
