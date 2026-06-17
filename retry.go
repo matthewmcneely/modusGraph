@@ -41,15 +41,25 @@ var DefaultRetryPolicy = RetryPolicy{
 	Jitter:     0.1,
 }
 
-// delay computes the backoff duration for a given attempt (0-indexed).
-// Formula: min(BaseDelay * 2^attempt, MaxDelay) + random(0, delay * Jitter)
+// delay computes the backoff duration for a given attempt (0-indexed):
+// the exponential BaseDelay*2^attempt, plus up to Jitter of itself, clamped
+// so the result never exceeds MaxDelay. Clamping last keeps the documented
+// invariant that no single delay exceeds MaxDelay — adding jitter after the
+// cap would let the delay overshoot it.
 func (p RetryPolicy) delay(attempt int) time.Duration {
-	d := p.BaseDelay * time.Duration(1<<uint(attempt))
-	if d > p.MaxDelay {
-		d = p.MaxDelay
+	// Cap the exponential before jitter so a large attempt cannot overflow the
+	// shift. exp <= 0 means the shift overflowed; treat that as the cap too.
+	d := p.MaxDelay
+	if attempt < 63 {
+		if exp := p.BaseDelay << uint(attempt); exp > 0 && exp < p.MaxDelay {
+			d = exp
+		}
 	}
 	if p.Jitter > 0 {
 		d += time.Duration(float64(d) * p.Jitter * rand.Float64())
+		if d > p.MaxDelay {
+			d = p.MaxDelay
+		}
 	}
 	return d
 }
@@ -74,23 +84,29 @@ func (p RetryPolicy) delay(attempt int) time.Duration {
 //	    return client.Insert(ctx, &entity)
 //	})
 func (c client) WithRetry(ctx context.Context, policy RetryPolicy, fn func() error) error {
-	for attempt := range policy.MaxRetries + 1 {
+	// A negative MaxRetries would make the loop run zero times and never call
+	// fn; clamp to zero so fn always runs at least once, as documented.
+	maxRetries := policy.MaxRetries
+	if maxRetries < 0 {
+		maxRetries = 0
+	}
+	for attempt := range maxRetries + 1 {
 		err := fn()
 		if err == nil {
 			return nil
 		}
-		if !errors.Is(err, dgo.ErrAborted) || attempt >= policy.MaxRetries {
+		if !errors.Is(err, dgo.ErrAborted) || attempt >= maxRetries {
 			return err
 		}
 		d := policy.delay(attempt)
 		c.logger.V(1).Info("Transaction aborted, retrying",
-			"attempt", attempt+1, "maxRetries", policy.MaxRetries, "delay", d)
+			"attempt", attempt+1, "maxRetries", maxRetries, "delay", d)
 		select {
 		case <-time.After(d):
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
-	// Unreachable: the loop runs MaxRetries+1 times and returns on every path.
+	// Unreachable: the loop runs at least once and returns on every path.
 	panic("unreachable")
 }
