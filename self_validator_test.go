@@ -63,6 +63,11 @@ func TestValidateSelfValidatorInSlice(t *testing.T) {
 	if !errors.Is(err, errSelfValidated) {
 		t.Fatalf("expected the SelfValidator path for slice elements, got %v", err)
 	}
+	// As in the scalar case, the SelfValidator path must not also invoke the
+	// configured StructValidator for slice elements.
+	if rv.calls != 0 {
+		t.Fatalf("StructCtx must not run for a SelfValidator slice element, got %d calls", rv.calls)
+	}
 }
 
 // dateRange validates a relationship between two fields — a cross-field rule
