@@ -26,7 +26,7 @@ func NewClient[T any](conn modusgraph.Client) *Client[T] {
 
 // Get loads the T with the given UID.
 func (c *Client[T]) Get(ctx context.Context, uid string) (rec *T, err error) {
-	ctx, span := tracer.StartSpan(ctx, "get", entityName[T]())
+	ctx, span := currentTracer().StartSpan(ctx, "get", entityName[T]())
 	defer func() { span.End(err) }()
 	var out T
 	if err = c.conn.Get(ctx, &out, uid); err != nil {
@@ -37,14 +37,14 @@ func (c *Client[T]) Get(ctx context.Context, uid string) (rec *T, err error) {
 
 // Add inserts a new T. modusgraph writes the assigned UID back into rec.
 func (c *Client[T]) Add(ctx context.Context, rec *T) (err error) {
-	ctx, span := tracer.StartSpan(ctx, "add", entityName[T]())
+	ctx, span := currentTracer().StartSpan(ctx, "add", entityName[T]())
 	defer func() { span.End(err) }()
 	return c.conn.Insert(ctx, rec)
 }
 
 // Update modifies an existing T (must have its UID set).
 func (c *Client[T]) Update(ctx context.Context, rec *T) (err error) {
-	ctx, span := tracer.StartSpan(ctx, "update", entityName[T]())
+	ctx, span := currentTracer().StartSpan(ctx, "update", entityName[T]())
 	defer func() { span.End(err) }()
 	return c.conn.Update(ctx, rec)
 }
@@ -52,14 +52,14 @@ func (c *Client[T]) Update(ctx context.Context, rec *T) (err error) {
 // Upsert inserts or updates rec, matching against predicates. With no
 // predicates, the first field tagged dgraph:"upsert" is used.
 func (c *Client[T]) Upsert(ctx context.Context, rec *T, predicates ...string) (err error) {
-	ctx, span := tracer.StartSpan(ctx, "upsert", entityName[T]())
+	ctx, span := currentTracer().StartSpan(ctx, "upsert", entityName[T]())
 	defer func() { span.End(err) }()
 	return c.conn.Upsert(ctx, rec, predicates...)
 }
 
 // Delete removes the T with the given UID.
 func (c *Client[T]) Delete(ctx context.Context, uid string) (err error) {
-	ctx, span := tracer.StartSpan(ctx, "delete", entityName[T]())
+	ctx, span := currentTracer().StartSpan(ctx, "delete", entityName[T]())
 	defer func() { span.End(err) }()
 	return c.conn.Delete(ctx, []string{uid})
 }
