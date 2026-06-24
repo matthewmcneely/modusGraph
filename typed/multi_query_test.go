@@ -140,3 +140,51 @@ func TestMultiQueryExecuteRemapsPredicateKeys(t *testing.T) {
 		}
 	}
 }
+
+// nestedChild sits on a nested edge and carries a renamed predicate: dgraph
+// names it "childLabel" but the struct tags it json:"label".
+type nestedChild struct {
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
+	Label string   `json:"label,omitempty" dgraph:"predicate=childLabel index=exact"`
+}
+
+// nestedParent has no renamed top-level predicate, only a renamed one on its
+// nested child. A top-level-only remap therefore skips the block entirely and
+// leaves Children[i].Label empty; the recursive remap descends the edge.
+type nestedParent struct {
+	UID      string         `json:"uid,omitempty"`
+	DType    []string       `json:"dgraph.type,omitempty"`
+	Name     string         `json:"name,omitempty" dgraph:"index=exact"`
+	Children []*nestedChild `json:"children,omitempty"`
+}
+
+func TestMultiQueryExecuteRemapsNestedPredicateKeys(t *testing.T) {
+	ctx := context.Background()
+	conn := newConn(t)
+	c := typed.NewClient[nestedParent](conn)
+
+	p := &nestedParent{Name: "root", Children: []*nestedChild{{Label: "leaf"}}}
+	if err := c.Add(ctx, p); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	mq := typed.NewMultiQuery[nestedParent](conn)
+	mq.Add("all", c.Query(ctx))
+	results, err := mq.Execute(ctx)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	rows := results["all"]
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(rows))
+	}
+	if len(rows[0].Children) != 1 {
+		t.Fatalf("Children = %d, want 1", len(rows[0].Children))
+	}
+	// With the old top-level-only remap this is empty: the nested "childLabel"
+	// predicate key is never rewritten to the struct's json:"label".
+	if got := rows[0].Children[0].Label; got != "leaf" {
+		t.Fatalf("nested Children[0].Label = %q, want leaf; nested predicate key not remapped", got)
+	}
+}
