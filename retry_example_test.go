@@ -17,7 +17,7 @@ import (
 // predicate — is retried with exponential backoff instead of surfacing to the
 // caller. Non-abort errors return immediately; the context bounds the total
 // wait.
-func ExampleClient_withRetry() {
+func ExampleClient_WithRetry() {
 	client, _ := modusgraph.NewClient("dgraph://localhost:9080")
 	defer client.Close()
 
