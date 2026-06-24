@@ -7,13 +7,24 @@ package typed
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"iter"
+	"reflect"
 	"strconv"
 	"strings"
 
 	dg "github.com/dolan-in/dgman/v2"
 	"github.com/matthewmcneely/modusgraph"
+)
+
+// Block names and the query-variable name used by the WhereEdge server-side var
+// query. The var block binds matched root UIDs; the data and count blocks
+// consume uid(edgeVarName), so the UIDs never leave the server.
+const (
+	edgeVarName    = "mgMatched"
+	edgeDataBlock  = "mgData"
+	edgeCountBlock = "mgCount"
 )
 
 // Query is a fluent, type-safe query builder over records of type T. Builder
@@ -43,10 +54,11 @@ type Query[T any] struct {
 	edges   []edgeFilter      // accumulated WhereEdge constraints; empty = none
 	filters []filterFrag      // accumulated @filter fragments, ANDed; empty = none
 
-	// customRoot records that the caller narrowed the root with UID or
-	// RootFunc. The WhereEdge pre-pass then intersects with that root instead
-	// of overwriting it (see resolveRoots).
-	customRoot bool
+	// customRootExpr is the caller's root narrowing (set by UID or RootFunc), or
+	// "" if none. The WhereEdge var block roots at it, so the matched UIDs are the
+	// intersection of the caller's root and the edge constraints rather than
+	// overwriting the caller's root (see edgeVarBlock).
+	customRootExpr string
 }
 
 // edgeFilter is one accumulated WhereEdge constraint: a dgraph @filter
@@ -194,7 +206,7 @@ func (qb *Query[T]) Cascade(predicates ...string) *Query[T] {
 // is type(<NodeType>); RootFunc replaces it with an expression such as
 // eq(name, "Alice") or has(email). Repeated calls overwrite.
 func (qb *Query[T]) RootFunc(rootFunc string) *Query[T] {
-	qb.customRoot = true
+	qb.customRootExpr = rootFunc
 	qb.q.RootFunc(rootFunc)
 	return qb
 }
@@ -222,10 +234,11 @@ func (qb *Query[T]) Vars(funcDef string, vars map[string]string) *Query[T] {
 //
 // Where Filter constrains T's own scalar predicates, WhereEdge constrains a
 // neighbouring node reached over an edge. dgraph's root @filter cannot express
-// that, so a query carrying WhereEdge constraints executes in two steps: a
-// pre-pass resolves the UIDs of roots that satisfy every constraint, then the
-// main query runs against uid(...) — keeping ordering, pagination, and result
-// projection on the normal path. See
+// that, so a query carrying WhereEdge constraints executes as one request built
+// around a server-side var block: an @cascade block binds the UIDs of roots
+// that satisfy every constraint, and the data block roots at uid(...) of that
+// var — keeping ordering, pagination, and result projection on the normal path
+// while the matched UIDs never leave the server. See
 // docs/specs/2026-05-21-query-edge-filter-design.md.
 //
 // WhereEdge accumulates: multiple calls AND together (a record must satisfy
@@ -277,14 +290,11 @@ func (qb *Query[T]) GroupBy(predicate string) *RawQuery {
 
 // Nodes executes the query and returns all matching records.
 func (qb *Query[T]) Nodes() (out []T, err error) {
-	_, span := tracer.StartSpan(qb.ctx, "query", entityName[T]())
+	_, span := currentTracer().StartSpan(qb.ctx, "query", entityName[T]())
 	defer func() { span.End(err) }()
-	matched, err := qb.resolveRoots()
-	if err != nil {
-		return nil, err
-	}
-	if !matched {
-		return nil, nil
+	if len(qb.edges) > 0 {
+		out, _, err = qb.runEdge(false)
+		return out, err
 	}
 	if err = qb.q.Nodes(&out); err != nil {
 		return nil, err
@@ -295,17 +305,16 @@ func (qb *Query[T]) Nodes() (out []T, err error) {
 // First executes the query with an implicit Limit(1) and returns the first
 // record, or (nil, nil) if the query matched no rows.
 func (qb *Query[T]) First() (rec *T, err error) {
-	_, span := tracer.StartSpan(qb.ctx, "query", entityName[T]())
+	_, span := currentTracer().StartSpan(qb.ctx, "query", entityName[T]())
 	defer func() { span.End(err) }()
-	matched, err := qb.resolveRoots()
-	if err != nil {
-		return nil, err
-	}
-	if !matched {
-		return nil, nil
-	}
 	var out []T
-	if err = qb.q.First(1).Nodes(&out); err != nil {
+	if len(qb.edges) > 0 {
+		qb.q.First(1)
+		out, _, err = qb.runEdge(false)
+	} else {
+		err = qb.q.First(1).Nodes(&out)
+	}
+	if err != nil {
 		return nil, err
 	}
 	if len(out) == 0 {
@@ -322,25 +331,17 @@ func (qb *Query[T]) First() (rec *T, err error) {
 // same Query afterward. A Limit set on the query caps the total number of
 // rows streamed; an Offset is the starting point.
 //
-// All pages execute against one read-only transaction, so the iteration reads
-// a single consistent snapshot: a concurrent writer cannot make it skip or
-// repeat rows. A WhereEdge pre-pass, when present, runs once before paging
-// begins, in its own transaction. On error it yields a final (nil, err) and
-// stops.
+// With no WhereEdge constraints, every page executes against one read-only
+// transaction, so the iteration reads a single consistent snapshot: a
+// concurrent writer cannot make it skip or repeat rows. With WhereEdge
+// constraints, each page is its own request that re-resolves the server-side
+// match var — keeping memory bounded, at the cost of reading each page from a
+// fresh snapshot. On error it yields a final (nil, err) and stops.
 func (qb *Query[T]) IterNodes() iter.Seq2[*T, error] {
 	return func(yield func(*T, error) bool) {
-		_, span := tracer.StartSpan(qb.ctx, "query", entityName[T]())
+		_, span := currentTracer().StartSpan(qb.ctx, "query", entityName[T]())
 		var ferr error
 		defer func() { span.End(ferr) }()
-		matched, err := qb.resolveRoots()
-		if err != nil {
-			ferr = err
-			yield(nil, err)
-			return
-		}
-		if !matched {
-			return // edge constraints present, but no root matched
-		}
 		remaining := qb.limit // 0 = unbounded
 		for off := qb.offset; ; off += defaultPageSize {
 			size := defaultPageSize
@@ -348,7 +349,16 @@ func (qb *Query[T]) IterNodes() iter.Seq2[*T, error] {
 				size = remaining // shrink the last page so it can't overshoot the cap
 			}
 			var page []T
-			if err := qb.q.Offset(off).First(size).Nodes(&page); err != nil {
+			var err error
+			if len(qb.edges) > 0 {
+				// Each page re-resolves the WhereEdge var server-side, so no page
+				// materializes the full matched-UID set.
+				qb.q.Offset(off).First(size)
+				page, _, err = qb.runEdge(false)
+			} else {
+				err = qb.q.Offset(off).First(size).Nodes(&page)
+			}
+			if err != nil {
 				ferr = err
 				yield(nil, err)
 				return
@@ -379,7 +389,7 @@ func (qb *Query[T]) Raw() *dg.Query {
 
 // UID roots the query at a specific node UID. Results still decode into []T.
 func (qb *Query[T]) UID(uid string) *Query[T] {
-	qb.customRoot = true
+	qb.customRootExpr = "uid(" + uid + ")"
 	qb.q.UID(uid)
 	return qb
 }
@@ -396,14 +406,10 @@ func (qb *Query[T]) All(depth int) *Query[T] {
 // with the total count (useful for pagination totals). Like Nodes, it runs the
 // WhereEdge pre-pass first when edge constraints are present.
 func (qb *Query[T]) NodesAndCount() (out []T, count int, err error) {
-	_, span := tracer.StartSpan(qb.ctx, "query", entityName[T]())
+	_, span := currentTracer().StartSpan(qb.ctx, "query", entityName[T]())
 	defer func() { span.End(err) }()
-	matched, err := qb.resolveRoots()
-	if err != nil {
-		return nil, 0, err
-	}
-	if !matched {
-		return nil, 0, nil
+	if len(qb.edges) > 0 {
+		return qb.runEdge(true)
 	}
 	count, err = qb.q.NodesAndCount(&out)
 	if err != nil {
@@ -478,58 +484,113 @@ func (r *RawQuery) GroupBy(predicate string) *RawQuery {
 	return r
 }
 
-// resolveRoots runs the WhereEdge pre-pass when the query carries edge
-// constraints, narrowing the main query to the UIDs whose edges matched.
-// It returns matched=false when constraints are present but no root satisfied
-// them — callers then return an empty result without running the main query.
-// With no edge constraints it is a no-op returning matched=true.
+// runEdge executes a WhereEdge query as a single server-side request: a var
+// block binds the matched root UIDs, and the data block (plus a count block when
+// withCount) consumes uid(mgMatched). The matched UIDs stay on the server — they
+// are never materialized into the client or inlined into a uid(...) literal — so
+// memory and DQL size stay bounded regardless of how many roots match.
 //
-// When the caller has not narrowed the root, the matched UIDs become the root
-// function directly (the efficient path: the main query scans only those
-// nodes). When the caller already narrowed the root with UID or RootFunc, the
-// matched UIDs are added as a uid() @filter instead, so the result is the
-// intersection of the caller's root and the edge constraints rather than
-// silently discarding the caller's narrowing.
-func (qb *Query[T]) resolveRoots() (matched bool, err error) {
-	if len(qb.edges) == 0 {
-		return true, nil
-	}
-	uids, err := qb.matchedUIDs()
+// runEdge is idempotent in qb: edgeBlocks pushes the data-block filter
+// last-write-wins onto qb.q and never mutates the accumulated filters, so
+// IterNodes can call runEdge once per page (each page re-resolves the var
+// server-side).
+func (qb *Query[T]) runEdge(withCount bool) (rows []T, count int, err error) {
+	dql := dg.NewQueryBlock(qb.edgeBlocks(withCount)...).String()
+	raw, err := qb.conn.QueryRaw(qb.ctx, dql, nil)
 	if err != nil {
-		return false, err
+		return nil, 0, fmt.Errorf("typed: WhereEdge query: %w", err)
 	}
-	if len(uids) == 0 {
-		return false, nil
+	var perBlock map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &perBlock); err != nil {
+		return nil, 0, fmt.Errorf("typed: decoding WhereEdge response: %w", err)
 	}
-	uidExpr := "uid(" + strings.Join(uids, ", ") + ")"
-	if qb.customRoot {
-		qb.addFilter(uidExpr, nil)
-	} else {
-		qb.q.RootFunc(uidExpr)
+	if body, ok := perBlock[edgeDataBlock]; ok {
+		remapped, rerr := remapPredicateKeys(body, reflect.TypeFor[T]())
+		if rerr != nil {
+			return nil, 0, fmt.Errorf("typed: remapping WhereEdge rows: %w", rerr)
+		}
+		if err := json.Unmarshal(remapped, &rows); err != nil {
+			return nil, 0, fmt.Errorf("typed: decoding WhereEdge rows: %w", err)
+		}
 	}
-	return true, nil
+	if withCount {
+		count, err = decodeCount(perBlock[edgeCountBlock])
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+	return rows, count, nil
 }
 
-// matchedUIDs runs the pre-pass: an @cascade query over T that keeps only
-// nodes whose every WhereEdge predicate has a target matching its filter, and
-// returns those nodes' UIDs.
-func (qb *Query[T]) matchedUIDs() ([]string, error) {
-	var z T
-	pre := qb.conn.Query(qb.ctx, &z)
-	body, params := qb.edgeMatchBody()
-	pre.Cascade().Query(body, params...)
+// edgeBlocks assembles the var block, the data block, and (when withCount) the
+// count block for a WhereEdge query. The matched UIDs are captured in the var
+// block and consumed by uid(mgMatched), never inlined as a literal list.
+//
+// It pushes the data-block filter last-write-wins onto qb.q and leaves the
+// accumulated qb.filters untouched, so it is safe to call once per IterNodes
+// page. The caller's @filter is captured before the uid() term is appended, so
+// the count block re-applies the same user filter without it.
+func (qb *Query[T]) edgeBlocks(withCount bool) []*dg.Query {
+	userExpr, userParams := combineAnd(qb.filters)
 
+	dataExpr := "uid(" + edgeVarName + ")"
+	if userExpr != "" {
+		dataExpr = "(" + userExpr + ") AND uid(" + edgeVarName + ")"
+	}
+	qb.q.Filter(dataExpr, userParams...).Name(edgeDataBlock)
+
+	blocks := []*dg.Query{qb.edgeVarBlock(), qb.q}
+	if withCount {
+		blocks = append(blocks, qb.edgeCountBlock(userExpr, userParams))
+	}
+	return blocks
+}
+
+// edgeVarBlock builds the var block that binds mgMatched to the roots surviving
+// @cascade over every WhereEdge constraint. It roots at the caller's narrowing
+// (UID/RootFunc) when present, so mgMatched is the intersection of the caller's
+// root and the edge constraints rather than discarding the caller's root.
+func (qb *Query[T]) edgeVarBlock() *dg.Query {
+	var z T
+	body, params := qb.edgeMatchBody()
+	v := qb.conn.Query(qb.ctx, &z)
+	if qb.customRootExpr != "" {
+		v.RootFunc(qb.customRootExpr)
+	}
+	v.As(edgeVarName).Var().Cascade().Query(body, params...)
+	return v
+}
+
+// edgeCountBlock builds the count block: count(uid) over uid(mgMatched) with the
+// caller's @filter re-applied, so the total matches the rows the data block
+// would return without pagination.
+func (qb *Query[T]) edgeCountBlock(userExpr string, userParams []any) *dg.Query {
+	var z T
+	c := qb.conn.Query(qb.ctx, &z)
+	c.RootFunc("uid(" + edgeVarName + ")")
+	if userExpr != "" {
+		c.Filter(userExpr, userParams...)
+	}
+	c.Query("{ count(uid) }").Name(edgeCountBlock)
+	return c
+}
+
+// decodeCount reads the count(uid) aggregation from a count block body of the
+// form [{"count": N}].
+func decodeCount(body json.RawMessage) (int, error) {
+	if len(body) == 0 {
+		return 0, nil
+	}
 	var rows []struct {
-		UID string `json:"uid"`
+		Count int `json:"count"`
 	}
-	if err := pre.Nodes(&rows); err != nil {
-		return nil, err
+	if err := json.Unmarshal(body, &rows); err != nil {
+		return 0, fmt.Errorf("typed: decoding WhereEdge count: %w", err)
 	}
-	uids := make([]string, len(rows))
-	for i := range rows {
-		uids[i] = rows[i].UID
+	if len(rows) == 0 {
+		return 0, nil
 	}
-	return uids, nil
+	return rows[0].Count, nil
 }
 
 // edgeMatchBody renders the selection set for the pre-pass: uid plus one

@@ -1188,11 +1188,10 @@ func TestQuery_WhereEdgePreservesUIDRoot(t *testing.T) {
 		}
 	}
 
-	// Both Alice and Carol own Fido, so the WhereEdge pre-pass matches both.
-	// Rooting the query at Alice's UID must survive that pre-pass: the result
-	// is the intersection (just Alice), not every Fido owner. Before the fix,
-	// resolveRoots overwrote the UID root with uid(Alice, Carol) and returned
-	// both owners.
+	// Both Alice and Carol own Fido, so the WhereEdge var block matches both.
+	// Rooting the query at Alice's UID must survive that match: the var block
+	// roots at the caller's UID, so mgMatched is the intersection (just Alice),
+	// not every Fido owner.
 	got, err := owners.Query(ctx).
 		UID(alice.UID).
 		WhereEdge("pets", `eq(name, "Fido")`).
@@ -1258,6 +1257,33 @@ func TestQuery_WhereEdgeFirst(t *testing.T) {
 	}
 	if none != nil {
 		t.Fatalf("WhereEdge First with no match = %+v, want nil", none)
+	}
+}
+
+func TestQuery_WhereEdgeNodesAndCount(t *testing.T) {
+	ctx := context.Background()
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{
+		"Alice": "Fido",
+		"Bob":   "Rex",
+		"Carol": "Fido",
+		"Dave":  "Fido",
+	})
+
+	// Three owners have a Fido. Limit caps the returned rows to 2, but the count
+	// reflects the full matched set: the count block runs count(uid) over
+	// uid(mgMatched), independent of the data block's pagination.
+	rows, count, err := owners.Query(ctx).
+		WhereEdge("pets", `eq(name, "Fido")`).
+		Limit(2).
+		NodesAndCount()
+	if err != nil {
+		t.Fatalf("WhereEdge NodesAndCount: %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("WhereEdge NodesAndCount count = %d, want 3 (Alice, Carol, Dave)", count)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("WhereEdge NodesAndCount returned %d rows, want 2 (Limit)", len(rows))
 	}
 }
 

@@ -8,6 +8,7 @@ package typed
 import (
 	"context"
 	"reflect"
+	"sync/atomic"
 )
 
 // Span is a tracing span for a single database operation. End is called once,
@@ -37,18 +38,30 @@ func (noopTracer) StartSpan(ctx context.Context, _, _ string) (context.Context, 
 	return ctx, noopSpan{}
 }
 
-// tracer is the process-wide tracer the typed package uses. It is a no-op until
-// a host installs one via SetTracer.
-var tracer Tracer = noopTracer{}
+// tracerHolder is the process-wide tracer the typed package uses, held in an
+// atomic.Pointer so SetTracer and the per-operation reads in currentTracer are
+// data-race free. It is a no-op until a host installs one via SetTracer.
+var tracerHolder atomic.Pointer[Tracer]
+
+// currentTracer returns the installed tracer, or the no-op tracer if SetTracer
+// has not run. Every terminal reads through here, so the load stays on the hot
+// path; atomic.Pointer makes it lock-free.
+func currentTracer() Tracer {
+	if p := tracerHolder.Load(); p != nil {
+		return *p
+	}
+	return noopTracer{}
+}
 
 // SetTracer installs the process-wide tracer for typed-layer DB spans. Passing
-// nil restores the no-op tracer. Install once during startup; it is not safe to
-// call concurrently with active queries.
+// nil restores the no-op tracer. It is safe to call concurrently with active
+// queries: in-flight terminals keep the tracer they already loaded, and later
+// terminals observe the new one.
 func SetTracer(t Tracer) {
 	if t == nil {
 		t = noopTracer{}
 	}
-	tracer = t
+	tracerHolder.Store(&t)
 }
 
 // entityName returns the unqualified Go type name of T (for example "Resource"),
