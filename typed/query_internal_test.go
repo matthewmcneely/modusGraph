@@ -7,12 +7,29 @@ package typed
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
 	dg "github.com/dolan-in/dgman/v2"
 	"github.com/matthewmcneely/modusgraph"
 )
+
+// TestRemapPredicateKeys_SurfacesMalformedBlock guards the swallowed-error fix:
+// MultiQuery.Execute used to discard a remap error and fall through to a generic
+// downstream decode failure. remapPredicateKeys must now return the structural
+// error so Execute can wrap it as "remapping block %q".
+func TestRemapPredicateKeys_SurfacesMalformedBlock(t *testing.T) {
+	// A block body that opens as an array but is not valid JSON cannot be
+	// remapped; the error must propagate rather than be swallowed.
+	if _, err := remapPredicateKeys([]byte("[not valid json"), reflect.TypeFor[ivOwner]()); err == nil {
+		t.Fatal("remapPredicateKeys swallowed a malformed-array error; it must surface it")
+	}
+	// A well-formed array remaps without error.
+	if _, err := remapPredicateKeys([]byte(`[{"name":"x"}]`), reflect.TypeFor[ivOwner]()); err != nil {
+		t.Fatalf("remapPredicateKeys errored on valid input: %v", err)
+	}
+}
 
 type ivPet struct {
 	UID   string   `json:"uid,omitempty"`

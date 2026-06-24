@@ -1310,6 +1310,30 @@ func TestQuery_WhereEdgeIterNodes(t *testing.T) {
 	}
 }
 
+func TestQuery_WhereEdgeForwardsVars(t *testing.T) {
+	ctx := context.Background()
+	owners := seedOwners(ctx, t, newConn(t), map[string]string{
+		"Alice": "Fido",
+		"Bob":   "Fido",
+	})
+
+	// Vars binds a GraphQL variable into the root function, combined with a
+	// WhereEdge constraint. The WhereEdge path renders its own multi-block
+	// request via QueryRaw, so it must forward the variable; otherwise $n is
+	// unbound and the query errors. Both own a Fido; $n narrows to Alice.
+	got, err := owners.Query(ctx).
+		Vars("byName($n: string)", map[string]string{"$n": "Alice"}).
+		RootFunc("eq(name, $n)").
+		WhereEdge("pets", `eq(name, "Fido")`).
+		Nodes()
+	if err != nil {
+		t.Fatalf("Vars+WhereEdge Nodes: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "Alice" {
+		t.Fatalf("Vars($n=Alice)+WhereEdge(pets,Fido) returned %+v, want [Alice]", got)
+	}
+}
+
 func TestQuery_UIDRootsAtNode(t *testing.T) {
 	ctx := context.Background()
 	c := typed.NewClient[widget](newConn(t))
