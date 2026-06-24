@@ -59,6 +59,13 @@ type Query[T any] struct {
 	// intersection of the caller's root and the edge constraints rather than
 	// overwriting the caller's root (see edgeVarBlock).
 	customRootExpr string
+
+	// varsFuncDef and varsMap hold GraphQL named variables set via Vars. The
+	// WhereEdge path renders its own multi-block request, so runEdge forwards
+	// these to the QueryBlock and QueryRaw; without that they would ride only on
+	// qb.q and be dropped when the request is composed and run as raw DQL.
+	varsFuncDef string
+	varsMap     map[string]string
 }
 
 // edgeFilter is one accumulated WhereEdge constraint: a dgraph @filter
@@ -224,6 +231,8 @@ func (qb *Query[T]) Name(queryName string) *Query[T] {
 // binds each variable. The query then executes via dgraph's QueryWithVars
 // path. Repeated calls overwrite.
 func (qb *Query[T]) Vars(funcDef string, vars map[string]string) *Query[T] {
+	qb.varsFuncDef = funcDef
+	qb.varsMap = vars
 	qb.q.Vars(funcDef, vars)
 	return qb
 }
@@ -495,8 +504,14 @@ func (r *RawQuery) GroupBy(predicate string) *RawQuery {
 // IterNodes can call runEdge once per page (each page re-resolves the var
 // server-side).
 func (qb *Query[T]) runEdge(withCount bool) (rows []T, count int, err error) {
-	dql := dg.NewQueryBlock(qb.edgeBlocks(withCount)...).String()
-	raw, err := qb.conn.QueryRaw(qb.ctx, dql, nil)
+	block := dg.NewQueryBlock(qb.edgeBlocks(withCount)...)
+	// Forward any GraphQL named variables set via Vars: dgman renders the
+	// "query <funcDef>" declaration only when the QueryBlock carries them, and
+	// QueryRaw binds them at execution.
+	if qb.varsMap != nil {
+		block.Vars(qb.varsFuncDef, qb.varsMap)
+	}
+	raw, err := qb.conn.QueryRaw(qb.ctx, block.String(), qb.varsMap)
 	if err != nil {
 		return nil, 0, fmt.Errorf("typed: WhereEdge query: %w", err)
 	}
