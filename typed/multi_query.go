@@ -73,9 +73,9 @@ func (mq *MultiQuery[T]) BlockNames() []string {
 //
 // Dgraph keys response JSON by predicate name (e.g. resourceName), but Go
 // structs typically use their json tag (e.g. name). Execute remaps the keys
-// per T's tags before decoding so a schema that uses `dgraph:"predicate=..."`
-// with a divergent `json:"..."` decodes correctly — matching the behavior of
-// dgman's QueryBlock.Scan path.
+// per T's tags before decoding — recursing into nested edge structs — so a
+// schema that uses `dgraph:"predicate=..."` with a divergent `json:"..."`
+// decodes correctly at every depth, matching dgman's QueryBlock.Scan path.
 func (mq *MultiQuery[T]) Execute(ctx context.Context) (map[string][]T, error) {
 	if len(mq.names) == 0 {
 		return map[string][]T{}, nil
@@ -106,8 +106,7 @@ func (mq *MultiQuery[T]) Execute(ctx context.Context) (map[string][]T, error) {
 		return nil, fmt.Errorf("multi_query: decoding response: %w", err)
 	}
 
-	var zero T
-	predMap := buildPredicateToJSONMap(reflect.TypeOf(zero))
+	rowType := reflect.TypeFor[T]()
 
 	out := make(map[string][]T, len(mq.names))
 	for _, name := range mq.names {
@@ -116,12 +115,11 @@ func (mq *MultiQuery[T]) Execute(ctx context.Context) (map[string][]T, error) {
 			out[name] = []T{}
 			continue
 		}
-		if len(predMap) > 0 {
-			remapped, err := remapArrayKeys(body, predMap)
-			if err == nil {
-				body = remapped
-			}
+		remapped, err := remapPredicateKeys(body, rowType)
+		if err != nil {
+			return nil, fmt.Errorf("multi_query: remapping block %q: %w", name, err)
 		}
+		body = remapped
 		var rows []T
 		if err := json.Unmarshal(body, &rows); err != nil {
 			return nil, fmt.Errorf("multi_query: decoding block %q: %w", name, err)
@@ -139,9 +137,7 @@ func (mq *MultiQuery[T]) Execute(ctx context.Context) (map[string][]T, error) {
 // of the same name; we need our own because the multi-block response from
 // QueryRaw bypasses dgman's scan path.
 func buildPredicateToJSONMap(t reflect.Type) map[string]string {
-	for t != nil && t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
+	t = getElemType(t)
 	if t == nil || t.Kind() != reflect.Struct {
 		return nil
 	}
@@ -178,23 +174,111 @@ func buildPredicateToJSONMap(t reflect.Type) map[string]string {
 	return result
 }
 
-// remapArrayKeys rewrites top-level keys in each object of a JSON array using
-// the predicate → JSON-tag map. Nested objects are left untouched (search
-// callers iterate scalar predicates of the root type; edge fields are
-// hydrated lazily, not in the multi-block response).
-func remapArrayKeys(data json.RawMessage, predMap map[string]string) (json.RawMessage, error) {
-	var rows []map[string]json.RawMessage
-	if err := json.Unmarshal(data, &rows); err != nil {
-		return data, err
+// remapPredicateKeys rewrites dgraph predicate names to JSON-tag names
+// throughout a block body, descending into nested edge structs so a renamed
+// predicate (dgraph `predicate=` diverging from `json=`) on a nested edge still
+// decodes. It reproduces dgman's QueryBlock.Scan remap, which QueryRaw bypasses.
+// The walk is type-driven by dstType (the row type T, or a nested field type),
+// so only declared edge fields are recursed into; scalars and unrecognized keys
+// pass through untouched. The top-level structural error is returned (so a
+// malformed block surfaces its root cause); nested remaps are best-effort, since
+// a type mismatch there surfaces with full context at the caller's typed decode.
+func remapPredicateKeys(data json.RawMessage, dstType reflect.Type) (json.RawMessage, error) {
+	dstType = getElemType(dstType)
+	if dstType == nil || dstType.Kind() != reflect.Struct {
+		return data, nil
 	}
-	for i, row := range rows {
-		for k, v := range row {
-			if newK, ok := predMap[k]; ok && newK != k {
-				delete(row, k)
-				row[newK] = v
+	switch firstNonSpace(data) {
+	case '[':
+		return remapArray(data, dstType)
+	case '{':
+		return remapObject(data, dstType)
+	default:
+		return data, nil
+	}
+}
+
+// remapArray applies the per-object remap to every element of a JSON array whose
+// elements decode into dstType.
+func remapArray(data json.RawMessage, dstType reflect.Type) (json.RawMessage, error) {
+	var arr []json.RawMessage
+	if err := json.Unmarshal(data, &arr); err != nil {
+		return nil, err
+	}
+	for i, item := range arr {
+		if remapped, err := remapPredicateKeys(item, dstType); err == nil {
+			arr[i] = remapped
+		}
+	}
+	return json.Marshal(arr)
+}
+
+// remapObject renames dstType's renamed-predicate keys in one JSON object and
+// recurses into its edge fields (struct- or slice-of-struct-typed).
+func remapObject(data json.RawMessage, dstType reflect.Type) (json.RawMessage, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return nil, err
+	}
+	predMap := buildPredicateToJSONMap(dstType)
+	fieldTypes := buildFieldTypeMap(dstType)
+	remapped := make(map[string]json.RawMessage, len(obj))
+	for key, val := range obj {
+		newKey := key
+		if mapped, ok := predMap[key]; ok {
+			newKey = mapped
+		}
+		if ft, ok := fieldTypes[newKey]; ok && getElemType(ft).Kind() == reflect.Struct {
+			if rv, err := remapPredicateKeys(val, ft); err == nil {
+				val = rv
 			}
 		}
-		rows[i] = row
+		remapped[newKey] = val
 	}
-	return json.Marshal(rows)
+	return json.Marshal(remapped)
+}
+
+// buildFieldTypeMap maps each of t's JSON-tag names to its field type, so the
+// remap can decide which keys are edges worth recursing into.
+func buildFieldTypeMap(t reflect.Type) map[string]reflect.Type {
+	t = getElemType(t)
+	if t == nil || t.Kind() != reflect.Struct {
+		return nil
+	}
+	result := make(map[string]reflect.Type, t.NumField())
+	for i := range t.NumField() {
+		field := t.Field(i)
+		jsonTag := field.Tag.Get("json")
+		if jsonTag == "" || jsonTag == "-" {
+			continue
+		}
+		jsonName := strings.Split(jsonTag, ",")[0]
+		if jsonName == "" {
+			continue
+		}
+		result[jsonName] = field.Type
+	}
+	return result
+}
+
+// getElemType unwraps pointer, slice, and array types to their base element
+// type, so an edge field declared as *T, []T, or []*T resolves to T.
+func getElemType(t reflect.Type) reflect.Type {
+	for t != nil && (t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Array) {
+		t = t.Elem()
+	}
+	return t
+}
+
+// firstNonSpace returns the first non-whitespace byte of b, or 0 if none.
+func firstNonSpace(b []byte) byte {
+	for _, c := range b {
+		switch c {
+		case ' ', '\t', '\n', '\r':
+			continue
+		default:
+			return c
+		}
+	}
+	return 0
 }
