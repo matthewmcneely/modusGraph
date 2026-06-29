@@ -16,6 +16,7 @@ import (
 
 	"github.com/dgraph-io/dgo/v250"
 	"github.com/matthewmcneely/modusgraph"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -211,4 +212,26 @@ func TestWithRetryNegativeMaxRetries(t *testing.T) {
 
 	assert.ErrorIs(t, err, expectedErr)
 	assert.Equal(t, 1, callCount, "negative MaxRetries should still call fn once")
+}
+
+// TestWithRetryDetectsWrappedAbort guards the wrapping chain WithRetry relies
+// on. A real abort does not reach WithRetry as the bare dgo.ErrAborted sentinel:
+// the mutation stack wraps it with github.com/pkg/errors (as dgman does), and
+// errors.Is must still see the sentinel through that wrapper. Every other abort
+// test returns the bare sentinel, so this is the only guard that the
+// wrap -> Unwrap chain stays intact if pkg/errors ever stops preserving it.
+func TestWithRetryDetectsWrappedAbort(t *testing.T) {
+	uri := "file://" + GetTempDir(t)
+	client, cleanup := CreateTestClient(t, uri)
+	defer cleanup()
+
+	policy := modusgraph.RetryPolicy{MaxRetries: 2, BaseDelay: time.Millisecond}
+	callCount := 0
+	err := client.WithRetry(context.Background(), policy, func() error {
+		callCount++
+		return pkgerrors.Wrap(dgo.ErrAborted, "post-mutation hook failed")
+	})
+
+	assert.ErrorIs(t, err, dgo.ErrAborted)
+	assert.Equal(t, 3, callCount, "a wrapped abort is retried MaxRetries+1 times")
 }
