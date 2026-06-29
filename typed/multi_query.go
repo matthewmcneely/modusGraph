@@ -44,7 +44,9 @@ func NewMultiQuery[T any](conn modusgraph.Client) *MultiQuery[T] {
 // and panic rather than fail at runtime.
 func (mq *MultiQuery[T]) Add(name string, q *Query[T]) *MultiQuery[T] {
 	if !validBlockName(name) {
-		panic(fmt.Sprintf("multi_query: invalid block name %q; must be a non-empty identifier of ASCII letters, digits, and underscores, not starting with a digit", name))
+		panic(fmt.Sprintf(
+			"multi_query: invalid block name %q; must be a non-empty identifier of ASCII "+
+				"letters, digits, and underscores, not starting with a digit", name))
 	}
 	if _, exists := mq.blocks[name]; exists {
 		panic(fmt.Sprintf("multi_query: duplicate block name %q", name))
