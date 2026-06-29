@@ -519,6 +519,82 @@ with language-specific analyzers, geolocation queries, and more. The ability to 
 Dgraph client gives you the full power of Dgraph's query language while still benefiting from
 modusGraph's simplified client interface and schema management.
 
+## Typed Client (Generic, Type-Safe API)
+
+The `typed` package wraps `modusgraph.Client` in a Go generic layer that binds one Go type to the
+otherwise `any`-typed client. You get compile-time-typed CRUD and a fluent query builder with no
+per-entity code generation. It composes on the same dgman primitives the base client uses, so it
+adds type safety without surrendering any of Dgraph's query power.
+
+The base client is value-oriented: its methods take and return `any`, so every call site declares a
+destination slice, builds the query, decodes, and re-asserts the type. The typed layer lifts that
+repeated shape into the type system once.
+
+```go
+import "github.com/matthewmcneely/modusgraph/typed"
+
+// Bind the client to User once.
+users := typed.NewClient[User](client)
+
+// Nodes returns []User directly — no destination slice, no decode step.
+admins, err := users.Query(ctx).
+    Filter(`eq(role, $1)`, "Admin").
+    OrderAsc("name").
+    Limit(50).
+    Nodes()
+
+// First returns *User, and nil when nothing matched.
+admin, err := users.Query(ctx).
+    Filter(`eq(role, $1)`, "Admin").
+    First()
+
+// Get, Add, Update, Upsert, and Delete are all typed to *User.
+got, err := users.Get(ctx, admin.UID)
+```
+
+### Query builder
+
+`Query[T]` chains builder methods and ends in a terminal that executes and decodes a typed result:
+`Nodes()` returns `[]T`, `First()` returns `*T`, `NodesAndCount()` returns `[]T` plus the total
+count, and `IterNodes()` returns an iterator of `*T`.
+
+- **Filters** accumulate and AND together. Each fragment is parenthesized, so a fragment containing
+  `OR` keeps its precedence when combined.
+- **`OrGroup`** ORs several sub-scopes into one parenthesized group:
+
+  ```go
+  // role == "Admin" AND (name == "Alice" OR name == "Bob")
+  users.Query(ctx).
+      Filter(`eq(role, $1)`, "Admin").
+      OrGroup(
+          typed.NewDetachedQuery[User]().Filter(`eq(name, "Alice")`),
+          typed.NewDetachedQuery[User]().Filter(`eq(name, "Bob")`),
+      ).Nodes()
+  ```
+
+- **`WhereEdge`** constrains `T` by a scalar on a neighbour reached over an edge, which a root
+  filter cannot express. It renders a server-side `var` block, so the matched UIDs never leave the
+  server and memory stays bounded no matter how many roots match. When you also set a root, the edge
+  match intersects it rather than replacing it.
+- **`IterNodes`** streams arbitrarily large result sets one page at a time over a single read-only
+  snapshot.
+- **`MultiQuery`** batches several same-type blocks into one round-trip:
+
+  ```go
+  // One request, results keyed by block name: map[string][]User.
+  results, err := typed.NewMultiQuery[User](client).
+      Add("admins", users.Query(ctx).Filter(`eq(role, $1)`, "Admin")).
+      Add("guests", users.Query(ctx).Filter(`eq(role, $1)`, "Guest")).
+      Execute(ctx)
+  ```
+
+The companion `typed/filter` and `typed/search` packages add a parameterised filter-expression
+builder and helpers for merging ranked results across blocks.
+
+For the full API, the design rationale, and runnable examples, see the package documentation
+(`go doc github.com/matthewmcneely/modusgraph/typed`) and the `example_test.go` files under
+`typed/`.
+
 ## Automatic Similarity Search (`SimString`)
 
 `SimString` is a string type that transparently manages vector embeddings and HNSW-indexed shadow
