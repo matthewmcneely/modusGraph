@@ -7,10 +7,39 @@ package typed_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/matthewmcneely/modusgraph/typed"
 )
+
+// TestMultiQueryAddValidatesBlockName checks that Add accepts legal DQL block
+// aliases and rejects names that would corrupt the generated DQL or the
+// response keying. Name validation happens before any connection use, so these
+// cases need no live conn.
+func TestMultiQueryAddValidatesBlockName(t *testing.T) {
+	t.Run("accepts valid identifiers", func(t *testing.T) {
+		mq := typed.NewMultiQuery[widget](nil)
+		valid := []string{"a", "byName", "block_2", "_private", "X1"}
+		for _, name := range valid {
+			mq.Add(name, typed.NewDetachedQuery[widget]())
+		}
+		if got := len(mq.BlockNames()); got != len(valid) {
+			t.Fatalf("BlockNames count = %d, want %d", got, len(valid))
+		}
+	})
+	for _, name := range []string{"", " ", "has space", "1leading", "dash-name", "paren()", "dot.name"} {
+		t.Run(fmt.Sprintf("rejects %q", name), func(t *testing.T) {
+			mq := typed.NewMultiQuery[widget](nil)
+			defer func() {
+				if r := recover(); r == nil {
+					t.Fatalf("expected panic for invalid block name %q", name)
+				}
+			}()
+			mq.Add(name, typed.NewDetachedQuery[widget]())
+		})
+	}
+}
 
 func TestMultiQueryAddAccumulatesBlocks(t *testing.T) {
 	conn := newConn(t)

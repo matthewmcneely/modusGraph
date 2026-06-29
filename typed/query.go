@@ -8,6 +8,7 @@ package typed
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"iter"
 	"reflect"
@@ -17,6 +18,14 @@ import (
 	dg "github.com/dolan-in/dgman/v2"
 	"github.com/matthewmcneely/modusgraph"
 )
+
+// ErrDetachedQuery is returned by a terminal (Nodes, First, NodesAndCount,
+// IterNodes) called on a detached query — one built with NewDetachedQuery,
+// which has no connection and no underlying dgman query. A detached query
+// exists only to capture a filter sub-scope for OrGroup or WhereEdge; it has no
+// execution path. Terminals return this error (testable with errors.Is) rather
+// than nil-panicking on the absent underlying query.
+var ErrDetachedQuery = errors.New("typed: cannot execute a detached query built with NewDetachedQuery; it captures a filter sub-scope for OrGroup or WhereEdge and has no execution path")
 
 // Block names and the query-variable name used by the WhereEdge server-side var
 // query. The var block binds matched root UIDs; the data and count blocks
@@ -299,6 +308,9 @@ func (qb *Query[T]) GroupBy(predicate string) *RawQuery {
 
 // Nodes executes the query and returns all matching records.
 func (qb *Query[T]) Nodes() (out []T, err error) {
+	if qb.q == nil {
+		return nil, ErrDetachedQuery
+	}
 	_, span := currentTracer().StartSpan(qb.ctx, "query", entityName[T]())
 	defer func() { span.End(err) }()
 	if len(qb.edges) > 0 {
@@ -314,6 +326,9 @@ func (qb *Query[T]) Nodes() (out []T, err error) {
 // First executes the query with an implicit Limit(1) and returns the first
 // record, or (nil, nil) if the query matched no rows.
 func (qb *Query[T]) First() (rec *T, err error) {
+	if qb.q == nil {
+		return nil, ErrDetachedQuery
+	}
 	_, span := currentTracer().StartSpan(qb.ctx, "query", entityName[T]())
 	defer func() { span.End(err) }()
 	var out []T
@@ -348,6 +363,10 @@ func (qb *Query[T]) First() (rec *T, err error) {
 // fresh snapshot. On error it yields a final (nil, err) and stops.
 func (qb *Query[T]) IterNodes() iter.Seq2[*T, error] {
 	return func(yield func(*T, error) bool) {
+		if qb.q == nil {
+			yield(nil, ErrDetachedQuery)
+			return
+		}
 		_, span := currentTracer().StartSpan(qb.ctx, "query", entityName[T]())
 		var ferr error
 		defer func() { span.End(ferr) }()
@@ -415,6 +434,9 @@ func (qb *Query[T]) All(depth int) *Query[T] {
 // with the total count (useful for pagination totals). Like Nodes, it runs the
 // WhereEdge pre-pass first when edge constraints are present.
 func (qb *Query[T]) NodesAndCount() (out []T, count int, err error) {
+	if qb.q == nil {
+		return nil, 0, ErrDetachedQuery
+	}
 	_, span := currentTracer().StartSpan(qb.ctx, "query", entityName[T]())
 	defer func() { span.End(err) }()
 	if len(qb.edges) > 0 {

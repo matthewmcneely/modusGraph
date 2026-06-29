@@ -7,6 +7,7 @@ package typed_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -15,6 +16,31 @@ import (
 	"github.com/matthewmcneely/modusgraph"
 	"github.com/matthewmcneely/modusgraph/typed"
 )
+
+// TestQuery_DetachedTerminalsReturnError verifies that executing a detached
+// query — the filter-capture target returned by NewDetachedQuery for OrGroup
+// and WhereEdge, which has no connection — returns ErrDetachedQuery from every
+// terminal instead of nil-panicking on the absent underlying dgman query.
+func TestQuery_DetachedTerminalsReturnError(t *testing.T) {
+	if _, err := typed.NewDetachedQuery[widget]().Nodes(); !errors.Is(err, typed.ErrDetachedQuery) {
+		t.Errorf("Nodes() error = %v, want ErrDetachedQuery", err)
+	}
+	if _, err := typed.NewDetachedQuery[widget]().First(); !errors.Is(err, typed.ErrDetachedQuery) {
+		t.Errorf("First() error = %v, want ErrDetachedQuery", err)
+	}
+	if _, _, err := typed.NewDetachedQuery[widget]().NodesAndCount(); !errors.Is(err, typed.ErrDetachedQuery) {
+		t.Errorf("NodesAndCount() error = %v, want ErrDetachedQuery", err)
+	}
+	var iterErr error
+	rows := 0
+	for _, err := range typed.NewDetachedQuery[widget]().IterNodes() {
+		rows++
+		iterErr = err
+	}
+	if rows != 1 || !errors.Is(iterErr, typed.ErrDetachedQuery) {
+		t.Errorf("IterNodes yielded %d (rec, err) pairs, last err = %v; want exactly 1 with ErrDetachedQuery", rows, iterErr)
+	}
+}
 
 // newCountingConn builds a file-backed modusgraph client exactly like newConn,
 // but wires in a logr.Logger that counts dgman query executions. dgman logs
