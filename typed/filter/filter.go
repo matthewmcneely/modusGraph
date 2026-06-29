@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: © 2017-2026 Istari Digital, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // Package filter provides typed values and a parameterised expression builder
 // for composing dgraph @filter clauses on generated <Entity>Query types.
 //
