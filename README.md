@@ -547,8 +547,14 @@ admins, err := users.Query(ctx).
 admin, err := users.Query(ctx).
     Filter(`eq(role, $1)`, "Admin").
     First()
+if err != nil {
+    log.Fatalf("query admin: %v", err)
+}
+if admin == nil {
+    log.Fatal("no admin matched") // First returns nil when nothing matched
+}
 
-// Get, Add, Update, Upsert, and Delete are all typed to *User.
+// Add, Update, and Upsert take *User; Get and Delete are keyed by a UID string (Get returns *User).
 got, err := users.Get(ctx, admin.UID)
 ```
 
