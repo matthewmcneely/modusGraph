@@ -49,3 +49,33 @@ func TestClientUnwrapsWrapperThroughRealMutation(t *testing.T) {
 	require.NoError(t, client.Get(ctx, &got, inner.UID))
 	require.Equal(t, "Acme", got.Name)
 }
+
+// TestClientUnwrapsWrapperSliceThroughRealMutation covers the batch path:
+// Insert accepts "an object or slice of objects", so a []*wrapper must have
+// each element unwrapped. Before UnwrapSchema mapped over slices, dgman
+// reflected over the wrappers and failed with "cannot set uid/", persisting
+// nothing; now each inner record is inserted and receives a UID.
+func TestClientUnwrapsWrapperSliceThroughRealMutation(t *testing.T) {
+	client, err := mg.NewClient("file://"+GetTempDir(t), mg.WithAutoSchema(true))
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := context.Background()
+	acme := &studioRecord{Name: "Acme"}
+	globex := &studioRecord{Name: "Globex"}
+	batch := []*studioWrapper{{inner: acme}, {inner: globex}}
+
+	require.NoError(t, client.Insert(ctx, batch))
+	require.NotEmpty(t, acme.UID,
+		"Insert did not route the first wrapper to its inner record")
+	require.NotEmpty(t, globex.UID,
+		"Insert did not route the second wrapper to its inner record")
+	require.NotEqual(t, acme.UID, globex.UID,
+		"batch elements should receive distinct UIDs")
+
+	var gotAcme, gotGlobex studioRecord
+	require.NoError(t, client.Get(ctx, &gotAcme, acme.UID))
+	require.NoError(t, client.Get(ctx, &gotGlobex, globex.UID))
+	require.Equal(t, "Acme", gotAcme.Name)
+	require.Equal(t, "Globex", gotGlobex.Name)
+}
