@@ -25,7 +25,10 @@ import (
 // exists only to capture a filter sub-scope for OrGroup or WhereEdge; it has no
 // execution path. Terminals return this error (testable with errors.Is) rather
 // than nil-panicking on the absent underlying query.
-var ErrDetachedQuery = errors.New("typed: cannot execute a detached query built with NewDetachedQuery; it captures a filter sub-scope for OrGroup or WhereEdge and has no execution path")
+var ErrDetachedQuery = errors.New(
+	"typed: cannot execute a detached query built with NewDetachedQuery; " +
+		"it captures a filter sub-scope for OrGroup or WhereEdge and has no execution path",
+)
 
 // Block names and the query-variable name used by the WhereEdge server-side var
 // query. The var block binds matched root UIDs; the data and count blocks
