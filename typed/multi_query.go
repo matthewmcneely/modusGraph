@@ -281,7 +281,9 @@ func getElemType(t reflect.Type) reflect.Type {
 // with a digit. Execute interpolates the name into the DQL block header (via
 // Query.Name) and uses it as the response JSON key, so an unconstrained name —
 // one with spaces, braces, parentheses, or other DQL punctuation — could
-// corrupt the generated query or collide with the response structure.
+// corrupt the generated query or collide with the response structure. It also
+// rejects reserved DQL keywords (var, query, mutation, schema) that are legal
+// identifiers but would not denote a normal result block.
 func validBlockName(name string) bool {
 	if name == "" {
 		return false
@@ -300,6 +302,13 @@ func validBlockName(name string) bool {
 		default:
 			return false
 		}
+	}
+	// Reject reserved DQL block/operation keywords: they are legal identifiers
+	// but would be interpreted as a special block (e.g. a `var` block) rather
+	// than a normal result block.
+	switch strings.ToLower(name) {
+	case "var", "query", "mutation", "schema":
+		return false
 	}
 	return true
 }
