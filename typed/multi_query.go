@@ -36,12 +36,16 @@ func NewMultiQuery[T any](conn modusgraph.Client) *MultiQuery[T] {
 	}
 }
 
-// Add registers a named block. Names must be unique within one MultiQuery, and
-// each *Query[T] may be added only once: Execute names the block's underlying
-// dgman query in place, so registering the same Query pointer under two names
-// would make both blocks render with whichever name was applied last. Both
-// conditions are programming errors and panic rather than fail at runtime.
+// Add registers a named block. The name must be a legal DQL block alias, names
+// must be unique within one MultiQuery, and each *Query[T] may be added only
+// once: Execute names the block's underlying dgman query in place, so
+// registering the same Query pointer under two names would make both blocks
+// render with whichever name was applied last. All three are programming errors
+// and panic rather than fail at runtime.
 func (mq *MultiQuery[T]) Add(name string, q *Query[T]) *MultiQuery[T] {
+	if !validBlockName(name) {
+		panic(fmt.Sprintf("multi_query: invalid block name %q; must be a non-empty identifier of ASCII letters, digits, and underscores, not starting with a digit", name))
+	}
 	if _, exists := mq.blocks[name]; exists {
 		panic(fmt.Sprintf("multi_query: duplicate block name %q", name))
 	}
@@ -268,6 +272,34 @@ func getElemType(t reflect.Type) reflect.Type {
 		t = t.Elem()
 	}
 	return t
+}
+
+// validBlockName reports whether name is a legal DQL query-block alias: a
+// non-empty run of ASCII letters, digits, and underscores that does not start
+// with a digit. Execute interpolates the name into the DQL block header (via
+// Query.Name) and uses it as the response JSON key, so an unconstrained name —
+// one with spaces, braces, parentheses, or other DQL punctuation — could
+// corrupt the generated query or collide with the response structure.
+func validBlockName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c == '_',
+			c >= 'a' && c <= 'z',
+			c >= 'A' && c <= 'Z':
+			// always allowed
+		case c >= '0' && c <= '9':
+			if i == 0 {
+				return false // a leading digit is not a legal identifier
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // firstNonSpace returns the first non-whitespace byte of b, or 0 if none.
