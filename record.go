@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: © 2017-2026 Istari Digital, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 package modusgraph
 
 import "reflect"
@@ -42,6 +47,13 @@ func UnwrapSchema(obj any) any {
 	if !v.IsValid() {
 		return obj
 	}
+	// Insert, InsertRaw, and Upsert accept "an object or slice of objects".
+	// A slice or array of wrappers must be unwrapped element-wise: otherwise
+	// the wrappers reach dgman, which reflects over them and fails with an
+	// opaque "cannot set uid/" while persisting nothing. Map over the elements.
+	if k := v.Kind(); k == reflect.Slice || k == reflect.Array {
+		return unwrapSchemaSlice(v, obj)
+	}
 	// A typed nil pointer has a valid method set, but invoking Unwrap on a nil
 	// receiver would panic if the method dereferences it. Leave it untouched.
 	if v.Kind() == reflect.Pointer && v.IsNil() {
@@ -68,4 +80,52 @@ func UnwrapSchema(obj any) any {
 		return inner
 	}
 	return obj
+}
+
+// unwrapSchemaSlice unwraps each element of a slice or array. It returns obj
+// unchanged when no element is a wrapper, so existing callers passing slices
+// of plain structs are unaffected — important because dgman writes generated
+// UIDs back through the original backing array, which rebuilding would break.
+//
+// When wrappers are present it builds a fresh slice of inner records: a typed
+// []T when every inner record shares one concrete type (the common batch case,
+// which dgman handles exactly as a directly-passed slice), or []any when the
+// inner types differ.
+func unwrapSchemaSlice(v reflect.Value, obj any) any {
+	n := v.Len()
+	if n == 0 {
+		return obj
+	}
+	unwrapped := make([]any, n)
+	changed := false
+	homogeneous := true
+	var elemType reflect.Type
+	for i := range n {
+		e := v.Index(i).Interface()
+		u := UnwrapSchema(e)
+		unwrapped[i] = u
+		ut := reflect.TypeOf(u)
+		if ut != reflect.TypeOf(e) {
+			changed = true
+		}
+		switch {
+		case ut == nil:
+			homogeneous = false
+		case i == 0:
+			elemType = ut
+		case ut != elemType:
+			homogeneous = false
+		}
+	}
+	if !changed {
+		return obj
+	}
+	if homogeneous && elemType != nil {
+		out := reflect.MakeSlice(reflect.SliceOf(elemType), n, n)
+		for i := range n {
+			out.Index(i).Set(reflect.ValueOf(unwrapped[i]))
+		}
+		return out.Interface()
+	}
+	return unwrapped
 }

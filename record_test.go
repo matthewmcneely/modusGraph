@@ -1,7 +1,13 @@
+/*
+ * SPDX-FileCopyrightText: © 2017-2026 Istari Digital, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 package modusgraph
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -135,5 +141,76 @@ func TestUnwrapSchema_VariadicUnwrapsEachElement(t *testing.T) {
 	}
 	if templates[1] != any(innerB) {
 		t.Fatalf("template[1]: expected innerB (passthrough), got %T", templates[1])
+	}
+}
+
+func TestUnwrapSchema_SliceOfWrappersUnwrapsEach(t *testing.T) {
+	// Insert/Upsert accept a slice of objects; a []*wrapper must be unwrapped
+	// element-wise into the inner records, yielding a typed []T dgman accepts.
+	a := &fakeRecord{name: "Studio"}
+	b := &fakeRecord{name: "Film"}
+	in := []*fakeWrapper{{inner: a}, {inner: b}}
+	out := UnwrapSchema(in)
+	got, ok := out.([]*fakeRecord)
+	if !ok {
+		t.Fatalf("expected []*fakeRecord, got %T", out)
+	}
+	if len(got) != 2 || got[0] != a || got[1] != b {
+		t.Fatalf("expected inner records [a b], got %v", got)
+	}
+}
+
+func TestUnwrapSchema_SliceOfPlainStructsUnchanged(t *testing.T) {
+	// No element is a wrapper, so the original slice must come back untouched:
+	// dgman writes generated UIDs back through this exact backing array, and a
+	// rebuilt slice would break that for existing callers.
+	in := []*fakeNonSchema{{X: "a"}, {X: "b"}}
+	out := UnwrapSchema(in)
+	if reflect.ValueOf(out).Pointer() != reflect.ValueOf(in).Pointer() {
+		t.Fatalf("expected the original slice, got a rebuilt %T", out)
+	}
+}
+
+func TestUnwrapSchema_EmptySlicePassthrough(t *testing.T) {
+	in := []*fakeWrapper{}
+	out := UnwrapSchema(in)
+	if reflect.ValueOf(out).Pointer() != reflect.ValueOf(in).Pointer() {
+		t.Fatalf("expected the original empty slice, got %T", out)
+	}
+}
+
+func TestUnwrapSchema_MixedInnerTypesFallBackToAny(t *testing.T) {
+	// A wrapper unwraps to *fakeRecord; a plain struct passes through as
+	// *fakeNonSchema. The inner types differ, so the result is []any rather
+	// than a typed slice, but every wrapper is still unwrapped.
+	film := &fakeRecord{name: "Film"}
+	w := &fakeWrapper{inner: film}
+	rec := &fakeRecord{name: "Studio"}
+	plain := &fakeNonSchema{X: "z"}
+	in := []any{w, rec, plain}
+	out := UnwrapSchema(in)
+	got, ok := out.([]any)
+	if !ok {
+		t.Fatalf("expected []any for mixed inner types, got %T", out)
+	}
+	if got[0] != any(film) {
+		t.Fatalf("expected wrapper unwrapped at [0], got %T", got[0])
+	}
+	if got[1] != any(rec) || got[2] != any(plain) {
+		t.Fatalf("expected passthrough at [1],[2], got %v %v", got[1], got[2])
+	}
+}
+
+func TestUnwrapSchema_ArrayOfWrappersUnwrapsEach(t *testing.T) {
+	a := &fakeRecord{name: "Studio"}
+	b := &fakeRecord{name: "Film"}
+	in := [2]*fakeWrapper{{inner: a}, {inner: b}}
+	out := UnwrapSchema(in)
+	got, ok := out.([]*fakeRecord)
+	if !ok {
+		t.Fatalf("expected []*fakeRecord from array input, got %T", out)
+	}
+	if got[0] != a || got[1] != b {
+		t.Fatalf("expected inner records [a b], got %v", got)
 	}
 }
