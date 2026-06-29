@@ -33,7 +33,7 @@ type RetryPolicy struct {
 }
 
 // DefaultRetryPolicy mirrors dgraph4j's defaults:
-// 5 retries, 100ms base delay, 5s max delay, 10% jitter.
+// 10 retries, 100ms base delay, 5s max delay, 10% jitter.
 var DefaultRetryPolicy = RetryPolicy{
 	MaxRetries: 10,
 	BaseDelay:  100 * time.Millisecond,
