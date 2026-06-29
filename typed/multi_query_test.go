@@ -28,7 +28,11 @@ func TestMultiQueryAddValidatesBlockName(t *testing.T) {
 			t.Fatalf("BlockNames count = %d, want %d", got, len(valid))
 		}
 	})
-	for _, name := range []string{"", " ", "has space", "1leading", "dash-name", "paren()", "dot.name", "var", "query", "mutation", "schema", "VAR"} {
+	invalid := []string{
+		"", " ", "has space", "1leading", "dash-name", "paren()", "dot.name",
+		"var", "query", "mutation", "schema", "VAR",
+	}
+	for _, name := range invalid {
 		t.Run(fmt.Sprintf("rejects %q", name), func(t *testing.T) {
 			mq := typed.NewMultiQuery[widget](nil)
 			defer func() {
