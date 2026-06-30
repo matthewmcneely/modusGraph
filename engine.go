@@ -345,7 +345,7 @@ func (engine *Engine) mutate(ctx context.Context, ns *Namespace, ms []*api.Mutat
 	defer engine.mutex.Unlock()
 	dms := make([]*dql.Mutation, 0, len(ms))
 	for _, mu := range ms {
-		dm, err := edgraph.ParseMutationObject(mu, false)
+		dm, err := edgraph.ParseMutationObject(ctx, mu)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing mutation: %w", err)
 		}
