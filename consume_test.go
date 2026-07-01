@@ -186,3 +186,32 @@ func TestLoadAndDeleteZeroesObjectWhenNotFound(t *testing.T) {
 		t.Fatalf("want obj zeroed on loaded=false, got %+v", got)
 	}
 }
+
+// consumeLowerUID stores its uid in a field named Uid, so dgman hydrates it
+// (json:"uid") but uidOf's FieldByName("UID") cannot read it.
+type consumeLowerUID struct {
+	Uid   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
+	State string   `json:"state,omitempty" dgraph:"index=hash upsert"`
+}
+
+// When Get matches a node but its UID cannot be read (the model lacks a UID
+// string field), LoadAndDelete must error rather than report loaded=false: the
+// node existed and would otherwise be silently skipped instead of consumed.
+func TestLoadAndDeleteErrorsWhenUIDUnreadable(t *testing.T) {
+	conn := newConsumeClient(t)
+	ctx := context.Background()
+
+	if err := conn.Insert(ctx, &consumeLowerUID{State: "s1"}); err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+
+	var got consumeLowerUID
+	loaded, err := conn.LoadAndDelete(ctx, &got, "s1", "state")
+	if err == nil {
+		t.Fatalf("want error when the matched node's UID is unreadable, got nil (loaded=%v)", loaded)
+	}
+	if loaded {
+		t.Fatal("want loaded=false alongside the error")
+	}
+}
