@@ -150,3 +150,18 @@ func TestLoadAndDeleteRejectsNilObject(t *testing.T) {
 		t.Fatal("typed nil pointer: want error, got nil")
 	}
 }
+
+// LoadOrStore validates via checkPointer (validateStruct is a no-op without a
+// configured validator), so nil and typed-nil input must return an error rather
+// than reaching MutateOrGet and panicking.
+func TestLoadOrStoreRejectsNilObject(t *testing.T) {
+	conn := newConsumeClient(t)
+	ctx := context.Background()
+
+	if _, err := conn.LoadOrStore(ctx, nil, "jti"); err == nil {
+		t.Fatal("nil interface: want error, got nil")
+	}
+	if _, err := conn.LoadOrStore(ctx, (*consumeJTI)(nil), "jti"); err == nil {
+		t.Fatal("typed nil pointer: want error, got nil")
+	}
+}

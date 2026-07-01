@@ -556,7 +556,7 @@ func checkPointer(obj any) error {
 func (c client) validateStruct(ctx context.Context, obj any) error {
 	// Handle both single structs and slices
 	val := reflect.ValueOf(obj)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return fmt.Errorf("cannot validate nil pointer")
 		}
@@ -566,7 +566,7 @@ func (c client) validateStruct(ctx context.Context, obj any) error {
 	if val.Kind() == reflect.Slice {
 		for i := 0; i < val.Len(); i++ {
 			elem := val.Index(i)
-			if elem.Kind() == reflect.Ptr {
+			if elem.Kind() == reflect.Pointer {
 				if elem.IsNil() {
 					return fmt.Errorf("cannot validate nil pointer at index %d", i)
 				}
@@ -657,6 +657,13 @@ func (c client) Upsert(ctx context.Context, obj any, predicates ...string) error
 // With no predicates, the first field tagged dgraph:"upsert" is used.
 func (c client) LoadOrStore(ctx context.Context, obj any, predicates ...string) (loaded bool, err error) {
 	obj = UnwrapSchema(obj)
+	// Reject nil / non-pointer input up front, as LoadAndDelete and Get do:
+	// validateStruct is a no-op when no validator is configured, so without this
+	// a typed nil or non-pointer would reach MutateOrGet and panic or silently
+	// fail to hydrate on the loaded=true path.
+	if err := checkPointer(obj); err != nil {
+		return false, err
+	}
 	if err := c.validateStruct(ctx, obj); err != nil {
 		return false, err
 	}
@@ -686,7 +693,7 @@ func (c client) LoadOrStore(ctx context.Context, obj any, predicates ...string) 
 // field exists.
 func firstUpsertPredicate(obj any) string {
 	v := reflect.ValueOf(obj)
-	for v.Kind() == reflect.Ptr {
+	for v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 	// A nil pointer (or nil interface) dereferences to an invalid Value, and a
