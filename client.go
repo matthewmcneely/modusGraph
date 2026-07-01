@@ -519,12 +519,13 @@ func checkPointer(obj any) error {
 	return nil
 }
 
-// validateStruct validates a struct using the configured validator
+// validateStruct validates a struct using the configured validator.
+//
+// It does NOT early-return when no StructValidator is configured: a value may
+// implement SelfValidator, which must run on the default client too. The
+// StructValidator fallback in validateOne is guarded by the nil check instead,
+// so self-validation fires regardless of whether a StructValidator was set.
 func (c client) validateStruct(ctx context.Context, obj any) error {
-	if c.options.validator == nil {
-		return nil // No validator configured, skip validation
-	}
-
 	// Handle both single structs and slices
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Ptr {
@@ -566,6 +567,9 @@ func (c client) validateOne(ctx context.Context, val reflect.Value) error {
 	}
 	if sv, ok := iface.(SelfValidator); ok {
 		return sv.ValidateWith(ctx, c.options.validator)
+	}
+	if c.options.validator == nil {
+		return nil // No StructValidator configured and not self-validating.
 	}
 	return c.options.validator.StructCtx(ctx, iface)
 }
