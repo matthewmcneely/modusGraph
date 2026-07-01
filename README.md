@@ -190,6 +190,46 @@ client, err := mg.NewClient(uri, mg.WithValidator(validate))
 
 See the [validator test](validate_test.go) for more examples.
 
+#### SelfValidator (self-driven validation)
+
+Struct tags validate one field at a time. When a rule spans fields or needs real logic —
+`End >= Start`, a field required only when another is set, or any business rule — a type can drive
+its own validation by implementing `SelfValidator`:
+
+```go
+type SelfValidator interface {
+    ValidateWith(ctx context.Context, v StructValidator) error
+}
+```
+
+When a value passed to `Insert`, `Upsert`, or `Update` implements `SelfValidator`, the client calls
+`ValidateWith` on it. The configured `StructValidator` is handed in, so an implementation can run
+the ordinary tag-based checks first and then layer custom logic on top:
+
+```go
+type Event struct {
+    UID   string   `json:"uid,omitempty"`
+    DType []string `json:"dgraph.type,omitempty"`
+    Name  string   `json:"name,omitempty"`
+    Start int      `json:"start,omitempty"`
+    End   int      `json:"end,omitempty"`
+}
+
+func (e *Event) ValidateWith(ctx context.Context, v mg.StructValidator) error {
+    if v != nil {
+        if err := v.StructCtx(ctx, e); err != nil { // tag-based checks first
+            return err
+        }
+    }
+    if e.End < e.Start { // then the cross-field rule
+        return fmt.Errorf("event %q: End (%d) must be >= Start (%d)", e.Name, e.End, e.Start)
+    }
+    return nil
+}
+```
+
+Plain structs are unaffected — they still flow through the configured `StructValidator` as before.
+
 You can combine multiple options:
 
 ```go
