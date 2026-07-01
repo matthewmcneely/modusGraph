@@ -700,6 +700,30 @@ if err != nil {
 This is useful when you want to ensure the schema is created before inserting data, or when you need
 to update the schema for new struct types.
 
+#### AlterSchema
+
+`UpdateSchema` infers the schema from Go struct tags, which is convenient but cannot express
+predicates no Go type models yet. `AlterSchema` is the escape hatch: it applies a raw Dgraph Schema
+Definition Language string directly, giving full control over predicate types, indexes, and
+directives. This is the common case during a migration that adds or reshapes predicates ahead of the
+code.
+
+```go
+// Apply raw DQL schema: predicate types, indexes, and directives.
+err := client.AlterSchema(ctx, `
+    name:  string @index(exact) .
+    email: string @index(hash) @upsert .
+    age:   int    @index(int) .
+`)
+if err != nil {
+    log.Fatalf("Failed to alter schema: %v", err)
+}
+```
+
+`AlterSchema` behaves the same for embedded (`file://`) and remote (`dgraph://`) clients. To drop a
+single predicate and its data, issue an `Alter` with `DropAttr` set through the underlying Dgraph
+client (see [`DgraphClient`](client.go)) — that path now behaves identically in both modes.
+
 #### GetSchema
 
 Retrieve the current schema definition from the database:
