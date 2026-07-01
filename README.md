@@ -519,6 +519,49 @@ with language-specific analyzers, geolocation queries, and more. The ability to 
 Dgraph client gives you the full power of Dgraph's query language while still benefiting from
 modusGraph's simplified client interface and schema management.
 
+## Retrying Aborted Transactions
+
+Under concurrent load, Dgraph may abort a transaction when two writers touch the same data at once.
+The write fails with an aborted-transaction error and is safe to retry: replaying it on a fresh
+transaction usually succeeds. `WithRetry` wraps that pattern with exponential backoff, modeled after
+dgraph4j's `client.withRetry()`.
+
+You supply a `RetryPolicy` and a function containing the work. `WithRetry` runs the function, and on
+an aborted-transaction error waits per the policy's backoff schedule and runs it again, up to
+`MaxRetries` additional times. Any other error is returned immediately, and the function always runs
+at least once.
+
+```go
+ctx := context.Background()
+
+err := client.WithRetry(ctx, modusgraph.DefaultRetryPolicy, func() error {
+    return client.Insert(ctx, &user)
+})
+if err != nil {
+    log.Fatalf("Insert failed after retries: %v", err)
+}
+```
+
+`DefaultRetryPolicy` uses 10 retries, a 100ms base delay, a 5s max delay, and 10% jitter. To tune
+the schedule, pass your own `RetryPolicy`:
+
+```go
+policy := modusgraph.RetryPolicy{
+    MaxRetries: 5,                      // retry attempts after the initial try
+    BaseDelay:  50 * time.Millisecond,  // grows exponentially: BaseDelay * 2^attempt
+    MaxDelay:   2 * time.Second,        // caps any single delay
+    Jitter:     0.2,                    // random fraction added to spread retriers apart
+}
+
+err := client.WithRetry(ctx, policy, func() error {
+    return client.Upsert(ctx, &user)
+})
+```
+
+The context bounds the total wait: if it is cancelled during a backoff sleep, `WithRetry` returns
+the context error. Only aborted transactions are retried — a unique-constraint violation, for
+example, surfaces to the caller on the first attempt rather than being retried.
+
 ## Typed Client (Generic, Type-Safe API)
 
 The `typed` package wraps `modusgraph.Client` in a Go generic layer that binds one Go type to the
