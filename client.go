@@ -709,6 +709,30 @@ func firstUpsertPredicate(obj any) string {
 	return ""
 }
 
+// isValidPredicateName reports whether pred is safe to concatenate into a DQL
+// filter. LoadAndDelete builds "eq(<pred>, $1)" by string concatenation; the key
+// value is parameterized, but the predicate name is not, so a name containing DQL
+// metacharacters (parentheses, commas, whitespace, quotes, angle brackets, ...)
+// could corrupt or inject the query. Dgraph predicate names are plain identifiers
+// over letters, digits, '_', '.', and '-'; anything outside that set is rejected
+// rather than trusted.
+func isValidPredicateName(pred string) bool {
+	if pred == "" {
+		return false
+	}
+	for _, r := range pred {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '_', r == '.', r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // uidOf reflects out the UID field of a dgraph struct pointer.
 func uidOf(obj any) string {
 	v := reflect.ValueOf(obj)
@@ -743,6 +767,13 @@ func (c client) LoadAndDelete(ctx context.Context, obj any, key any, predicates 
 	}
 	if pred == "" {
 		return false, fmt.Errorf("LoadAndDelete: no key predicate (pass one or tag a field dgraph:\"upsert\")")
+	}
+	// The key value below is parameterized ($1), but the predicate name is
+	// concatenated straight into the DQL filter, so a name carrying DQL
+	// metacharacters could corrupt or inject the query. Reject anything that is
+	// not a plain Dgraph predicate identifier before it reaches the filter.
+	if !isValidPredicateName(pred) {
+		return false, fmt.Errorf("LoadAndDelete: invalid key predicate %q (allowed: letters, digits, '_', '.', '-')", pred)
 	}
 
 	dgClient, err := c.pool.get()
