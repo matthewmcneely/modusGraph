@@ -27,7 +27,7 @@ type Token struct {
 //
 // This is the building block for "claim a one-time token": the first caller
 // stores and proceeds, every later caller sees loaded=true and is rejected.
-func ExampleClient_loadOrStore() {
+func ExampleClient_LoadOrStore() {
 	client, _ := mg.NewClient("dgraph://localhost:9080")
 	defer client.Close()
 
@@ -43,7 +43,7 @@ func ExampleClient_loadOrStore() {
 // single winner under concurrency: exactly one caller gets loaded=true with the
 // record hydrated, the rest get loaded=false. Use it to consume a one-shot
 // value — a nonce, a pending job, a single-use code.
-func ExampleClient_loadAndDelete() {
+func ExampleClient_LoadAndDelete() {
 	client, _ := mg.NewClient("dgraph://localhost:9080")
 	defer client.Close()
 
