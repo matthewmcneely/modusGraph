@@ -62,7 +62,7 @@ func (c *Client[T]) Upsert(ctx context.Context, rec *T, predicates ...string) (e
 // Insert-if-absent (compare sync.Map.LoadOrStore). With no predicates, the
 // first field tagged dgraph:"upsert" is used.
 func (c *Client[T]) LoadOrStore(ctx context.Context, rec *T, predicates ...string) (out *T, loaded bool, err error) {
-	ctx, span := tracer.StartSpan(ctx, "loadOrStore", entityName[T]())
+	ctx, span := currentTracer().StartSpan(ctx, "loadOrStore", entityName[T]())
 	defer func() { span.End(err) }()
 	loaded, err = c.conn.LoadOrStore(ctx, rec, predicates...)
 	if err != nil {
@@ -76,7 +76,7 @@ func (c *Client[T]) LoadOrStore(ctx context.Context, rec *T, predicates ...strin
 // (compare sync.Map.LoadAndDelete). With no predicates, the first field tagged
 // dgraph:"upsert" is used.
 func (c *Client[T]) LoadAndDelete(ctx context.Context, key any, predicates ...string) (rec *T, loaded bool, err error) {
-	ctx, span := tracer.StartSpan(ctx, "loadAndDelete", entityName[T]())
+	ctx, span := currentTracer().StartSpan(ctx, "loadAndDelete", entityName[T]())
 	defer func() { span.End(err) }()
 	var out T
 	loaded, err = c.conn.LoadAndDelete(ctx, &out, key, predicates...)

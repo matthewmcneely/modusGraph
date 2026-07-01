@@ -559,6 +559,55 @@ with language-specific analyzers, geolocation queries, and more. The ability to 
 Dgraph client gives you the full power of Dgraph's query language while still benefiting from
 modusGraph's simplified client interface and schema management.
 
+## Atomic Operations (`LoadOrStore` and `LoadAndDelete`)
+
+Two key-keyed operations give you atomic insert-if-absent and read-and-consume semantics, named
+after their `sync.Map` counterparts. Both key off an upsert predicate — either one you pass
+explicitly or the first field tagged `dgraph:"upsert"`.
+
+### LoadOrStore
+
+`LoadOrStore` stores a node only if none already matches the upsert predicate, reporting whether one
+already existed. It is the building block for claiming a one-time token: the first caller stores and
+proceeds, every later caller sees `loaded == true` and is rejected. On the `loaded == true` path the
+passed object is hydrated with the existing record.
+
+```go
+type Token struct {
+    UID   string   `json:"uid,omitempty"`
+    DType []string `json:"dgraph.type,omitempty"`
+    JTI   string   `json:"jti,omitempty" dgraph:"index=hash upsert unique"`
+}
+
+// false the first time (stored), true thereafter (an existing node matched).
+loaded, err := client.LoadOrStore(ctx, &Token{JTI: "abc123"}, "jti")
+if err != nil {
+    log.Fatalf("LoadOrStore failed: %v", err)
+}
+```
+
+### LoadAndDelete
+
+`LoadAndDelete` atomically reads a node and deletes it, electing a single winner under concurrency:
+exactly one caller gets `loaded == true` with the record hydrated, the rest get `loaded == false`.
+The read and delete share one transaction, so concurrent callers conflict on commit — the loser
+aborts and retries into not-found. Use it to consume a one-shot value such as a nonce, a pending
+job, or a single-use code.
+
+```go
+var got Token
+loaded, err := client.LoadAndDelete(ctx, &got, "abc123", "jti")
+if err != nil {
+    log.Fatalf("LoadAndDelete failed: %v", err)
+}
+if loaded {
+    fmt.Println("consumed", got.JTI)
+}
+```
+
+Both operations are also available on the typed `Client[T]`, returning the record directly rather
+than hydrating a passed pointer.
+
 ## Retrying Aborted Transactions
 
 Under concurrent load, Dgraph may abort a transaction when two writers touch the same data at once.
