@@ -858,9 +858,13 @@ func (c client) LoadAndDelete(ctx context.Context, obj any, key any, predicates 
 
 		uid := uidOf(obj)
 		if uid == "" {
+			// A genuine miss already returned via ErrNodeNotFound above, so the
+			// Get here matched and hydrated a node. An empty UID therefore means
+			// the model has no readable string UID field, not that nothing existed
+			// -- reporting loaded=false would silently skip a matched node, so
+			// surface it as an error instead.
 			_ = tx.Discard()
-			zeroValue(obj)
-			return false, nil
+			return false, fmt.Errorf("LoadAndDelete: matched a node but read no UID; the model needs a string UID field")
 		}
 
 		if delErr := tx.DeleteNode(uid); delErr != nil {
