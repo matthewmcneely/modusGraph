@@ -165,3 +165,24 @@ func TestLoadOrStoreRejectsNilObject(t *testing.T) {
 		t.Fatal("typed nil pointer: want error, got nil")
 	}
 }
+
+// LoadAndDelete documents that obj is left zero when loaded=false. A caller may
+// pass a pre-populated struct (and, after a commit-abort retry, a prior Get may
+// have hydrated it), so a not-found consume must reset obj rather than leave
+// stale data behind.
+func TestLoadAndDeleteZeroesObjectWhenNotFound(t *testing.T) {
+	conn := newConsumeClient(t)
+	ctx := context.Background()
+
+	got := consumeState{UID: "0x99", State: "preexisting", Secret: "stale"}
+	loaded, err := conn.LoadAndDelete(ctx, &got, "no-such-key", "state")
+	if err != nil {
+		t.Fatalf("LoadAndDelete: %v", err)
+	}
+	if loaded {
+		t.Fatal("want loaded=false for a missing key")
+	}
+	if got.UID != "" || got.State != "" || got.Secret != "" || got.DType != nil {
+		t.Fatalf("want obj zeroed on loaded=false, got %+v", got)
+	}
+}

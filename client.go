@@ -714,6 +714,21 @@ func isValidPredicateName(pred string) bool {
 	return true
 }
 
+// zeroValue resets the value pointed to by obj to its zero value. LoadAndDelete
+// promises obj is left zero when it returns loaded=false, but tx.Get hydrates obj
+// on a read whose commit may then abort and retry into not-found; without this
+// reset the caller would observe stale data from the aborted attempt (or their
+// own pre-populated fields). obj is a non-nil pointer here (checkPointer ran).
+func zeroValue(obj any) {
+	v := reflect.ValueOf(obj)
+	if v.Kind() != reflect.Pointer || v.IsNil() {
+		return
+	}
+	if e := v.Elem(); e.CanSet() {
+		e.Set(reflect.Zero(e.Type()))
+	}
+}
+
 // uidOf reflects out the UID field of a dgraph struct pointer.
 func uidOf(obj any) string {
 	v := reflect.ValueOf(obj)
@@ -798,6 +813,10 @@ func (c client) LoadAndDelete(ctx context.Context, obj any, key any, predicates 
 			_ = tx.Discard()
 			// dgman returns ErrNodeNotFound when nothing matches.
 			if errors.Is(getErr, dg.ErrNodeNotFound) {
+				// Honor the documented contract: obj is zero when loaded=false.
+				// A prior attempt's Get (before a commit abort) may have hydrated
+				// obj, and the caller may have passed a pre-populated struct.
+				zeroValue(obj)
 				return false, nil
 			}
 			return false, getErr
@@ -806,6 +825,7 @@ func (c client) LoadAndDelete(ctx context.Context, obj any, key any, predicates 
 		uid := uidOf(obj)
 		if uid == "" {
 			_ = tx.Discard()
+			zeroValue(obj)
 			return false, nil
 		}
 
