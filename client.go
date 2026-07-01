@@ -533,8 +533,16 @@ func (c client) embeddingProvider() EmbeddingProvider {
 }
 
 func checkPointer(obj any) error {
-	if reflect.TypeOf(obj).Kind() != reflect.Ptr {
+	// reflect.ValueOf(nil) yields a zero Value whose Kind is Invalid, so this is
+	// nil-safe; reflect.TypeOf(nil).Kind() would instead panic on a nil receiver.
+	v := reflect.ValueOf(obj)
+	if v.Kind() != reflect.Ptr {
 		return errors.New("object must be a pointer")
+	}
+	// A typed nil pointer ((*T)(nil)) has Kind Ptr but nothing to read or write;
+	// downstream reflection (uidOf, dgman) would panic on it, so reject it here.
+	if v.IsNil() {
+		return errors.New("object must not be a nil pointer")
 	}
 	return nil
 }
@@ -738,6 +746,13 @@ func uidOf(obj any) string {
 	v := reflect.ValueOf(obj)
 	for v.Kind() == reflect.Ptr {
 		v = v.Elem()
+	}
+	// A nil pointer dereferences to an invalid Value and a non-struct has no
+	// fields; FieldByName would panic on either, so guard as firstUpsertPredicate
+	// does. (LoadAndDelete already rejects nil via checkPointer; this is
+	// defense-in-depth for any other caller.)
+	if !v.IsValid() || v.Kind() != reflect.Struct {
+		return ""
 	}
 	f := v.FieldByName("UID")
 	if f.IsValid() && f.Kind() == reflect.String {
