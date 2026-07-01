@@ -135,3 +135,18 @@ func TestLoadAndDeleteRejectsInvalidPredicate(t *testing.T) {
 		t.Fatal("valid predicate: want loaded=true")
 	}
 }
+
+// A new public API must return errors on nil input rather than panic. A nil
+// interface would panic in reflect.TypeOf(nil).Kind(); a typed nil pointer would
+// pass the pointer-kind check and then panic when uidOf dereferences it.
+func TestLoadAndDeleteRejectsNilObject(t *testing.T) {
+	conn := newConsumeClient(t)
+	ctx := context.Background()
+
+	if _, err := conn.LoadAndDelete(ctx, nil, "s1", "state"); err == nil {
+		t.Fatal("nil interface: want error, got nil")
+	}
+	if _, err := conn.LoadAndDelete(ctx, (*consumeState)(nil), "s1", "state"); err == nil {
+		t.Fatal("typed nil pointer: want error, got nil")
+	}
+}
