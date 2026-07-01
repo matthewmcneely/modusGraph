@@ -536,7 +536,7 @@ func checkPointer(obj any) error {
 	// reflect.ValueOf(nil) yields a zero Value whose Kind is Invalid, so this is
 	// nil-safe; reflect.TypeOf(nil).Kind() would instead panic on a nil receiver.
 	v := reflect.ValueOf(obj)
-	if v.Kind() != reflect.Ptr {
+	if v.Kind() != reflect.Pointer {
 		return errors.New("object must be a pointer")
 	}
 	// A typed nil pointer ((*T)(nil)) has Kind Ptr but nothing to read or write;
@@ -744,7 +744,7 @@ func isValidPredicateName(pred string) bool {
 // uidOf reflects out the UID field of a dgraph struct pointer.
 func uidOf(obj any) string {
 	v := reflect.ValueOf(obj)
-	for v.Kind() == reflect.Ptr {
+	for v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 	// A nil pointer dereferences to an invalid Value and a non-struct has no
