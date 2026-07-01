@@ -96,3 +96,42 @@ func TestLoadAndDelete(t *testing.T) {
 		t.Fatal("second consume: want loaded=false (already consumed)")
 	}
 }
+
+// LoadAndDelete concatenates the predicate name straight into the DQL filter, so
+// a name carrying DQL metacharacters must be rejected before it reaches the query
+// rather than corrupting or injecting it. The key value is separately
+// parameterized, so only the predicate name is at risk here.
+func TestLoadAndDeleteRejectsInvalidPredicate(t *testing.T) {
+	conn := newConsumeClient(t)
+	ctx := context.Background()
+
+	for _, pred := range []string{
+		"state), has(secret", // break out of eq(...) and inject another function
+		"state, uid",         // extra argument
+		"state\"",            // stray quote
+		"has(secret)",        // whole different function
+		"state val",          // embedded whitespace
+	} {
+		var got consumeState
+		loaded, err := conn.LoadAndDelete(ctx, &got, "s1", pred)
+		if err == nil {
+			t.Fatalf("predicate %q: want error, got nil (loaded=%v)", pred, loaded)
+		}
+		if loaded {
+			t.Fatalf("predicate %q: want loaded=false on rejection, got true", pred)
+		}
+	}
+
+	// A valid predicate still works: the guard must not reject legitimate names.
+	if err := conn.Insert(ctx, &consumeState{State: "ok", Secret: "shh"}); err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	var got consumeState
+	loaded, err := conn.LoadAndDelete(ctx, &got, "ok", "state")
+	if err != nil {
+		t.Fatalf("valid predicate: unexpected error: %v", err)
+	}
+	if !loaded {
+		t.Fatal("valid predicate: want loaded=true")
+	}
+}
