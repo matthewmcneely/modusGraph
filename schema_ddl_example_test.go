@@ -15,7 +15,7 @@ import (
 // full control over predicate types, indexes, and directives. This complements
 // UpdateSchema (which infers the schema from Go struct tags) and is useful for
 // migrations that declare predicates no Go type models yet.
-func ExampleClient_alterSchema() {
+func ExampleClient_AlterSchema() {
 	client, _ := mg.NewClient("dgraph://localhost:9080")
 	defer client.Close()
 
