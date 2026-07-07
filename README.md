@@ -5,6 +5,13 @@
 
 </div>
 
+> [!WARNING]
+> **This repository will be archived**
+> 
+> This project is no longer actively maintained or updated in this repo. modusgraph has been rehomed
+> in the dgraph-io organization as `dgdao`. Users are encouraged to migrate their code to this repo:
+> [dgdao](https://github.com/dgraph-io/dgdao).
+
 **modusGraph is a high-performance, transactional database system.** It's designed to be type-first,
 schema-agnostic, and portable. modusGraph provides ORM-like mechanisms that make it simple to build
 new apps, paired with support for advanced use cases through the Dgraph Query Language (DQL). A
